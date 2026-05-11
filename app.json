@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Arrow Escape",
+    "slug": "arrow-escape",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "arrowescape",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#F6F1E8"
+    },
+    "android": {
+      "package": "com.arrowescape.mvp",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#F6F1E8"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "49928ee1-c2ea-4874-92c2-58360eb4f361"
+      }
+    }
+  }
+}

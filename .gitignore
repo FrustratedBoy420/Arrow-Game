@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+.expo-shared/
+web-build/
+dist/
+
+# React Native / native build output
+android/
+ios/
+build/
+*.apk
+*.aab
+*.ipa
+
+# Tests and coverage
+coverage/
+.nyc_output/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+expo.log
+expo.err.log
+
+# TypeScript
+*.tsbuildinfo
+
+# Metro / bundler cache
+.metro-cache/
+.vite/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
