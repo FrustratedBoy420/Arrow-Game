@@ -9,9 +9,8 @@ export type GridPosition = {
 
 export type ArrowNode = {
   id: string;
-  direction: Direction;
-  length: number;
-  position: GridPosition;
+  path: GridPosition[];      // waypoints / corner points
+  fullPath: GridPosition[];   // every cell the arrow occupies
 };
 
 export type LevelDefinition = {

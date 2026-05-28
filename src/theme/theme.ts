@@ -21,11 +21,6 @@ export const theme = {
     difficultyHard: '#E53935',
     difficultyExpert: '#8E24AA',
 
-    // Arrow direction colors
-    arrowUp: '#5C6BC0',
-    arrowDown: '#26A69A',
-    arrowLeft: '#EF5350',
-    arrowRight: '#FFA726',
 
     // Level select
     levelLocked: '#C8BDAE',

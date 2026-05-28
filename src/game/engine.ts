@@ -16,18 +16,35 @@ export function createInitialBoard(level: LevelDefinition, livesLeft = 3): Board
   };
 }
 
+/**
+ * Returns every cell occupied by this arrow.
+ */
 export function getArrowCells(arrow: ArrowNode): GridPosition[] {
-  const vector = directionVector[arrow.direction];
-
-  return Array.from({ length: arrow.length }, (_, index) => ({
-    x: arrow.position.x + vector.x * index,
-    y: arrow.position.y + vector.y * index
-  }));
+  return arrow.fullPath;
 }
 
+/**
+ * The tip/head of the arrow — the last cell in fullPath.
+ */
 export function getArrowHead(arrow: ArrowNode): GridPosition {
-  const cells = getArrowCells(arrow);
-  return cells[cells.length - 1] ?? arrow.position;
+  return arrow.fullPath[arrow.fullPath.length - 1] ?? arrow.fullPath[0]!;
+}
+
+/**
+ * Compute the exit direction from the last two cells of fullPath.
+ * This is the direction the arrow is pointing at its tip.
+ */
+export function getExitDirection(arrow: ArrowNode): Direction {
+  const fp = arrow.fullPath;
+  if (fp.length < 2) return 'RIGHT'; // fallback
+  const last = fp[fp.length - 1]!;
+  const prev = fp[fp.length - 2]!;
+  const dx = last.x - prev.x;
+  const dy = last.y - prev.y;
+  if (dx > 0) return 'RIGHT';
+  if (dx < 0) return 'LEFT';
+  if (dy > 0) return 'DOWN';
+  return 'UP';
 }
 
 export function isInsideGrid(position: GridPosition, level: LevelDefinition): boolean {
@@ -43,11 +60,18 @@ export function samePosition(left: GridPosition, right: GridPosition): boolean {
   return left.x === right.x && left.y === right.y;
 }
 
+/**
+ * Check whether nothing blocks this arrow's exit path.
+ * Traces forward from the head in the exit direction until leaving the grid.
+ */
 export function isFrontClear(arrow: ArrowNode, board: BoardState): boolean {
-  const vector = directionVector[arrow.direction];
+  const dir = getExitDirection(arrow);
+  const vector = directionVector[dir];
+  const head = getArrowHead(arrow);
+
   let cursor = {
-    x: getArrowHead(arrow).x + vector.x,
-    y: getArrowHead(arrow).y + vector.y
+    x: head.x + vector.x,
+    y: head.y + vector.y
   };
 
   const occupiedCells = board.arrows

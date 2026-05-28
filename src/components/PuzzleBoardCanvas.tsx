@@ -5,11 +5,12 @@ import Animated, {
   Easing,
   runOnJS,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withTiming
 } from 'react-native-reanimated';
 
-import { getArrowCells, getArrowHead } from '../game/engine';
+import { getArrowCells, getArrowHead, getExitDirection } from '../game/engine';
 import type { ArrowNode, BoardState, Direction } from '../game/types';
 import { theme } from '../theme/theme';
 
@@ -28,15 +29,7 @@ const dirVec: Record<Direction, { x: number; y: number }> = {
   LEFT: { x: -1, y: 0 }, RIGHT: { x: 1, y: 0 }
 };
 
-export function getArrowColor(direction: Direction) {
-  switch (direction) {
-    case 'UP': return theme.colors.arrowUp;
-    case 'DOWN': return theme.colors.arrowDown;
-    case 'LEFT': return theme.colors.arrowLeft;
-    case 'RIGHT': return theme.colors.arrowRight;
-    default: return theme.colors.arrowStroke;
-  }
-}
+// All arrows now use a single premium color: theme.colors.arrowStroke
 
 export function PuzzleBoardCanvas({ board, exitingArrows, width, onArrowPress, onExitDone }: Props) {
   const cellSize = width / board.level.gridSize.columns;
@@ -44,11 +37,13 @@ export function PuzzleBoardCanvas({ board, exitingArrows, width, onArrowPress, o
   const strokeW = Math.max(3, cellSize * 0.13);
 
   const arrowPaths = useMemo(
-    () => board.arrows.map((arrow) => ({
-      id: arrow.id,
-      path: makeArrowPath(arrow, cellSize),
-      color: getArrowColor(arrow.direction)
-    })),
+    () => board.arrows.map((arrow) => {
+      return {
+        id: arrow.id,
+        path: makeArrowPath(arrow, cellSize),
+        color: theme.colors.arrowStroke
+      };
+    }),
     [board.arrows, cellSize]
   );
 
@@ -109,34 +104,119 @@ function ExitingArrow({
 }: {
   arrow: ArrowNode; cellSize: number; strokeWidth: number; onDone: () => void;
 }) {
-  const v = dirVec[arrow.direction];
-  const dist = cellSize * 10;
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
+  const animProgress = useSharedValue(0);
   const opacity = useSharedValue(1);
 
+  const trackPath = useMemo(() => {
+    const path = Skia.Path.Make();
+    const cells = arrow.fullPath;
+    if (cells.length === 0) return path;
+
+    const first = cells[0]!;
+    const start = centerOf(first, cellSize);
+    path.moveTo(start.x, start.y);
+
+    for (let i = 1; i < cells.length; i++) {
+      const pt = centerOf(cells[i]!, cellSize);
+      path.lineTo(pt.x, pt.y);
+    }
+
+    const head = cells[cells.length - 1]!;
+    const exitDir = getExitDirection(arrow);
+    const v = dirVec[exitDir];
+    const lastCenter = centerOf(head, cellSize);
+    
+    // Extend the path by 12 cells in the exit direction so it goes fully off-screen
+    const extensionLength = cellSize * 12;
+    const exitEnd = {
+      x: lastCenter.x + v.x * extensionLength,
+      y: lastCenter.y + v.y * extensionLength,
+    };
+    path.lineTo(exitEnd.x, exitEnd.y);
+
+    return path;
+  }, [arrow, cellSize]);
+
+  const { totalLength, arrowLength, contour } = useMemo(() => {
+    const it = Skia.ContourMeasureIter(trackPath, false, 1);
+    const contourVal = it.next();
+    const trackLen = contourVal ? contourVal.length() : 0;
+    const arrowLen = Math.max(0, trackLen - cellSize * 12);
+    return { totalLength: trackLen, arrowLength: arrowLen, contour: contourVal };
+  }, [trackPath, cellSize]);
+
   useEffect(() => {
-    translateX.value = withTiming(v.x * dist, { duration: 350, easing: Easing.in(Easing.cubic) });
-    translateY.value = withTiming(v.y * dist, { duration: 350, easing: Easing.in(Easing.cubic) });
-    opacity.value = withTiming(0, { duration: 350 }, (fin) => {
+    animProgress.value = withTiming(1, {
+      duration: 1200,
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1)
+    });
+    opacity.value = withTiming(0, {
+      duration: 1200,
+      easing: Easing.bezier(0.7, 0, 0.84, 0)
+    }, (fin) => {
       if (fin) runOnJS(onDone)();
     });
   }, []);
 
+  const startVal = useDerivedValue(() => {
+    const t = animProgress.value;
+    return (t * (totalLength - arrowLength)) / totalLength;
+  });
+
+  const endVal = useDerivedValue(() => {
+    const t = animProgress.value;
+    return (arrowLength + t * (totalLength - arrowLength)) / totalLength;
+  });
+
+  const arrowheadPath = useDerivedValue(() => {
+    const path = Skia.Path.Make();
+    if (!contour) return path;
+
+    const t = animProgress.value;
+    const posHead = arrowLength + t * (totalLength - arrowLength);
+
+    const posTan = contour.getPosTan(posHead);
+    if (!posTan) return path;
+
+    const [pos, tangent] = posTan;
+    const sz = Math.min(arrowHeadSize, cellSize * 0.32);
+    const tx = tangent.x;
+    const ty = tangent.y;
+
+    const leftX = pos.x - sz * tx - sz * ty;
+    const leftY = pos.y - sz * ty + sz * tx;
+    const rightX = pos.x - sz * tx + sz * ty;
+    const rightY = pos.y - sz * ty - sz * tx;
+
+    path.moveTo(leftX, leftY);
+    path.lineTo(pos.x, pos.y);
+    path.lineTo(rightX, rightY);
+
+    return path;
+  });
+
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }, { translateY: translateY.value }],
     opacity: opacity.value
   }));
-
-  const color = getArrowColor(arrow.direction);
-  const path = useMemo(() => makeArrowPath(arrow, cellSize), [arrow, cellSize]);
 
   return (
     <Animated.View style={[StyleSheet.absoluteFill, animStyle, { zIndex: 10 }]} pointerEvents="none">
       <Canvas style={StyleSheet.absoluteFill}>
+        {/* Draw the moving body of the arrow */}
         <Path
-          path={path}
-          color={color}
+          path={trackPath}
+          start={startVal}
+          end={endVal}
+          color={theme.colors.arrowStroke}
+          style="stroke"
+          strokeCap="round"
+          strokeJoin="round"
+          strokeWidth={sw}
+        />
+        {/* Draw the moving arrowhead */}
+        <Path
+          path={arrowheadPath}
+          color={theme.colors.arrowStroke}
           style="stroke"
           strokeCap="round"
           strokeJoin="round"
@@ -147,17 +227,31 @@ function ExitingArrow({
   );
 }
 
+/**
+ * Build a Skia path that traces through all fullPath cells and draws an arrowhead at the tip.
+ */
 function makeArrowPath(arrow: ArrowNode, cellSize: number) {
   const path = Skia.Path.Make();
-  const cells = getArrowCells(arrow);
-  const first = cells[0] ?? arrow.position;
-  const head = getArrowHead(arrow);
-  const start = centerOf(first, cellSize);
-  const end = centerOf(head, cellSize);
-  const headPoints = getHeadPoints(end, arrow.direction, cellSize);
+  const cells = arrow.fullPath;
 
+  if (cells.length === 0) return path;
+
+  const first = cells[0]!;
+  const start = centerOf(first, cellSize);
   path.moveTo(start.x, start.y);
-  path.lineTo(end.x, end.y);
+
+  // Draw polyline through every cell
+  for (let i = 1; i < cells.length; i++) {
+    const pt = centerOf(cells[i]!, cellSize);
+    path.lineTo(pt.x, pt.y);
+  }
+
+  // Draw arrowhead at the tip
+  const head = getArrowHead(arrow);
+  const end = centerOf(head, cellSize);
+  const exitDir = getExitDirection(arrow);
+  const headPoints = getHeadPoints(end, exitDir, cellSize);
+
   path.moveTo(headPoints.left.x, headPoints.left.y);
   path.lineTo(end.x, end.y);
   path.lineTo(headPoints.right.x, headPoints.right.y);

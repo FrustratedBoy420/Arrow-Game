@@ -9,9 +9,21 @@ const level: LevelDefinition = {
   difficulty: 'Easy',
   gridSize: { columns: 5, rows: 5 },
   arrows: [
-    { id: 'clear', direction: 'RIGHT', length: 2, position: { x: 0, y: 0 } },
-    { id: 'blocked', direction: 'RIGHT', length: 2, position: { x: 0, y: 2 } },
-    { id: 'blocker', direction: 'DOWN', length: 2, position: { x: 3, y: 2 } }
+    {
+      id: 'clear',
+      path: [{ x: 0, y: 0 }, { x: 1, y: 0 }],
+      fullPath: [{ x: 0, y: 0 }, { x: 1, y: 0 }]
+    },
+    {
+      id: 'blocked',
+      path: [{ x: 0, y: 2 }, { x: 1, y: 2 }],
+      fullPath: [{ x: 0, y: 2 }, { x: 1, y: 2 }]
+    },
+    {
+      id: 'blocker',
+      path: [{ x: 3, y: 2 }, { x: 3, y: 3 }],
+      fullPath: [{ x: 3, y: 2 }, { x: 3, y: 3 }]
+    }
   ]
 };
 

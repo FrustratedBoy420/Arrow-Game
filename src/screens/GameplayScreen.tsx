@@ -37,7 +37,6 @@ export function GameplayScreen() {
 
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
   const pendingNav = useRef<'Victory' | 'Fail' | null>(null);
-  const shakeX = useSharedValue(0);
   const boardScale = useSharedValue(1);
   const boardOpacity = useSharedValue(1);
 
@@ -50,7 +49,7 @@ export function GameplayScreen() {
   const boardWidth = cellSize * columns;
 
   const animatedBoardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: shakeX.value }, { scale: boardScale.value }],
+    transform: [{ scale: boardScale.value }],
     opacity: boardOpacity.value
   }));
 
@@ -88,15 +87,9 @@ export function GameplayScreen() {
       );
       void playCorrectFeedback(soundEnabled);
     } else if (result === 'BLOCKED') {
-      shakeX.value = withSequence(
-        withTiming(-8, { duration: 50, easing: Easing.out(Easing.quad) }),
-        withTiming(8, { duration: 80 }),
-        withTiming(-5, { duration: 60 }),
-        withTiming(0, { duration: 50 })
-      );
       void playWrongFeedback(hapticsEnabled);
     }
-  }, [board.arrows, tapArrow, soundEnabled, hapticsEnabled, boardScale, shakeX]);
+  }, [board.arrows, tapArrow, soundEnabled, hapticsEnabled, boardScale]);
 
   const handleHint = useCallback(() => {
     const hintArrow = board.arrows.find((a) => isFrontClear(a, board));
