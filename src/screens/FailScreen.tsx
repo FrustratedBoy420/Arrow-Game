@@ -1,6 +1,8 @@
 import { useNavigation } from '@react-navigation/native';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
+import { AmbientBackground } from '../components/AmbientBackground';
 import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
@@ -9,22 +11,33 @@ export function FailScreen() {
   const navigation = useNavigation<AppNavigation>();
   const retry = useGameStore((state) => state.retry);
 
+  const btnScale = useSharedValue(1);
+
+  const buttonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: btnScale.value }]
+  }));
+
   return (
     <SafeAreaView style={styles.screen}>
+      <AmbientBackground />
       <View style={styles.content}>
         <Text style={styles.icon}>✖</Text>
         <Text style={styles.title}>Out of Moves</Text>
         <Text style={styles.copy}>No more clear paths available. Rethink your strategy and try again!</Text>
+        
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Retry level"
-          style={styles.button}
+          onPressIn={() => { btnScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
+          onPressOut={() => { btnScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
           onPress={() => {
             retry();
             navigation.replace('Gameplay');
           }}
         >
-          <Text style={styles.buttonText}>Retry</Text>
+          <Animated.View style={[styles.button, buttonStyle]}>
+            <Text style={styles.buttonText}>Try Again</Text>
+          </Animated.View>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -33,7 +46,7 @@ export function FailScreen() {
 
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: theme.colors.bgPrimary,
+    backgroundColor: 'transparent',
     flex: 1
   },
   content: {
@@ -44,32 +57,35 @@ const styles = StyleSheet.create({
   },
   icon: {
     color: theme.colors.lifeRed,
-    fontSize: 50,
-    marginBottom: 16,
+    fontSize: 56,
+    marginBottom: 20,
     fontWeight: '800'
   },
   title: {
     color: theme.colors.textPrimary,
-    fontSize: 32,
-    fontWeight: '800',
-    marginBottom: 12
+    fontSize: 34,
+    fontWeight: '900',
+    marginBottom: 16
   },
   copy: {
     color: theme.colors.textMuted,
     fontSize: 18,
-    lineHeight: 25,
-    marginBottom: 28,
-    maxWidth: 280,
-    textAlign: 'center'
+    lineHeight: 26,
+    marginBottom: 36,
+    maxWidth: 290,
+    textAlign: 'center',
+    fontWeight: '500'
   },
   button: {
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
     borderColor: theme.colors.arrowStroke,
-    borderRadius: theme.radius.sm,
+    borderRadius: 30,
     borderWidth: 2,
-    minWidth: 160,
-    paddingHorizontal: 24,
-    paddingVertical: 14
+    minWidth: 180,
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    ...theme.shadows.md
   },
   buttonText: {
     color: theme.colors.arrowStroke,

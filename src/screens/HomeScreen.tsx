@@ -8,9 +8,11 @@ import Animated, {
   withDelay,
   withRepeat,
   withSequence,
+  withSpring,
   withTiming
 } from 'react-native-reanimated';
 
+import { AmbientBackground } from '../components/AmbientBackground';
 import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
@@ -24,6 +26,10 @@ export function HomeScreen() {
   const btnOpacity = useSharedValue(0);
   const btnTranslateY = useSharedValue(30);
   const arrowBounce = useSharedValue(0);
+
+  // Button interactive scales
+  const startScale = useSharedValue(1);
+  const selectScale = useSharedValue(1);
 
   useEffect(() => {
     titleScale.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.back(1.4)) });
@@ -57,8 +63,17 @@ export function HomeScreen() {
     transform: [{ translateX: arrowBounce.value }]
   }));
 
+  const startAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: startScale.value }]
+  }));
+
+  const selectAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: selectScale.value }]
+  }));
+
   return (
     <SafeAreaView style={styles.screen}>
+      <AmbientBackground />
       <View style={styles.content}>
         <Animated.View style={[styles.arrowDeco, arrowStyle]}>
           <Text style={styles.arrowIcon}>➤</Text>
@@ -69,25 +84,29 @@ export function HomeScreen() {
           <Text style={styles.subtitle}>Tap · Think · Escape</Text>
         </Animated.View>
 
-        <Animated.View style={btnStyle}>
+        <Animated.View style={[btnStyle, { width: '100%', alignItems: 'center' }]}>
           <Pressable
-            style={styles.startBtn}
+            style={{ width: '100%', alignItems: 'center' }}
+            onPressIn={() => { startScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
+            onPressOut={() => { startScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
             onPress={() => navigation.replace(hasSeenTutorial ? 'Gameplay' : 'Tutorial')}
           >
-            <Text style={styles.startBtnText}>Start Now</Text>
-            <Text style={styles.startBtnArrow}>→</Text>
+            <Animated.View style={[styles.startBtn, startAnimStyle]}>
+              <Text style={styles.startBtnText}>Start Now</Text>
+              <Text style={styles.startBtnArrow}>→</Text>
+            </Animated.View>
           </Pressable>
 
           <Pressable
-            style={[styles.startBtn, styles.levelSelectBtn]}
+            style={{ width: '100%', alignItems: 'center' }}
+            onPressIn={() => { selectScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
+            onPressOut={() => { selectScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
             onPress={() => navigation.navigate('LevelSelect')}
           >
-            <Text style={[styles.startBtnText, styles.levelSelectText]}>Level Select</Text>
+            <Animated.View style={[styles.startBtn, styles.levelSelectBtn, selectAnimStyle]}>
+              <Text style={[styles.startBtnText, styles.levelSelectText]}>Level Select</Text>
+            </Animated.View>
           </Pressable>
-        </Animated.View>
-
-        <Animated.View style={[btnStyle, { marginTop: 24 }]}>
-          <Text style={styles.versionText}>v1.1 · 50 Levels</Text>
         </Animated.View>
       </View>
     </SafeAreaView>
@@ -95,7 +114,7 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.colors.bgPrimary },
+  screen: { flex: 1, backgroundColor: 'transparent' },
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
   arrowDeco: { marginBottom: 20 },
   arrowIcon: { fontSize: 64, color: theme.colors.arrowStroke, opacity: 0.7 },
@@ -117,25 +136,24 @@ const styles = StyleSheet.create({
   startBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: theme.colors.arrowStroke,
-    paddingHorizontal: 40,
+    width: 250,
     paddingVertical: 18,
     borderRadius: 30,
-    marginTop: 48,
+    marginTop: 36,
     gap: 12,
     ...theme.shadows.md
   },
   startBtnText: { color: '#FFF', fontSize: 20, fontWeight: '800' },
   startBtnArrow: { color: '#FFF', fontSize: 22, fontWeight: '800' },
   levelSelectBtn: {
-    backgroundColor: theme.colors.bgPrimary,
-    borderWidth: 2,
-    borderColor: theme.colors.arrowStroke,
+    backgroundColor: '#FFF',
+    borderWidth: 0,
     marginTop: 16,
-    ...theme.shadows.sm
+    ...theme.shadows.md
   },
   levelSelectText: {
     color: theme.colors.arrowStroke,
-  },
-  versionText: { color: theme.colors.textMuted, fontSize: 13, opacity: 0.6 }
+  }
 });

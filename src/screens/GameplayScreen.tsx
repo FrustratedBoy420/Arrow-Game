@@ -10,6 +10,7 @@ import Animated, {
   withTiming
 } from 'react-native-reanimated';
 
+import { AmbientBackground } from '../components/AmbientBackground';
 import { BottomControls } from '../components/BottomControls';
 import { GameHeader } from '../components/GameHeader';
 import { LivesIndicator } from '../components/LivesIndicator';
@@ -108,6 +109,7 @@ export function GameplayScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
+      <AmbientBackground />
       <GameHeader
         title={`Level ${currentLevelId}`}
         difficulty={board.level.difficulty}
@@ -135,6 +137,6 @@ export function GameplayScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.colors.bgPrimary },
+  screen: { flex: 1, backgroundColor: 'transparent' },
   boardStage: { flex: 1, alignItems: 'center', justifyContent: 'center' }
 });

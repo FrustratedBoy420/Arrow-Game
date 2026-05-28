@@ -1,6 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { AmbientBackground } from '../components/AmbientBackground';
 import { GameHeader } from '../components/GameHeader';
 import { HintBubble } from '../components/HintBubble';
 import { PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
@@ -20,6 +21,7 @@ export function TutorialScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
+      <AmbientBackground />
       <GameHeader title="Level 1" showBack={false} />
       <View style={styles.content}>
         <HintBubble text="Tap an arrow" />
@@ -43,7 +45,7 @@ export function TutorialScreen() {
 
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: theme.colors.bgPrimary,
+    backgroundColor: 'transparent',
     flex: 1
   },
   content: {

@@ -1,6 +1,8 @@
 import { useNavigation } from '@react-navigation/native';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
+import { AmbientBackground } from '../components/AmbientBackground';
 import { GameHeader } from '../components/GameHeader';
 import { getLevel, getTotalLevels } from '../levels/levels';
 import { useGameStore } from '../state/gameStore';
@@ -24,6 +26,7 @@ export function LevelSelectScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
+      <AmbientBackground />
       <GameHeader
         title="Select Level"
         showBack={true}
@@ -38,24 +41,13 @@ export function LevelSelectScreen() {
             const color = isUnlocked ? difficultyColor[difficulty] : theme.colors.levelLocked;
             
             return (
-              <Pressable
+              <LevelBoxButton
                 key={levelId}
-                style={[
-                  styles.levelBox,
-                  { borderColor: isUnlocked ? color : theme.colors.levelLocked },
-                  !isUnlocked && styles.levelBoxLocked
-                ]}
+                levelId={levelId}
+                isUnlocked={isUnlocked}
+                color={color}
                 onPress={() => handleSelectLevel(levelId)}
-              >
-                <Text style={[styles.levelNumber, { color: isUnlocked ? color : '#FFF' }]}>
-                  {levelId}
-                </Text>
-                {isUnlocked && (
-                  <View style={[styles.badge, { backgroundColor: color }]}>
-                    <Text style={styles.badgeText}>{difficulty[0]}</Text>
-                  </View>
-                )}
-              </Pressable>
+              />
             );
           })}
         </View>
@@ -64,10 +56,57 @@ export function LevelSelectScreen() {
   );
 }
 
+function LevelBoxButton({
+  levelId,
+  isUnlocked,
+  color,
+  onPress
+}: {
+  levelId: number;
+  isUnlocked: boolean;
+  color: string;
+  onPress: () => void;
+}) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }]
+  }));
+
+  const difficulty = getLevel(levelId).difficulty;
+
+  return (
+    <Pressable
+      onPressIn={() => { if (isUnlocked) scale.value = withSpring(0.92, { damping: 10, stiffness: 350 }); }}
+      onPressOut={() => { if (isUnlocked) scale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
+      onPress={onPress}
+      disabled={!isUnlocked}
+    >
+      <Animated.View
+        style={[
+          styles.levelBox,
+          { borderColor: isUnlocked ? color : theme.colors.levelLocked },
+          !isUnlocked && styles.levelBoxLocked,
+          animatedStyle
+        ]}
+      >
+        <Text style={[styles.levelNumber, { color: isUnlocked ? color : '#FFF' }]}>
+          {levelId}
+        </Text>
+        {isUnlocked && (
+          <View style={[styles.badge, { backgroundColor: color }]}>
+            <Text style={styles.badgeText}>{difficulty[0]}</Text>
+          </View>
+        )}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: theme.colors.bgPrimary,
+    backgroundColor: 'transparent',
   },
   scrollContent: {
     padding: 24,
@@ -84,13 +123,14 @@ const styles = StyleSheet.create({
     height: 72,
     borderWidth: 3,
     borderRadius: 16,
-    backgroundColor: theme.colors.bgPrimary,
+    backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
     ...theme.shadows.sm,
   },
   levelBoxLocked: {
-    backgroundColor: theme.colors.levelLocked,
+    backgroundColor: 'rgba(200, 189, 174, 0.35)',
+    borderColor: 'rgba(200, 189, 174, 0.2)',
   },
   levelNumber: {
     fontSize: 26,

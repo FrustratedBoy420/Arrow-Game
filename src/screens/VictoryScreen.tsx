@@ -3,6 +3,7 @@ import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useEffect } from 'react';
 
+import { AmbientBackground } from '../components/AmbientBackground';
 import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
@@ -13,6 +14,7 @@ export function VictoryScreen() {
 
   const starScale = useSharedValue(0);
   const textOpacity = useSharedValue(0);
+  const btnScale = useSharedValue(1);
 
   useEffect(() => {
     starScale.value = withSequence(
@@ -31,24 +33,33 @@ export function VictoryScreen() {
     alignItems: 'center' as const
   }));
 
+  const buttonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: btnScale.value }]
+  }));
+
   return (
     <SafeAreaView style={styles.screen}>
+      <AmbientBackground />
       <View style={styles.content}>
         <Animated.Text style={[styles.stars, starStyle]}>★ ★ ★</Animated.Text>
         <Animated.View style={textStyle}>
           <Text style={styles.title}>Level Complete</Text>
           <Text style={styles.reward}>+25 coins</Text>
         </Animated.View>
+        
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Next level"
-          style={styles.button}
+          onPressIn={() => { btnScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
+          onPressOut={() => { btnScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
           onPress={() => {
             nextLevel();
             navigation.replace('Gameplay');
           }}
         >
-          <Text style={styles.buttonText}>Next</Text>
+          <Animated.View style={[styles.button, buttonStyle]}>
+            <Text style={styles.buttonText}>Next Level</Text>
+          </Animated.View>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -57,7 +68,7 @@ export function VictoryScreen() {
 
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: theme.colors.bgPrimary,
+    backgroundColor: 'transparent',
     flex: 1
   },
   content: {
@@ -67,34 +78,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24
   },
   stars: {
-    color: theme.colors.textPrimary,
-    fontSize: 40,
-    marginBottom: 16
+    color: '#FFD54F',
+    fontSize: 48,
+    marginBottom: 20,
+    textShadowColor: 'rgba(106, 68, 40, 0.2)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 6
   },
   title: {
-    color: theme.colors.textPrimary,
-    fontSize: 32,
-    fontWeight: '800',
+    color: theme.colors.arrowStroke,
+    fontSize: 36,
+    fontWeight: '900',
     marginBottom: 10,
     textAlign: 'center'
   },
   reward: {
-    color: theme.colors.textMuted,
-    fontSize: 20,
+    color: theme.colors.textPrimary,
+    fontSize: 22,
     fontWeight: '700',
-    marginBottom: 28
+    marginBottom: 36
   },
   button: {
     alignItems: 'center',
     backgroundColor: theme.colors.arrowStroke,
-    borderRadius: theme.radius.sm,
-    minWidth: 160,
-    paddingHorizontal: 24,
-    paddingVertical: 14
+    borderRadius: 30,
+    minWidth: 200,
+    paddingHorizontal: 36,
+    paddingVertical: 18,
+    ...theme.shadows.lg
   },
   buttonText: {
     color: theme.colors.white,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800'
   }
 });
