@@ -9,6 +9,7 @@ import { FailScreen } from './src/screens/FailScreen';
 import { GameplayScreen } from './src/screens/GameplayScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LevelSelectScreen } from './src/screens/LevelSelectScreen';
+import { MultiplayerScreen } from './src/screens/MultiplayerScreen';
 import { TutorialScreen } from './src/screens/TutorialScreen';
 import { VictoryScreen } from './src/screens/VictoryScreen';
 import { theme } from './src/theme/theme';
@@ -20,6 +21,7 @@ export type RootStackParamList = {
   LevelSelect: undefined;
   Victory: undefined;
   Fail: undefined;
+  Multiplayer: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -43,6 +45,7 @@ export default function App() {
           <Stack.Screen name="Gameplay" component={GameplayScreen} />
           <Stack.Screen name="Victory" component={VictoryScreen} />
           <Stack.Screen name="Fail" component={FailScreen} />
+          <Stack.Screen name="Multiplayer" component={MultiplayerScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </GestureHandlerRootView>

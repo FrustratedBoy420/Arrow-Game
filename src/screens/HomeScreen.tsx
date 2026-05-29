@@ -30,6 +30,7 @@ export function HomeScreen() {
   // Button interactive scales
   const startScale = useSharedValue(1);
   const selectScale = useSharedValue(1);
+  const multiScale = useSharedValue(1);
 
   useEffect(() => {
     titleScale.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.back(1.4)) });
@@ -71,6 +72,10 @@ export function HomeScreen() {
     transform: [{ scale: selectScale.value }]
   }));
 
+  const multiAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: multiScale.value }]
+  }));
+
   return (
     <SafeAreaView style={styles.screen}>
       <AmbientBackground />
@@ -105,6 +110,17 @@ export function HomeScreen() {
           >
             <Animated.View style={[styles.startBtn, styles.levelSelectBtn, selectAnimStyle]}>
               <Text style={[styles.startBtnText, styles.levelSelectText]}>Level Select</Text>
+            </Animated.View>
+          </Pressable>
+
+          <Pressable
+            style={{ width: '100%', alignItems: 'center' }}
+            onPressIn={() => { multiScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
+            onPressOut={() => { multiScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
+            onPress={() => navigation.navigate('Multiplayer')}
+          >
+            <Animated.View style={[styles.startBtn, styles.multiplayerBtn, multiAnimStyle]}>
+              <Text style={[styles.startBtnText, styles.multiplayerText]}>⚔️ Multiplayer Mode ⚔️</Text>
             </Animated.View>
           </Pressable>
         </Animated.View>
@@ -155,5 +171,16 @@ const styles = StyleSheet.create({
   },
   levelSelectText: {
     color: theme.colors.arrowStroke,
+  },
+  multiplayerBtn: {
+    backgroundColor: '#6A4428',
+    borderWidth: 2,
+    borderColor: '#FFD54F',
+    marginTop: 16,
+    ...theme.shadows.lg
+  },
+  multiplayerText: {
+    color: '#FFD54F',
+    fontWeight: '800'
   }
 });

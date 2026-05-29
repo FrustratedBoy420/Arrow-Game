@@ -29,12 +29,34 @@ const dirVec: Record<Direction, { x: number; y: number }> = {
   LEFT: { x: -1, y: 0 }, RIGHT: { x: 1, y: 0 }
 };
 
-// All arrows now use a single premium color: theme.colors.arrowStroke
-
 export function PuzzleBoardCanvas({ board, exitingArrows, width, onArrowPress, onExitDone }: Props) {
   const cellSize = width / board.level.gridSize.columns;
   const height = cellSize * board.level.gridSize.rows;
   const strokeW = Math.max(3, cellSize * 0.13);
+
+  const initialDots = useMemo(() => {
+    const dots: { r: number; c: number }[] = [];
+    const occupied = new Set<string>();
+
+    const arrows = board.level?.arrows || [];
+    arrows.forEach((arrow) => {
+      const fullPath = arrow.fullPath || [];
+      fullPath.forEach((cell) => {
+        occupied.add(`${cell.x},${cell.y}`);
+      });
+    });
+
+    const rows = board.level?.gridSize?.rows || 0;
+    const columns = board.level?.gridSize?.columns || 0;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < columns; c++) {
+        if (occupied.has(`${c},${r}`)) {
+          dots.push({ r, c });
+        }
+      }
+    }
+    return dots;
+  }, [board.level]);
 
   const arrowPaths = useMemo(
     () => board.arrows.map((arrow) => {
@@ -51,17 +73,15 @@ export function PuzzleBoardCanvas({ board, exitingArrows, width, onArrowPress, o
     <View style={[styles.container, { width, height }]}>
       {/* Static arrows via Skia */}
       <Canvas style={StyleSheet.absoluteFill}>
-        {Array.from({ length: board.level.gridSize.rows }).map((_, r) =>
-          Array.from({ length: board.level.gridSize.columns }).map((_, c) => (
-            <Circle
-              key={`dot-${r}-${c}`}
-              cx={c * cellSize + cellSize / 2}
-              cy={r * cellSize + cellSize / 2}
-              r={Math.max(2, cellSize * 0.05)}
-              color={theme.colors.borderSoft}
-            />
-          ))
-        )}
+        {initialDots.map(({ r, c }) => (
+          <Circle
+            key={`dot-${r}-${c}`}
+            cx={c * cellSize + cellSize / 2}
+            cy={r * cellSize + cellSize / 2}
+            r={Math.max(2, cellSize * 0.05)}
+            color={theme.colors.borderSoft}
+          />
+        ))}
         {arrowPaths.map(({ id, path, color }) => (
           <Path
             key={id}
