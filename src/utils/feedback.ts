@@ -1,15 +1,12 @@
-import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
+import { audioManager } from './audio';
 
-export async function playCorrectFeedback(soundEnabled: boolean) {
-  if (!soundEnabled) {
-    return;
-  }
-
-  await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+export async function playCorrectFeedback() {
+  await audioManager.playSound('correct');
 }
 
 export async function playWrongFeedback(hapticsEnabled: boolean) {
+  await audioManager.playSound('wrong');
   if (hapticsEnabled) {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
   }

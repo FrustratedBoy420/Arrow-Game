@@ -1,9 +1,11 @@
 import { useNavigation } from '@react-navigation/native';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useEffect } from 'react';
 
 import { AmbientBackground } from '../components/AmbientBackground';
 import { useGameStore } from '../state/gameStore';
+import { audioManager } from '../utils/audio';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 
@@ -12,6 +14,10 @@ export function FailScreen() {
   const retry = useGameStore((state) => state.retry);
 
   const btnScale = useSharedValue(1);
+
+  useEffect(() => {
+    audioManager.playSound('outOfMove');
+  }, []);
 
   const buttonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: btnScale.value }]

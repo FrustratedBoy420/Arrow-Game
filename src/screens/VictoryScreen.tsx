@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 
 import { AmbientBackground } from '../components/AmbientBackground';
 import { useGameStore } from '../state/gameStore';
+import { audioManager } from '../utils/audio';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 
@@ -17,6 +18,7 @@ export function VictoryScreen() {
   const btnScale = useSharedValue(1);
 
   useEffect(() => {
+    audioManager.playSound('victory');
     starScale.value = withSequence(
       withTiming(1.4, { duration: 400, easing: Easing.out(Easing.cubic) }),
       withSpring(1, { damping: 12, stiffness: 100 })

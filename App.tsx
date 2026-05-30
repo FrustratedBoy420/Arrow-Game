@@ -4,6 +4,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useEffect } from 'react';
+
+import { audioManager } from './src/utils/audio';
 
 import { FailScreen } from './src/screens/FailScreen';
 import { GameplayScreen } from './src/screens/GameplayScreen';
@@ -27,6 +30,10 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
+  useEffect(() => {
+    void audioManager.init();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer>

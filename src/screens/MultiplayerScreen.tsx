@@ -454,7 +454,7 @@ export function MultiplayerScreen() {
         withTiming(0.98, { duration: 70 }),
         withSpring(1, { damping: 12, stiffness: 200 })
       );
-      void playCorrectFeedback(soundEnabled);
+      void playCorrectFeedback();
 
       const nextBoard = result.board;
       setBoard(nextBoard);

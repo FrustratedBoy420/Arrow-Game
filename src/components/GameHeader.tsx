@@ -12,10 +12,9 @@ type Props = {
   showBack?: boolean;
   onBack?: () => void;
   onSettings?: () => void;
-  onTheme?: () => void;
 };
 
-export function GameHeader({ title, difficulty, arrowsLeft, totalArrows, showBack = true, onBack, onSettings, onTheme }: Props) {
+export function GameHeader({ title, difficulty, arrowsLeft, totalArrows, showBack = true, onBack, onSettings }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.side}>
@@ -39,9 +38,6 @@ export function GameHeader({ title, difficulty, arrowsLeft, totalArrows, showBac
       </View>
 
       <View style={[styles.side, styles.actions]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Theme" onPress={onTheme} style={styles.iconButton}>
-          <Text style={styles.smallIcon}>◌</Text>
-        </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={onSettings} style={styles.iconButton}>
           <Text style={styles.smallIcon}>⬡</Text>
         </Pressable>

@@ -15,6 +15,7 @@ import { BottomControls } from '../components/BottomControls';
 import { GameHeader } from '../components/GameHeader';
 import { LivesIndicator } from '../components/LivesIndicator';
 import { PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
+import { SettingsModal } from '../components/SettingsModal';
 import { isFrontClear } from '../game/engine';
 import type { ArrowNode } from '../game/types';
 import { useGameStore } from '../state/gameStore';
@@ -34,8 +35,8 @@ export function GameplayScreen() {
   const retry = useGameStore((s) => s.retry);
   const undo = useGameStore((s) => s.undo);
   const useHint = useGameStore((s) => s.useHint);
-  const toggleSound = useGameStore((s) => s.toggleSound);
 
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
   const pendingNav = useRef<'Victory' | 'Fail' | null>(null);
   const boardScale = useSharedValue(1);
@@ -86,11 +87,11 @@ export function GameplayScreen() {
         withTiming(0.98, { duration: 70 }),
         withSpring(1, { damping: 12, stiffness: 200 })
       );
-      void playCorrectFeedback(soundEnabled);
+      void playCorrectFeedback();
     } else if (result === 'BLOCKED') {
       void playWrongFeedback(hapticsEnabled);
     }
-  }, [board.arrows, tapArrow, soundEnabled, hapticsEnabled, boardScale]);
+  }, [board.arrows, tapArrow, hapticsEnabled, boardScale]);
 
   const handleHint = useCallback(() => {
     const hintArrow = board.arrows.find((a) => isFrontClear(a, board));
@@ -101,11 +102,11 @@ export function GameplayScreen() {
         withTiming(0.97, { duration: 100 }),
         withSpring(1, { damping: 12, stiffness: 180 })
       );
-      void playCorrectFeedback(soundEnabled);
+      void playCorrectFeedback();
     } else {
       Alert.alert('No Hint', 'No valid move right now. Try Undo!');
     }
-  }, [board, useHint, soundEnabled, boardScale]);
+  }, [board, useHint, boardScale]);
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -116,8 +117,7 @@ export function GameplayScreen() {
         arrowsLeft={board.arrows.length}
         totalArrows={board.level.arrows.length}
         onBack={() => navigation.replace('Home')}
-        onSettings={toggleSound}
-        onTheme={() => Alert.alert('Theme', 'Coming soon!')}
+        onSettings={() => setSettingsVisible(true)}
       />
       <LivesIndicator livesLeft={board.livesLeft} />
       <View style={styles.boardStage}>
@@ -132,6 +132,14 @@ export function GameplayScreen() {
         </Animated.View>
       </View>
       <BottomControls onUndo={undo} onHint={handleHint} onRestart={retry} />
+      <SettingsModal 
+        visible={settingsVisible} 
+        onClose={() => setSettingsVisible(false)} 
+        onRestart={() => {
+          setSettingsVisible(false);
+          retry();
+        }} 
+      />
     </SafeAreaView>
   );
 }

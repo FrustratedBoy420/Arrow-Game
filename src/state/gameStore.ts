@@ -15,6 +15,7 @@ type GameStore = {
   status: GameStatus;
   soundEnabled: boolean;
   hapticsEnabled: boolean;
+  musicEnabled: boolean;
   lastHintArrowId: string | null;
   startLevel: (levelId: number) => void;
   completeTutorial: () => void;
@@ -25,6 +26,7 @@ type GameStore = {
   useHint: () => string | null;
   toggleSound: () => void;
   toggleHaptics: () => void;
+  toggleMusic: () => void;
 };
 
 const initialLevel = getLevel(1);
@@ -39,6 +41,7 @@ export const useGameStore = create<GameStore>()(
       status: 'playing',
       soundEnabled: true,
       hapticsEnabled: true,
+      musicEnabled: true,
       lastHintArrowId: null,
       startLevel: (levelId) => {
         const level = getLevel(levelId);
@@ -157,7 +160,8 @@ export const useGameStore = create<GameStore>()(
         return hintArrow.id;
       },
       toggleSound: () => set((state) => ({ soundEnabled: !state.soundEnabled })),
-      toggleHaptics: () => set((state) => ({ hapticsEnabled: !state.hapticsEnabled }))
+      toggleHaptics: () => set((state) => ({ hapticsEnabled: !state.hapticsEnabled })),
+      toggleMusic: () => set((state) => ({ musicEnabled: !state.musicEnabled }))
     }),
     {
       name: 'arrow-escape-progress',
@@ -167,7 +171,8 @@ export const useGameStore = create<GameStore>()(
         highestUnlockedLevel: state.highestUnlockedLevel,
         hasSeenTutorial: state.hasSeenTutorial,
         soundEnabled: state.soundEnabled,
-        hapticsEnabled: state.hapticsEnabled
+        hapticsEnabled: state.hapticsEnabled,
+        musicEnabled: state.musicEnabled
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
