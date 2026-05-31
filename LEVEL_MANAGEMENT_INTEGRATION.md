@@ -165,21 +165,21 @@ Example E: Player takes 24 seconds, 1 heart lost
 // ============================================================================
 
 /*
-Tier 1: Levels 1-5
+Block 1: Levels 1-5
 ├─ Status: ALWAYS UNLOCKED
 ├─ Required Stars: None (N/A)
 └─ Purpose: Tutorial/Learning
 
-Tier 2: Levels 6-10
+Block 2: Levels 6-10
 ├─ Status: LOCKED initially
-├─ Required Stars: 10 (configurable in LEVEL_CONFIG)
-├─ Auto-unlocks when total stars ≥ 10
+├─ Required Stars: 13 (configurable in LEVEL_CONFIG)
+├─ Unlock condition: 13 stars earned in Block 1
 └─ Purpose: Intermediate challenge
 
-Tier 3: Levels 11+
+Block 3: Levels 11-15
 ├─ Status: LOCKED initially
-├─ Required Stars: 25 (configurable in LEVEL_CONFIG)
-├─ Auto-unlocks when total stars ≥ 25
+├─ Required Stars: 13 (configurable in LEVEL_CONFIG)
+├─ Unlock condition: 13 stars earned in Block 2
 └─ Purpose: Advanced/Expert challenges
 
 ADDING MORE LEVELS
@@ -245,8 +245,7 @@ File: src/systems/levelManagement.ts
 Export: LEVEL_CONFIG
 
 Current values:
-├─ REQUIRED_TOTAL_STARS_FOR_TIER_2: 10
-├─ REQUIRED_TOTAL_STARS_FOR_TIER_3: 25
+├─ STARS_REQUIRED_PER_BLOCK: 13
 ├─ MIN_STARS_PER_LEVEL: 1
 └─ MAX_STARS_PER_LEVEL: 3
 
@@ -254,10 +253,10 @@ TO ADJUST:
 ──────────
 
 Example 1 - Easier progression:
-  REQUIRED_TOTAL_STARS_FOR_TIER_2: 7  // Unlock tier 2 sooner
+  STARS_REQUIRED_PER_BLOCK: 10  // Unlock next block sooner
 
 Example 2 - Harder progression:
-  REQUIRED_TOTAL_STARS_FOR_TIER_2: 15  // Need more stars
+  STARS_REQUIRED_PER_BLOCK: 14  // Need almost perfect scores
 
 Example 3 - More stars per level:
   MAX_STARS_PER_LEVEL: 5  // Up to 5 stars instead of 3

@@ -186,11 +186,8 @@ LEVEL_CONFIG Object
 ───────────────────
 
 export const LEVEL_CONFIG = {
-  // Stars required to unlock Tier 2 (Levels 6-10)
-  REQUIRED_TOTAL_STARS_FOR_TIER_2: 10,
-  
-  // Stars required to unlock Tier 3 (Levels 11+)
-  REQUIRED_TOTAL_STARS_FOR_TIER_3: 25,
+  // Stars required to unlock the next block of 5 levels
+  STARS_REQUIRED_PER_BLOCK: 13,
   
   // Minimum stars per successful completion
   MIN_STARS_PER_LEVEL: 1,
@@ -204,10 +201,10 @@ TO MODIFY DIFFICULTY:
 Just edit LEVEL_CONFIG values. No other changes needed.
 
 Example 1: Easier Progression
-  REQUIRED_TOTAL_STARS_FOR_TIER_2: 8  // Unlock tier 2 sooner
+  STARS_REQUIRED_PER_BLOCK: 10  // Unlock next block sooner
 
 Example 2: Stricter Grading
-  REQUIRED_TOTAL_STARS_FOR_TIER_2: 15  // Need more stars
+  STARS_REQUIRED_PER_BLOCK: 14  // Need almost perfect scores
 
 Example 3: Allow 0-star completions
   MIN_STARS_PER_LEVEL: 0  // Not recommended for gameplay
@@ -413,41 +410,35 @@ Result: 3 stars earned
 // ============================================================================
 
 /*
-DYNAMIC TIER SYSTEM
-───────────────────
+DYNAMIC BLOCK SYSTEM
+────────────────────
 
-Tier 1 (Levels 1-5):
+Block 1 (Levels 1-5):
   ├─ Always UNLOCKED from the start
   ├─ No requirements
   └─ Players complete these to earn stars
 
-Tier 2 (Levels 6-10):
+Block 2 (Levels 6-10):
   ├─ Start as LOCKED
-  ├─ Unlock when totalStars >= REQUIRED_TOTAL_STARS_FOR_TIER_2 (default: 10)
+  ├─ Unlock when Stars in Block 1 >= STARS_REQUIRED_PER_BLOCK (default: 13)
   ├─ Once unlocked, stays unlocked
-  └─ Can add more levels (e.g., 11-15) they automatically become Tier 3+
+  └─ Add more levels (e.g., 11-15) they automatically become Block 3+
 
-Tier 3 (Levels 11+):
+Block 3 (Levels 11-15):
   ├─ Start as LOCKED
-  ├─ Unlock when totalStars >= REQUIRED_TOTAL_STARS_FOR_TIER_3 (default: 25)
-  ├─ Perfect for future expansion
-  └─ Add new levels without changing code
+  ├─ Unlock when Stars in Block 2 >= STARS_REQUIRED_PER_BLOCK (default: 13)
+  └─ Perfect for future expansion
 
-HOW TO EXTEND TO 4+ TIERS
-────────────────────────
+HOW TO EXTEND TO MORE BLOCKS
+────────────────────────────
 
-In levelManagement.ts, add to LEVEL_CONFIG:
-  REQUIRED_TOTAL_STARS_FOR_TIER_4: 40,
-
-In checkLevelUnlocks(), add tier logic:
-  else if (levelNum >= 16 && levelNum <= 20) {
-    shouldBeUnlocked = totalStarsEarned >= LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_4;
-  }
-
-Then dynamically add levels:
+The system automatically handles blocks of 5. To add more levels:
   addLevel(levelMap, 16, 32);
   addLevel(levelMap, 17, 35);
   // ... etc
+
+The checkLevelUnlocks() function will group them into blocks 
+and apply the STARS_REQUIRED_PER_BLOCK threshold automatically.
 */
 
 // ============================================================================
@@ -543,14 +534,14 @@ PRINT PROGRESS REPORT
     ==================================================
     Progress: 5/6 levels completed
     Unlocked: 5/6 levels available
-    Total Stars: 11
-    Next Tier Requirement: 10 stars
+    Total Stars: 13
+    Block Requirement: 13 stars per 5 levels
     
       Level 1: ✅ COMPLETE | ⭐⭐⭐ (8s)
       Level 2: ✅ COMPLETE | ⭐⭐⭐ (12s)
-      Level 3: ✅ COMPLETE | ⭐⭐ (16s)
-      Level 4: ✅ COMPLETE | ⭐⭐ (19s)
-      Level 5: ✅ COMPLETE | ⭐ (24s)
+      Level 3: ✅ COMPLETE | ⭐⭐ (15s)
+      Level 4: ✅ COMPLETE | ⭐⭐⭐ (18s)
+      Level 5: ✅ COMPLETE | ⭐⭐ (20s)
       Level 6: 🔓 OPEN | ○ (—)
     ==================================================
 */

@@ -1,8 +1,10 @@
 import { useNavigation } from '@react-navigation/native';
+import { useState } from 'react';
 import { SafeAreaView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { AmbientBackground } from '../components/AmbientBackground';
 import { GameHeader } from '../components/GameHeader';
+import { SettingsModal } from '../components/SettingsModal';
 import { HintBubble } from '../components/HintBubble';
 import { PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
 import { createInitialBoard } from '../game/engine';
@@ -16,13 +18,18 @@ const tutorialBoard = createInitialBoard(getLevel(1));
 export function TutorialScreen() {
   const navigation = useNavigation<AppNavigation>();
   const completeTutorial = useGameStore((state) => state.completeTutorial);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const { width } = useWindowDimensions();
   const boardWidth = Math.min(width * 0.44, 220);
 
   return (
     <SafeAreaView style={styles.screen}>
       <AmbientBackground />
-      <GameHeader title="Level 1" showBack={false} />
+      <GameHeader
+        title="Level 1"
+        showBack={false}
+        onSettings={() => setSettingsVisible(true)}
+      />
       <View style={styles.content}>
         <HintBubble text="Tap an arrow" />
         <View style={styles.boardRow}>
@@ -39,6 +46,10 @@ export function TutorialScreen() {
           <Text style={styles.hand}>☝</Text>
         </View>
       </View>
+      <SettingsModal
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+      />
     </SafeAreaView>
   );
 }
