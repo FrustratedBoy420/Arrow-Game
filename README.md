@@ -160,6 +160,26 @@ eas build --profile preview
 eas build --profile production
 ```
 
+## Dynamic Configuration & Backend Integration
+
+The app supports **dynamic configuration** loaded from the backend database (Redis):
+- **Dynamic Levels**: Game levels can be updated, added, or deleted from the database.
+- **Dynamic Audio**: Pasting hosted audio URLs dynamically overrides background music and move/victory sound effects.
+- **Dynamic Accent Icon**: Home Screen top character symbol is fetched from the database icons config.
+
+### Connecting to Your Backend
+The app fetches configurations from the server URL saved in `AsyncStorage` under `multiplayer_url` (defaulting to the production URL `https://arrow-game-backend.vercel.app`).
+To point the app to a custom or local backend:
+1. Open the app and navigate to **⚔️ Multiplayer Mode ⚔️**.
+2. Change the **Server URL** to your server IP address (e.g., `http://192.168.1.5:3000` for local running backend).
+3. Trigger a room creation or join once. This saves the URL to AsyncStorage.
+4. On subsequent app launches, the singleplayer mode will query your server to download latest levels and configurations.
+
+### Offline & Fallback Support
+If the backend server is unreachable or offline, the app automatically:
+1. Uses the previously cached config saved in `AsyncStorage`.
+2. Falls back to the bundled local `levels.json` and static asset soundtracks if no cache is available.
+
 ## Notes
 
 - Game progress is persisted locally under `arrow-escape-progress`.

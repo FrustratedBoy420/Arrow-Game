@@ -1,7 +1,13 @@
 import type { LevelDefinition } from '../game/types';
 import levelData from './level.json';
 
-export const levels: LevelDefinition[] = levelData as unknown as LevelDefinition[];
+export let levels: LevelDefinition[] = levelData as unknown as LevelDefinition[];
+
+export function setDynamicLevels(newLevels: LevelDefinition[]) {
+  if (Array.isArray(newLevels) && newLevels.length > 0) {
+    levels = newLevels;
+  }
+}
 
 export function getLevel(id: number): LevelDefinition {
   const level = levels.find((l) => l.id === id);
@@ -18,3 +24,4 @@ export function getNextLevelId(currentId: number): number {
   if (currentIndex < 0 || currentIndex >= levels.length - 1) return currentId;
   return levels[currentIndex + 1]!.id;
 }
+

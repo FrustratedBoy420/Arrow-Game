@@ -17,21 +17,24 @@ class AudioManager {
   private isInitializing = false;
   private subscriptionUnsubscribe: (() => void) | null = null;
   private lastMusicState: boolean | null = null;
+  private lastMusicUrlsJson = '{}';
 
   private async loadAsset(
-    asset: any,
+    assetOrUri: any,
     label: string,
     options: object
   ): Promise<Audio.Sound | null> {
     try {
       console.log(`Loading audio asset: ${label}`);
       
+      const source = typeof assetOrUri === 'string' ? { uri: assetOrUri } : assetOrUri;
+      
       const { sound } = await Audio.Sound.createAsync(
-        asset,
+        source,
         options as any
       );
 
-      console.log(`Successfully loaded local asset: ${label}`);
+      console.log(`Successfully loaded asset: ${label}`);
       return sound;
     } catch (err: any) {
       console.error(`Failed to load audio asset: ${label}`, {
@@ -75,10 +78,14 @@ class AudioManager {
       console.error('Failed to set audio mode', e);
     }
 
+    // Retrieve dynamic music/sound configurations from store
+    const storeState = useGameStore.getState();
+    const musicUrls = (storeState as any).musicUrls || {};
+
     const soundSources = [
       {
         name: 'correct',
-        asset: correctSoundAsset,
+        asset: musicUrls.correct || correctSoundAsset,
         options: {
           shouldPlay: false,
           volume: 1.0,
@@ -86,7 +93,7 @@ class AudioManager {
       },
       {
         name: 'wrong',
-        asset: wrongSoundAsset,
+        asset: musicUrls.wrong || wrongSoundAsset,
         options: {
           shouldPlay: false,
           volume: 1.0,
@@ -94,7 +101,7 @@ class AudioManager {
       },
       {
         name: 'victory',
-        asset: victorySoundAsset,
+        asset: musicUrls.victory || victorySoundAsset,
         options: {
           shouldPlay: false,
           volume: 1.0,
@@ -102,7 +109,7 @@ class AudioManager {
       },
       {
         name: 'outOfMove',
-        asset: outOfMoveSoundAsset,
+        asset: musicUrls.outOfMove || outOfMoveSoundAsset,
         options: {
           shouldPlay: false,
           volume: 1.0,
@@ -127,10 +134,11 @@ class AudioManager {
 
     // Load background music
     console.log('Loading background music...');
-    const musicEnabled = useGameStore.getState().musicEnabled;
+    const musicEnabled = storeState.musicEnabled;
+    const bgMusicSource = musicUrls.bgMusic || bgMusicAsset;
 
     const bgSound = await this.loadAsset(
-      bgMusicAsset,
+      bgMusicSource,
       'bgMusic',
       {
         shouldPlay: false,
@@ -157,10 +165,21 @@ class AudioManager {
 
       this.subscriptionUnsubscribe = useGameStore.subscribe(
         (state) => {
-          // Only trigger if manager is ready and the state actually changed
+          // 1. Handle music toggle
           if (this.isInitialized && state.musicEnabled !== this.lastMusicState) {
             console.log(`Music enabled changed: ${state.musicEnabled}`);
             this.handleMusicToggle(state.musicEnabled);
+          }
+
+          // 2. Handle dynamic music config changes
+          const currentUrlsJson = JSON.stringify((state as any).musicUrls || {});
+          if (this.isInitialized && this.lastMusicUrlsJson !== currentUrlsJson) {
+            console.log('Dynamic music URLs changed, reloading audio manager...');
+            this.lastMusicUrlsJson = currentUrlsJson;
+            // Reload asynchronously to prevent blocking the store state update
+            setTimeout(() => {
+              this.reload().catch(err => console.error('Failed to reload audio manager:', err));
+            }, 0);
           }
         }
       );
@@ -265,6 +284,12 @@ class AudioManager {
     } catch (e) {
       console.error('Failed to cleanup audio manager', e);
     }
+  }
+
+  async reload() {
+    console.log('Reloading audio manager with potential new dynamic assets...');
+    await this.cleanup();
+    await this.init();
   }
 }
 

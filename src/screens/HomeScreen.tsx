@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useEffect } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
@@ -20,6 +21,8 @@ import type { AppNavigation } from '../types/navigation';
 export function HomeScreen() {
   const navigation = useNavigation<AppNavigation>();
   const hasSeenTutorial = useGameStore((s) => s.hasSeenTutorial);
+  const iconsConfig = useGameStore((s) => s.iconsConfig);
+  const fetchGameConfig = useGameStore((s) => s.fetchGameConfig);
 
   const titleScale = useSharedValue(0.8);
   const titleOpacity = useSharedValue(0);
@@ -33,6 +36,17 @@ export function HomeScreen() {
   const multiScale = useSharedValue(1);
 
   useEffect(() => {
+    async function loadConfig() {
+      try {
+        const savedUrl = await AsyncStorage.getItem('multiplayer_url');
+        await fetchGameConfig(savedUrl || undefined);
+      } catch (err) {
+        console.error('Failed to load server URL from AsyncStorage:', err);
+        await fetchGameConfig();
+      }
+    }
+    loadConfig();
+
     titleScale.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.back(1.4)) });
     titleOpacity.value = withTiming(1, { duration: 500 });
     btnOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
@@ -48,7 +62,7 @@ export function HomeScreen() {
         true
       )
     );
-  }, []);
+  }, [fetchGameConfig]);
 
   const titleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: titleScale.value }],
@@ -81,7 +95,7 @@ export function HomeScreen() {
       <AmbientBackground />
       <View style={styles.content}>
         <Animated.View style={[styles.arrowDeco, arrowStyle]}>
-          <Text style={styles.arrowIcon}>➤</Text>
+          <Text style={styles.arrowIcon}>{iconsConfig?.homeArrow || '➤'}</Text>
         </Animated.View>
 
         <Animated.View style={titleStyle}>
