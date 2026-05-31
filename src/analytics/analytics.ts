@@ -6,7 +6,8 @@ export type AnalyticsEventName =
   | 'move_wrong'
   | 'level_complete'
   | 'level_failed'
-  | 'retry';
+  | 'retry'
+  | 'stars_earned';
 
 export function trackEvent(name: AnalyticsEventName, payload: AnalyticsPayload = {}) {
   if (__DEV__) {

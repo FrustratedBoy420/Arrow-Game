@@ -49,8 +49,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 32,
     justifyContent: 'center',
-    paddingBottom: 34,
-    paddingTop: 18
+    paddingBottom: 24,
+    paddingTop: 12
   },
   button: {
     alignItems: 'center',
@@ -62,20 +62,20 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(106, 68, 40, 0.12)',
     borderRadius: 18,
     borderWidth: 1.5,
-    height: 56,
+    height: 48,
     justifyContent: 'center',
-    width: 66,
-    marginBottom: 8,
-    ...theme.shadows.md
+    width: 58,
+    marginBottom: 6,
+    ...theme.shadows.sm
   },
   icon: {
     color: theme.colors.arrowStroke,
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '700'
   },
   labelText: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5

@@ -6,6 +6,8 @@ import { trackEvent } from '../analytics/analytics';
 import { createInitialBoard, findHintArrow, isBoardWon, resolveTap } from '../game/engine';
 import type { BoardState, GameStatus, LevelDefinition } from '../game/types';
 import { getLevel, getNextLevelId, setDynamicLevels } from '../levels/levels';
+import { completeLevelWithStars, loadLevelProgress, saveLevelProgress } from '../systems/levelManagementStore';
+import type { LevelProgress } from '../systems/levelManagement';
 
 type GameStore = {
   board: BoardState;
@@ -28,6 +30,12 @@ type GameStore = {
   iconsConfig: {
     homeArrow: string;
   };
+  // Level Management System Integration
+  levelProgressMap: Map<number, LevelProgress>;
+  starsEarnedThisLevel: number;
+  levelStartTime: number;
+  gameStartTime: number | null;
+  finalStarsCalculated: number;
   startLevel: (levelId: number) => void;
   completeTutorial: () => void;
   tapArrow: (arrowId: string) => 'REMOVED' | 'BLOCKED';
@@ -39,9 +47,14 @@ type GameStore = {
   toggleHaptics: () => void;
   toggleMusic: () => void;
   fetchGameConfig: (serverUrl?: string) => Promise<void>;
+  recordLevelCompletion: (timeTaken: number, heartsLost: number) => Promise<void>;
+  setFinalStarsCalculated: (stars: number) => void;
 };
 
 const initialLevel = getLevel(1);
+
+// Initialize level progress map - will be hydrated from storage
+const initialLevelMap = new Map<number, LevelProgress>();
 
 export const useGameStore = create<GameStore>()(
   persist(
@@ -66,6 +79,11 @@ export const useGameStore = create<GameStore>()(
       iconsConfig: {
         homeArrow: '➤'
       },
+      levelProgressMap: initialLevelMap,
+      starsEarnedThisLevel: 0,
+      levelStartTime: Date.now(),
+      gameStartTime: null,
+      finalStarsCalculated: 3,
       startLevel: (levelId) => {
         const level = getLevel(levelId);
         trackEvent('level_start', { levelId: level.id, difficulty: level.difficulty });
@@ -73,7 +91,11 @@ export const useGameStore = create<GameStore>()(
           board: createInitialBoard(level),
           currentLevelId: level.id,
           status: 'playing',
-          lastHintArrowId: null
+          lastHintArrowId: null,
+          levelStartTime: Date.now(),
+          gameStartTime: null,
+          // Reset star score on every new level start
+          finalStarsCalculated: 3,
         });
       },
       completeTutorial: () => {
@@ -81,6 +103,11 @@ export const useGameStore = create<GameStore>()(
         get().startLevel(1);
       },
       tapArrow: (arrowId) => {
+        const { gameStartTime } = get();
+        if (gameStartTime === null) {
+          set({ gameStartTime: Date.now() });
+        }
+        
         const result = resolveTap(arrowId, get().board);
         const nextStatus: GameStatus = isBoardWon(result.board)
           ? 'won'
@@ -145,10 +172,14 @@ export const useGameStore = create<GameStore>()(
         });
       },
       useHint: () => {
-        const { board, status } = get();
+        const { board, status, gameStartTime } = get();
 
         if (status !== 'playing') {
           return null;
+        }
+
+        if (gameStartTime === null) {
+          set({ gameStartTime: Date.now() });
         }
 
         const hintArrow = findHintArrow(board);
@@ -227,6 +258,25 @@ export const useGameStore = create<GameStore>()(
         } catch (err) {
           console.warn('⚠️ Failed to fetch dynamic game config, using cache/static:', err);
         }
+      },
+      setFinalStarsCalculated: (stars: number) =>
+        set({ finalStarsCalculated: Math.max(1, Math.min(3, stars)) }),
+      recordLevelCompletion: async (timeTaken, heartsLost) => {
+        const { levelProgressMap, currentLevelId, finalStarsCalculated } = get();
+        const result = completeLevelWithStars(levelProgressMap, currentLevelId, timeTaken, heartsLost, finalStarsCalculated);
+        
+        set({ starsEarnedThisLevel: finalStarsCalculated });
+        
+        // Save to storage
+        await saveLevelProgress(levelProgressMap);
+        
+        // Track analytics
+        trackEvent('stars_earned', {
+          levelId: currentLevelId,
+          stars: result.starsEarned,
+          timeTaken,
+          heartsLost
+        });
       }
     }),
     {
@@ -255,3 +305,12 @@ export const useGameStore = create<GameStore>()(
     }
   )
 );
+
+/**
+ * Initialize the level progress map from storage.
+ * Call this once during app startup (e.g., in your root component).
+ */
+export async function initializeLevelProgressMap(): Promise<void> {
+  const levelProgressMap = await loadLevelProgress();
+  useGameStore.setState({ levelProgressMap });
+}

@@ -52,10 +52,10 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.borderSoft,
     borderBottomWidth: 1,
     flexDirection: 'row',
-    minHeight: 110,
+    minHeight: 100,
     paddingHorizontal: 24,
-    paddingTop: 36,
-    paddingBottom: 16
+    paddingTop: 44,
+    paddingBottom: 8
   },
   side: {
     alignItems: 'flex-start',
@@ -72,9 +72,9 @@ const styles = StyleSheet.create({
   },
   title: {
     color: theme.colors.textPrimary,
-    fontSize: theme.typography.title,
+    fontSize: 24,
     fontWeight: '800',
-    lineHeight: 34,
+    lineHeight: 28,
     textAlign: 'center'
   },
   arrowCount: {
