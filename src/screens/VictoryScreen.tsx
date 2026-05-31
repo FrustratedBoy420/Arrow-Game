@@ -1,9 +1,21 @@
 import { useNavigation } from '@react-navigation/native';
+import React, { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { useEffect } from 'react';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming
+} from 'react-native-reanimated';
 
 import { AmbientBackground } from '../components/AmbientBackground';
+import GearIcon from '../components/GearIcon';
+import { SettingsModal } from '../components/SettingsModal';
+import { getTotalStarsEarned, getUnlockedLevelCount } from '../systems/levelManagement';
+import { ensureLevelProgressMap } from '../systems/levelManagementStore';
 import { useGameStore } from '../state/gameStore';
 import { audioManager } from '../utils/audio';
 import { theme } from '../theme/theme';
@@ -17,9 +29,14 @@ export function VictoryScreen() {
   const board = useGameStore((state) => state.board);
   const gameStartTime = useGameStore((state) => state.gameStartTime);
   const levelStartTime = useGameStore((state) => state.levelStartTime);
-
-  // FIX 3: Read the authoritative star score synced in real-time by StarRatingDisplay
+  const levelProgressMap = useGameStore((state) => state.levelProgressMap);
   const finalStarsCalculated = useGameStore((state) => state.finalStarsCalculated);
+
+  const [settingsVisible, setSettingsVisible] = useState(false);
+
+  const progressMap = ensureLevelProgressMap(levelProgressMap);
+  const totalStars = getTotalStarsEarned(progressMap);
+  const maxPossibleStars = getUnlockedLevelCount(progressMap) * 3;
 
   const starScale = useSharedValue(0);
   const textOpacity = useSharedValue(0);
@@ -27,15 +44,13 @@ export function VictoryScreen() {
 
   useEffect(() => {
     audioManager.playSound('victory');
-    
-    // Calculate time taken using the same logic as the HUD (gameStartTime)
-    // Fallback to levelStartTime if gameStartTime is somehow null
+
     const startTime = gameStartTime ?? levelStartTime;
     const timeTaken = Math.round((Date.now() - startTime) / 1000);
-    const heartsLost = 3 - board.livesLeft;
-    
+    const heartsLost = Math.max(0, 3 - board.livesLeft);
+
     recordLevelCompletion(timeTaken, heartsLost);
-    
+
     starScale.value = withSequence(
       withTiming(1.4, { duration: 400, easing: Easing.out(Easing.cubic) }),
       withSpring(1, { damping: 12, stiffness: 100 })
@@ -46,36 +61,57 @@ export function VictoryScreen() {
   const starStyle = useAnimatedStyle(() => ({
     transform: [{ scale: starScale.value }]
   }));
-
   const textStyle = useAnimatedStyle(() => ({
     opacity: textOpacity.value,
     alignItems: 'center' as const
   }));
-
   const buttonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: btnScale.value }]
   }));
 
-  // FIX 3: Use finalStarsCalculated from the global store (pushed by StarRatingDisplay HUD)
-  // Old code used starsEarnedThisLevel which was a separate async calculation — caused 1-star lock
-  const starDisplay = '⭐'.repeat(finalStarsCalculated) || '○';
+  const starDisplay = '⭐'.repeat(finalStarsCalculated) || '⭐';
 
   return (
     <SafeAreaView style={styles.screen}>
       <AmbientBackground />
+
+      {/* ── Top Header ── */}
+      <View style={styles.header}>
+        <View style={styles.starCounter}>
+          <Text style={styles.starEmoji}>⭐</Text>
+          <Text style={styles.starText}>
+            {totalStars}
+            <Text style={styles.starMax}> / {maxPossibleStars}</Text>
+          </Text>
+        </View>
+        <Pressable
+          style={styles.settingsBtn}
+          onPress={() => setSettingsVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+        >
+          <GearIcon size={28} color={theme.colors.arrowStroke} />
+        </Pressable>
+      </View>
+
+      {/* ── Content ── */}
       <View style={styles.content}>
         <Animated.Text style={[styles.stars, starStyle]}>{starDisplay}</Animated.Text>
         <Animated.View style={textStyle}>
-          <Text style={styles.title}>Level Complete</Text>
+          <Text style={styles.title}>Level Complete!</Text>
           <Text style={styles.reward}>+25 coins</Text>
         </Animated.View>
-        
+
         <View style={styles.buttonContainer}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Replay level"
-            onPressIn={() => { btnScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
-            onPressOut={() => { btnScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
+            onPressIn={() => {
+              btnScale.value = withSpring(0.94, { damping: 10, stiffness: 350 });
+            }}
+            onPressOut={() => {
+              btnScale.value = withSpring(1, { damping: 10, stiffness: 350 });
+            }}
             onPress={() => {
               retry();
               navigation.replace('Gameplay');
@@ -89,8 +125,12 @@ export function VictoryScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Next level"
-            onPressIn={() => { btnScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
-            onPressOut={() => { btnScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
+            onPressIn={() => {
+              btnScale.value = withSpring(0.94, { damping: 10, stiffness: 350 });
+            }}
+            onPressOut={() => {
+              btnScale.value = withSpring(1, { damping: 10, stiffness: 350 });
+            }}
             onPress={() => {
               nextLevel();
               navigation.replace('Gameplay');
@@ -102,24 +142,65 @@ export function VictoryScreen() {
           </Pressable>
         </View>
       </View>
+
+      <SettingsModal
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: 'transparent',
-    flex: 1
+  screen: { backgroundColor: 'transparent', flex: 1 },
+
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 44,
+    height: 100
   },
+  starCounter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 22,
+    ...theme.shadows.sm
+  },
+  starEmoji: { fontSize: 18, marginRight: 6 },
+  starText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: theme.colors.arrowStroke
+  },
+  starMax: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.textMuted
+  },
+  settingsBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 22,
+    ...theme.shadows.sm
+  },
+
   content: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24
+    paddingHorizontal: 24,
+    marginTop: -60
   },
   stars: {
-    color: '#FFD54F',
-    fontSize: 48,
+    fontSize: 52,
     marginBottom: 20,
     textShadowColor: 'rgba(106, 68, 40, 0.2)',
     textShadowOffset: { width: 0, height: 4 },
@@ -146,19 +227,14 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: 'center',
-    backgroundColor: theme.colors.arrowStroke,
     borderRadius: 30,
     paddingHorizontal: 24,
     paddingVertical: 16,
     minWidth: 130,
     ...theme.shadows.lg
   },
-  replayButton: {
-    backgroundColor: '#A0826D'
-  },
-  nextButton: {
-    backgroundColor: theme.colors.arrowStroke
-  },
+  replayButton: { backgroundColor: '#A0826D' },
+  nextButton: { backgroundColor: theme.colors.arrowStroke },
   buttonText: {
     color: theme.colors.white,
     fontSize: 18,

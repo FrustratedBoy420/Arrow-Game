@@ -5,9 +5,9 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { trackEvent } from '../analytics/analytics';
 import { createInitialBoard, findHintArrow, isBoardWon, resolveTap } from '../game/engine';
 import type { BoardState, GameStatus, LevelDefinition } from '../game/types';
-import { getLevel, getNextLevelId, setDynamicLevels, levels, localLevelData } from '../levels/levels';
-import { completeLevelWithStars, loadLevelProgress, saveLevelProgress, syncLevelProgressMap } from '../systems/levelManagementStore';
-import type { LevelProgress } from '../systems/levelManagement';
+import { getLevel, getNextLevelId, setDynamicLevels } from '../levels/levels';
+import { completeLevelWithStars, ensureLevelProgressMap, isLevelLocked, loadLevelProgress, saveLevelProgress } from '../systems/levelManagementStore';
+import { checkLevelUnlocks, type LevelProgress, initializeLevelMap } from '../systems/levelManagement';
 
 type GameStore = {
   board: BoardState;
@@ -30,6 +30,7 @@ type GameStore = {
   iconsConfig: {
     homeArrow: string;
   };
+  resetAllProgress: () => void;
   // Level Management System Integration
   levelProgressMap: Map<number, LevelProgress>;
   starsEarnedThisLevel: number;
@@ -47,15 +48,13 @@ type GameStore = {
   toggleHaptics: () => void;
   toggleMusic: () => void;
   fetchGameConfig: (serverUrl?: string) => Promise<void>;
-  fetchNextLevels: () => Promise<void>;
   recordLevelCompletion: (timeTaken: number, heartsLost: number) => Promise<void>;
   setFinalStarsCalculated: (stars: number) => void;
 };
 
 const initialLevel = getLevel(1);
 
-// Initialize level progress map - will be hydrated from storage
-const initialLevelMap = new Map<number, LevelProgress>();
+const initialLevelMap = initializeLevelMap();
 
 export const useGameStore = create<GameStore>()(
   persist(
@@ -69,7 +68,7 @@ export const useGameStore = create<GameStore>()(
       hapticsEnabled: true,
       musicEnabled: true,
       lastHintArrowId: null,
-      dynamicLevels: levels,
+      dynamicLevels: null,
       musicUrls: {
         correct: null,
         wrong: null,
@@ -85,7 +84,24 @@ export const useGameStore = create<GameStore>()(
       levelStartTime: Date.now(),
       gameStartTime: null,
       finalStarsCalculated: 3,
+
+      resetAllProgress: () => {
+        const freshMap = require('../systems/levelManagement').initializeLevelMap();
+        set({
+          highestUnlockedLevel: 1,
+          levelProgressMap: freshMap,
+          currentLevelId: 1
+        });
+        require('../systems/levelManagementStore').saveLevelProgress(freshMap);
+      },
+
       startLevel: (levelId) => {
+        const levelProgressMap = ensureLevelProgressMap(get().levelProgressMap);
+        if (!levelProgressMap.get(levelId) || isLevelLocked(levelProgressMap, levelId)) {
+          console.warn(`Level ${levelId} is locked`);
+          return;
+        }
+
         const level = getLevel(levelId);
         trackEvent('level_start', { levelId: level.id, difficulty: level.difficulty });
         set({
@@ -95,20 +111,21 @@ export const useGameStore = create<GameStore>()(
           lastHintArrowId: null,
           levelStartTime: Date.now(),
           gameStartTime: null,
-          // Reset star score on every new level start
-          finalStarsCalculated: 3,
+          finalStarsCalculated: 3
         });
       },
+
       completeTutorial: () => {
         set({ hasSeenTutorial: true });
         get().startLevel(1);
       },
+
       tapArrow: (arrowId) => {
         const { gameStartTime } = get();
         if (gameStartTime === null) {
           set({ gameStartTime: Date.now() });
         }
-        
+
         const result = resolveTap(arrowId, get().board);
         const nextStatus: GameStatus = isBoardWon(result.board)
           ? 'won'
@@ -126,12 +143,11 @@ export const useGameStore = create<GameStore>()(
           });
         }
 
+        // ✅ FIX: Do NOT auto-unlock the next level here.
+        // Level unlocks are handled exclusively by checkLevelUnlocks()
+        // inside recordLevelCompletion → completeLevelWithStars.
         if (nextStatus === 'won') {
-          const nextLevelId = getNextLevelId(get().currentLevelId);
-          trackEvent('level_complete', { levelId: get().currentLevelId, nextLevelId });
-          set((state) => ({
-            highestUnlockedLevel: Math.max(state.highestUnlockedLevel, nextLevelId)
-          }));
+          trackEvent('level_complete', { levelId: get().currentLevelId });
         }
 
         if (nextStatus === 'failed') {
@@ -141,54 +157,29 @@ export const useGameStore = create<GameStore>()(
         set({ board: result.board, status: nextStatus, lastHintArrowId: null });
         return result.type;
       },
+
       retry: () => {
         trackEvent('retry', { levelId: get().currentLevelId });
         get().startLevel(get().currentLevelId);
       },
+
       nextLevel: () => {
-        const { currentLevelId } = get();
-        const nextId = getNextLevelId(currentLevelId);
-        
-        if (nextId === currentLevelId) {
-          // We are at the end of the current active levels list.
-          // Let's check if there are more levels in localLevelData.
-          const nextLevelExist = localLevelData.some(l => l.id === currentLevelId + 1);
-          if (nextLevelExist) {
-            const activeLevels = get().dynamicLevels || levels;
-            const currentCount = activeLevels.length;
-            const targetCount = currentCount + 5;
-            const nextLevels = localLevelData.slice(0, targetCount);
-            
-            setDynamicLevels(nextLevels);
-            const syncedMap = syncLevelProgressMap(get().levelProgressMap, nextLevels);
-            void saveLevelProgress(syncedMap);
-            
-            set({
-              dynamicLevels: nextLevels,
-              levelProgressMap: syncedMap,
-              highestUnlockedLevel: Math.max(get().highestUnlockedLevel, currentCount + 1)
-            });
-            
-            get().startLevel(currentLevelId + 1);
-            return;
-          }
+        const nextId = getNextLevelId(get().currentLevelId);
+        const levelProgressMap = ensureLevelProgressMap(get().levelProgressMap);
+        if (!isLevelLocked(levelProgressMap, nextId)) {
+          get().startLevel(nextId);
+        } else {
+          get().startLevel(get().currentLevelId);
         }
-        
-        get().startLevel(nextId);
       },
+
       undo: () => {
         const { board } = get();
         const lastRemovedId = board.removedIds[board.removedIds.length - 1];
-
-        if (!lastRemovedId) {
-          return;
-        }
+        if (!lastRemovedId) return;
 
         const originalArrow = board.level.arrows.find((arrow) => arrow.id === lastRemovedId);
-
-        if (!originalArrow) {
-          return;
-        }
+        if (!originalArrow) return;
 
         set({
           board: {
@@ -200,38 +191,26 @@ export const useGameStore = create<GameStore>()(
           lastHintArrowId: null
         });
       },
+
       useHint: () => {
         const { board, status, gameStartTime } = get();
-
-        if (status !== 'playing') {
-          return null;
-        }
+        if (status !== 'playing') return null;
 
         if (gameStartTime === null) {
           set({ gameStartTime: Date.now() });
         }
 
         const hintArrow = findHintArrow(board);
+        if (!hintArrow) return null;
 
-        if (!hintArrow) {
-          return null;
-        }
-
-        // Auto-remove the hint arrow
         const result = resolveTap(hintArrow.id, board);
-
-        if (result.type !== 'REMOVED') {
-          return null;
-        }
+        if (result.type !== 'REMOVED') return null;
 
         const nextStatus: GameStatus = isBoardWon(result.board) ? 'won' : 'playing';
 
+        // ✅ FIX: Do NOT auto-unlock here either. Let recordLevelCompletion handle it.
         if (nextStatus === 'won') {
-          const nextLevelId = getNextLevelId(get().currentLevelId);
-          trackEvent('level_complete', { levelId: get().currentLevelId, nextLevelId });
-          set((state) => ({
-            highestUnlockedLevel: Math.max(state.highestUnlockedLevel, nextLevelId)
-          }));
+          trackEvent('level_complete', { levelId: get().currentLevelId });
         }
 
         set({
@@ -242,9 +221,11 @@ export const useGameStore = create<GameStore>()(
 
         return hintArrow.id;
       },
+
       toggleSound: () => set((state) => ({ soundEnabled: !state.soundEnabled })),
       toggleHaptics: () => set((state) => ({ hapticsEnabled: !state.hapticsEnabled })),
       toggleMusic: () => set((state) => ({ musicEnabled: !state.musicEnabled })),
+
       fetchGameConfig: async (serverUrl) => {
         let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend.vercel.app';
         baseUrl = baseUrl.replace(/\/$/, '');
@@ -253,45 +234,17 @@ export const useGameStore = create<GameStore>()(
         }
 
         try {
-          console.log(`📡 Fetching dynamic game config from ${baseUrl}/api/config`);
           const response = await fetch(`${baseUrl}/api/config`);
-          if (!response.ok) {
-            throw new Error(`Server returned status ${response.status}`);
-          }
+          if (!response.ok) throw new Error(`Server returned status ${response.status}`);
           const resData = await response.json();
           if (resData) {
-            const { levels: serverLevels, music, icons } = resData;
-
-            // Apply levels to levels.ts runtime array (restricted to current count)
-            if (Array.isArray(serverLevels) && serverLevels.length > 0) {
-              const activeLevels = get().dynamicLevels;
-              const currentCount = Math.max(20, activeLevels ? activeLevels.length : 20);
-              
-              const allowedLevels: LevelDefinition[] = [];
-              for (let i = 1; i <= currentCount; i++) {
-                const serverLvl = serverLevels.find(l => l.id === i);
-                if (serverLvl) {
-                  allowedLevels.push(serverLvl);
-                } else {
-                  const localLvl = localLevelData.find(l => l.id === i);
-                  if (localLvl) {
-                    allowedLevels.push(localLvl);
-                  }
-                }
-              }
-
-              setDynamicLevels(allowedLevels);
-              
-              const syncedMap = syncLevelProgressMap(get().levelProgressMap, allowedLevels);
-              await saveLevelProgress(syncedMap);
-              set({ 
-                levelProgressMap: syncedMap,
-                dynamicLevels: allowedLevels
-              });
+            const { levels, music, icons } = resData;
+            if (Array.isArray(levels) && levels.length > 0) {
+              setDynamicLevels(levels);
+              void refreshLevelProgressForLevels();
             }
-
-            // Save in store state (will trigger subscription in audio.ts if music URLs changed)
             set({
+              dynamicLevels: levels || null,
               musicUrls: music || {
                 correct: null,
                 wrong: null,
@@ -299,104 +252,37 @@ export const useGameStore = create<GameStore>()(
                 outOfMove: null,
                 bgMusic: null
               },
-              iconsConfig: icons || {
-                homeArrow: '➤'
-              }
+              iconsConfig: icons || { homeArrow: '➤' }
             });
-
-            console.log('✅ Dynamic game config loaded successfully.');
           }
         } catch (err) {
-          console.warn('⚠️ Failed to fetch dynamic game config, using cache/static:', err);
+          console.warn('⚠️ Failed to fetch dynamic game config:', err);
         }
       },
-      fetchNextLevels: async () => {
-        const activeLevels = get().dynamicLevels;
-        const currentCount = Math.max(20, activeLevels ? activeLevels.length : 20);
-        const targetCount = currentCount + 5;
-        console.log(`🔓 Unlocking next 5 levels. New target count: ${targetCount}`);
 
-        try {
-          const savedUrl = await AsyncStorage.getItem('multiplayer_url');
-          let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
-          baseUrl = baseUrl.replace(/\/$/, '');
-          if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-            baseUrl = `https://${baseUrl}`;
-          }
-
-          console.log(`📡 Fetching levels config for unlock from ${baseUrl}/api/config`);
-          const response = await fetch(`${baseUrl}/api/config`);
-          if (!response.ok) throw new Error();
-          
-          const resData = await response.json();
-          const serverLevels = resData.levels || [];
-          
-          if (Array.isArray(serverLevels) && serverLevels.length > 0) {
-            const nextLevels: LevelDefinition[] = [];
-            for (let i = 1; i <= targetCount; i++) {
-              const serverLvl = serverLevels.find(l => l.id === i);
-              if (serverLvl) {
-                nextLevels.push(serverLvl);
-              } else {
-                const localLvl = localLevelData.find(l => l.id === i);
-                if (localLvl) {
-                  nextLevels.push(localLvl);
-                }
-              }
-            }
-
-            setDynamicLevels(nextLevels);
-            
-            const syncedMap = syncLevelProgressMap(get().levelProgressMap, nextLevels);
-            await saveLevelProgress(syncedMap);
-            set({
-              dynamicLevels: nextLevels,
-              levelProgressMap: syncedMap,
-              highestUnlockedLevel: Math.max(get().highestUnlockedLevel, currentCount + 1)
-            });
-            console.log(`✅ Successfully unlocked levels 1 to ${nextLevels.length} from database.`);
-            return;
-          }
-        } catch (err) {
-          console.warn('⚠️ Offline or failed to fetch config, unlocking next levels from localLevelData:', err);
-        }
-
-        // Offline Fallback
-        const nextLevels = localLevelData.slice(0, targetCount);
-        setDynamicLevels(nextLevels);
-        
-        const syncedMap = syncLevelProgressMap(get().levelProgressMap, nextLevels);
-        await saveLevelProgress(syncedMap);
-        set({
-          dynamicLevels: nextLevels,
-          levelProgressMap: syncedMap,
-          highestUnlockedLevel: Math.max(get().highestUnlockedLevel, currentCount + 1)
-        });
-        console.log(`✅ Successfully unlocked levels 1 to ${nextLevels.length} from local levelData.`);
-      },
       setFinalStarsCalculated: (stars: number) =>
         set({ finalStarsCalculated: Math.max(1, Math.min(3, stars)) }),
+
       recordLevelCompletion: async (timeTaken, heartsLost) => {
-        const { levelProgressMap, currentLevelId, finalStarsCalculated, dynamicLevels } = get();
-        const result = completeLevelWithStars(levelProgressMap, currentLevelId, timeTaken, heartsLost, finalStarsCalculated);
-        
+        const levelProgressMap = ensureLevelProgressMap(get().levelProgressMap);
+        const { currentLevelId, finalStarsCalculated } = get();
+
+        const result = completeLevelWithStars(
+          levelProgressMap,
+          currentLevelId,
+          timeTaken,
+          heartsLost,
+          finalStarsCalculated
+        );
+
         set({ starsEarnedThisLevel: finalStarsCalculated });
-        
-        // Save to storage
+
+        // Persist updated progress (includes newly unlocked levels from checkLevelUnlocks)
         await saveLevelProgress(levelProgressMap);
-        
-        // Check if all currently available levels are completed
-        const activeLevels = dynamicLevels || levels;
-        const allCompleted = activeLevels.every(lvl => {
-          const progress = levelProgressMap.get(lvl.id);
-          return progress && progress.isCompleted;
-        });
 
-        if (allCompleted) {
-          await get().fetchNextLevels();
-        }
+        // Force re-render by replacing the map reference
+        set({ levelProgressMap: new Map(levelProgressMap) });
 
-        // Track analytics
         trackEvent('stars_earned', {
           levelId: currentLevelId,
           stars: result.starsEarned,
@@ -421,20 +307,13 @@ export const useGameStore = create<GameStore>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
-          // If we had previously cached dynamic levels, restore them (minimum 20 levels)
-          if (state.dynamicLevels && state.dynamicLevels.length >= 20) {
-            setDynamicLevels(state.dynamicLevels);
-          } else {
-            // First time load or recovery: initialize with the first 20 levels
-            state.dynamicLevels = levels;
-            setDynamicLevels(levels);
+          const { checkLevelUnlocks } = require('../systems/levelManagement');
+          if (state.levelProgressMap) {
+            checkLevelUnlocks(state.levelProgressMap);
           }
-          
-          // Re-sync progress map immediately after hydration
-          void initializeLevelProgressMap().then(() => {
-            console.log('✅ Level progress map initialized and synced post-hydration');
-          });
-
+          if (state.dynamicLevels) {
+            setDynamicLevels(state.dynamicLevels);
+          }
           state.startLevel(state.currentLevelId);
         }
       }
@@ -442,14 +321,18 @@ export const useGameStore = create<GameStore>()(
   )
 );
 
-/**
- * Initialize the level progress map from storage.
- * Call this once during app startup (e.g., in your root component).
- */
 export async function initializeLevelProgressMap(): Promise<void> {
   const levelProgressMap = await loadLevelProgress();
-  const activeLevels = useGameStore.getState().dynamicLevels || levels;
-  const syncedMap = syncLevelProgressMap(levelProgressMap, activeLevels);
-  await saveLevelProgress(syncedMap);
-  useGameStore.setState({ levelProgressMap: syncedMap });
+  checkLevelUnlocks(levelProgressMap);
+  await saveLevelProgress(levelProgressMap);
+  useGameStore.setState({ levelProgressMap: new Map(levelProgressMap) });
+}
+
+/** Re-sync locks after dynamic levels are loaded from the server. */
+export async function refreshLevelProgressForLevels(): Promise<void> {
+  const current = ensureLevelProgressMap(useGameStore.getState().levelProgressMap);
+  const { mergeLevelProgressMap } = await import('../systems/levelManagement');
+  const merged = mergeLevelProgressMap(current);
+  await saveLevelProgress(merged);
+  useGameStore.setState({ levelProgressMap: new Map(merged) });
 }

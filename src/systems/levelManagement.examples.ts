@@ -110,15 +110,15 @@ export function exampleProgressionSimulation(): void {
   // Initialize the system
   const levelMap = initializeLevelMap();
   console.log('\n▶️  Starting: 6 levels initialized (Level 6 is LOCKED)');
-  console.log(`   Unlock Threshold for Level 6+: ${LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_2} stars`);
+  console.log(`   Unlock Threshold for Level 6+: ${LEVEL_CONFIG.STARS_REQUIRED_PER_BLOCK} stars in previous block (1-5)`);
 
   // Simulate player completing levels
   const completionData = [
     { levelNum: 1, timeTaken: 8, heartsLost: 0, description: 'Level 1: Perfect!' },
-    { levelNum: 2, timeTaken: 14, heartsLost: 0, description: 'Level 2: Good time!' },
-    { levelNum: 3, timeTaken: 18, heartsLost: 1, description: 'Level 3: One mistake' },
-    { levelNum: 4, timeTaken: 19, heartsLost: 0, description: 'Level 4: Solid!' },
-    { levelNum: 5, timeTaken: 25, heartsLost: 2, description: 'Level 5: Struggled a bit' }
+    { levelNum: 2, timeTaken: 12, heartsLost: 0, description: 'Level 2: Good time!' },
+    { levelNum: 3, timeTaken: 15, heartsLost: 1, description: 'Level 3: One mistake' },
+    { levelNum: 4, timeTaken: 18, heartsLost: 0, description: 'Level 4: Solid!' },
+    { levelNum: 5, timeTaken: 20, heartsLost: 0, description: 'Level 5: Perfect!' }
   ];
 
   completionData.forEach(({ levelNum, timeTaken, heartsLost, description }) => {
@@ -136,12 +136,13 @@ export function exampleProgressionSimulation(): void {
   // Check for level unlocks
   console.log(`\n▶️  Checking for Level Unlocks...`);
   const unlockResult = checkLevelUnlocks(levelMap);
-  console.log(`   Total Stars Accumulated: ${unlockResult.totalStarsEarned}/${LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_2}`);
+  const block1Stars = [1,2,3,4,5].reduce((sum, id) => sum + (getLevel(levelMap, id)?.starsEarned || 0), 0);
+  console.log(`   Block 1 Stars (Levels 1-5): ${block1Stars}/${LEVEL_CONFIG.STARS_REQUIRED_PER_BLOCK} required`);
 
   if (unlockResult.newlyUnlockedLevels.length > 0) {
     console.log(`   🔓 LEVEL UNLOCK! Levels ${unlockResult.newlyUnlockedLevels.join(', ')} are now available!`);
   } else {
-    console.log(`   🔒 Level 6 still locked. ${LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_2 - unlockResult.totalStarsEarned} more stars needed.`);
+    console.log(`   🔒 Level 6 still locked. ${LEVEL_CONFIG.STARS_REQUIRED_PER_BLOCK - block1Stars} more stars needed in Block 1.`);
   }
 
   // Print final progress report
@@ -207,19 +208,19 @@ export function exampleComplexScenario(): void {
   addLevel(levelMap, 11, 35);
 
   console.log(`\n▶️  Scenario: Player with partial progression on 11 levels`);
-  console.log(`   Tier 2 Threshold: ${LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_2} stars (Levels 6-10)`);
-  console.log(`   Tier 3 Threshold: ${LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_3} stars (Levels 11+)`);
+  console.log(`   Progression Rule: ${LEVEL_CONFIG.STARS_REQUIRED_PER_BLOCK} stars required from previous block of 5 to unlock next.`);
 
   // Simulate mixed player performance
   const scores = [
     [1, 8, 0, 3],    // Level 1: 8s, 0 hearts → 3 stars
     [2, 12, 0, 3],   // Level 2: 12s, 0 hearts → 3 stars
-    [3, 16, 1, 2],   // Level 3: 16s, 1 heart → 2 stars
-    [4, 20, 0, 2],   // Level 4: 20s, 0 hearts → 2 stars
-    [5, 24, 2, 1],   // Level 5: 24s, 2 hearts → 1 star
-    [6, 25, 0, 2],   // Level 6: 25s, 0 hearts → 2 stars (unlocked)
-    [7, 27, 1, 2],   // Level 7: 27s, 1 heart → 2 stars
-    [8, 31, 0, 1]    // Level 8: 31s, 0 hearts → 1 star
+    [3, 15, 1, 2],   // Level 3: 15s, 1 heart → 2 stars
+    [4, 18, 0, 3],   // Level 4: 18s, 0 hearts → 3 stars
+    [5, 20, 0, 3],   // Level 5: 20s, 0 hearts → 3 stars
+    // Total for Block 1 = 14 stars (>= 13, so Level 6 unlocks)
+    [6, 22, 0, 3],   // Level 6: 22s, 0 hearts → 3 stars
+    [7, 24, 1, 2],   // Level 7: 24s, 1 heart → 2 stars
+    [8, 26, 0, 3]    // Level 8: 26s, 0 hearts → 3 stars
   ] as const;
 
   scores.forEach(([levelNum, timeTaken, heartsLost]) => {
@@ -255,15 +256,14 @@ export function exampleConfigurationFlexibility(): void {
   console.log('='.repeat(70));
 
   console.log('\n▶️  Current Configuration:');
-  console.log(`   REQUIRED_TOTAL_STARS_FOR_TIER_2: ${LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_2}`);
-  console.log(`   REQUIRED_TOTAL_STARS_FOR_TIER_3: ${LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_3}`);
+  console.log(`   STARS_REQUIRED_PER_BLOCK: ${LEVEL_CONFIG.STARS_REQUIRED_PER_BLOCK}`);
   console.log(`   MIN_STARS_PER_LEVEL: ${LEVEL_CONFIG.MIN_STARS_PER_LEVEL}`);
   console.log(`   MAX_STARS_PER_LEVEL: ${LEVEL_CONFIG.MAX_STARS_PER_LEVEL}`);
 
   console.log('\n💡 To adjust difficulty:');
   console.log('   1. Modify LEVEL_CONFIG in levelManagement.ts');
   console.log('   2. Changes apply instantly - no need to recompile level data');
-  console.log('   3. Example: Set REQUIRED_TOTAL_STARS_FOR_TIER_2 to 8 for easier progression');
+  console.log('   3. Example: Set STARS_REQUIRED_PER_BLOCK to 10 for easier progression');
 }
 
 // ============================================================================

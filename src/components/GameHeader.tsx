@@ -1,8 +1,9 @@
+import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Difficulty } from '../game/types';
 import { theme } from '../theme/theme';
-import { DifficultyBadge } from './DifficultyBadge';
+import GearIcon from './GearIcon';
 
 type Props = {
   title: string;
@@ -14,32 +15,50 @@ type Props = {
   onSettings?: () => void;
 };
 
-export function GameHeader({ title, difficulty, arrowsLeft, totalArrows, showBack = true, onBack, onSettings }: Props) {
+export function GameHeader({
+  title,
+  difficulty,
+  arrowsLeft,
+  totalArrows,
+  showBack = true,
+  onBack,
+  onSettings
+}: Props) {
   return (
     <View style={styles.container}>
+      {/* Left: back button */}
       <View style={styles.side}>
         {showBack ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={onBack} style={styles.iconButton}>
-            <Text style={styles.icon}>‹</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            onPress={onBack}
+            style={styles.iconButton}
+          >
+            <Text style={styles.backIcon}>‹</Text>
           </Pressable>
         ) : null}
       </View>
 
+      {/* Center: title + arrow count */}
       <View style={styles.center}>
         <Text style={styles.title}>{title}</Text>
         {arrowsLeft !== undefined && totalArrows !== undefined && (
-          <Text style={styles.arrowCount}>{arrowsLeft} / {totalArrows} arrows left</Text>
+          <Text style={styles.arrowCount}>
+            {arrowsLeft} / {totalArrows} arrows left
+          </Text>
         )}
-        {difficulty ? (
-          <View style={{ marginTop: 6 }}>
-            <DifficultyBadge difficulty={difficulty} />
-          </View>
-        ) : null}
       </View>
 
-      <View style={[styles.side, styles.actions]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={onSettings} style={styles.iconButton}>
-          <Text style={styles.smallIcon}>⬡</Text>
+      {/* Right: settings gear */}
+      <View style={[styles.side, styles.rightSide]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+          onPress={onSettings}
+          style={styles.iconButton}
+        >
+          <GearIcon size={26} color={theme.colors.textMuted} />
         </Pressable>
       </View>
     </View>
@@ -58,17 +77,15 @@ const styles = StyleSheet.create({
     paddingBottom: 8
   },
   side: {
-    alignItems: 'flex-start',
-    flex: 1
+    flex: 1,
+    alignItems: 'flex-start'
+  },
+  rightSide: {
+    alignItems: 'flex-end'
   },
   center: {
     alignItems: 'center',
     flex: 1.5
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'flex-end'
   },
   title: {
     color: theme.colors.textPrimary,
@@ -82,7 +99,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginTop: 2,
-    marginBottom: 4,
+    marginBottom: 4
   },
   iconButton: {
     alignItems: 'center',
@@ -90,15 +107,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 44
   },
-  icon: {
+  backIcon: {
     color: theme.colors.textMuted,
     fontSize: 50,
     fontWeight: '300',
     lineHeight: 50
-  },
-  smallIcon: {
-    color: theme.colors.textMuted,
-    fontSize: 36,
-    lineHeight: 40
   }
 });

@@ -7,6 +7,8 @@
  * No hardcoded level numbers or arrow counts - everything is configuration-driven.
  */
 
+import { levels } from '../levels/levels';
+
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
@@ -16,15 +18,19 @@
  * Modify these values to change unlock thresholds and star requirements.
  */
 export const LEVEL_CONFIG = {
-  // Total stars required to unlock tier-2 levels (e.g., Level 6+)
-  REQUIRED_TOTAL_STARS_FOR_TIER_2: 10,
-  // Total stars required to unlock tier-3 levels (e.g., Level 11+)
-  REQUIRED_TOTAL_STARS_FOR_TIER_3: 25,
+  // Stars required to unlock the next block of 5 levels
+  STARS_REQUIRED_PER_BLOCK: 13,
   // Minimum stars per successful level completion
   MIN_STARS_PER_LEVEL: 1,
   // Maximum stars per level
   MAX_STARS_PER_LEVEL: 3
 } as const;
+
+/** Number of levels per star-checkpoint block */
+export const BLOCK_SIZE = 5;
+
+/** Maximum stars achievable in one block (5 levels × 3 stars) */
+export const MAX_BLOCK_STARS = BLOCK_SIZE * LEVEL_CONFIG.MAX_STARS_PER_LEVEL;
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -126,64 +132,59 @@ export function calculateStars(
 // ============================================================================
 
 /**
- * Checks if levels should be unlocked based on total stars earned.
- * 
- * Automatically unlocks tier-2 levels (e.g., Level 6) when player reaches
- * REQUIRED_TOTAL_STARS_FOR_TIER_2, and tier-3 levels when reaching
- * REQUIRED_TOTAL_STARS_FOR_TIER_3, etc.
- * 
- * @param levelProgressMap - Map of level numbers to their progress data
- * @returns UnlockCheckResult with total stars and newly unlocked levels
+ * Computes whether a level should be playable right now.
+ * Never trust persisted isLocked — always derive from completion + star gates.
+ */
+export function isLevelUnlocked(
+  levelMap: Map<number, LevelProgress>,
+  levelNumber: number
+): boolean {
+  if (levelNumber === 1) return true;
+
+  const prev = levelMap.get(levelNumber - 1);
+  if (!prev?.isCompleted) return false;
+
+  if (isCheckpointLevel(levelNumber)) {
+    const requiredStars = getCheckpointRequiredStars(levelNumber);
+    const cumulativeStars = getBlockStars(levelMap, 1, levelNumber - 1);
+    return cumulativeStars >= requiredStars;
+  }
+
+  return true;
+}
+
+/**
+ * Writes isLocked on every level entry from computed unlock rules.
+ */
+export function syncLevelLockFlags(levelMap: Map<number, LevelProgress>): void {
+  for (const progress of getAllLevelsSorted(levelMap)) {
+    progress.isLocked = !isLevelUnlocked(levelMap, progress.levelNumber);
+  }
+}
+
+/**
+ * Checks if levels should be unlocked based on linear progression and block gates.
+ *
+ * 1. Linear: Level N unlocks only when Level N-1 is completed.
+ * 2. Star gates: Levels 6, 11, 16… need cumulative stars from all prior levels
+ *    (13 per completed block of 5: L6→13, L11→26, L16→39…).
  */
 export function checkLevelUnlocks(levelProgressMap: Map<number, LevelProgress>): UnlockCheckResult {
-  // Calculate total stars earned from all completed levels
-  const totalStarsEarned = Array.from(levelProgressMap.values()).reduce(
-    (sum, progress) => sum + progress.starsEarned,
-    0
-  );
-
+  const allLevels = getAllLevelsSorted(levelProgressMap);
+  const totalStarsEarned = getTotalStarsEarned(levelProgressMap);
   const newlyUnlockedLevels: number[] = [];
 
-  // Determine tier boundaries dynamically
-  // Tier 1: Levels 1-5
-  // Tier 2: Levels 6-10 (unlock when totalStars >= REQUIRED_TOTAL_STARS_FOR_TIER_2)
-  // Tier 3: Levels 11+ (unlock when totalStars >= REQUIRED_TOTAL_STARS_FOR_TIER_3)
-
-  Array.from(levelProgressMap.values()).forEach((progress) => {
-    const levelNum = progress.levelNumber;
+  allLevels.forEach((progress) => {
     const wasLocked = progress.isLocked;
-
-    // Determine unlock conditions dynamically based on level number
-    let shouldBeUnlocked = false;
-
-    if (levelNum <= 5) {
-      // Tier 1: Always unlocked
-      shouldBeUnlocked = true;
-    } else if (levelNum >= 6 && levelNum <= 10) {
-      // Tier 2: Unlock when totalStars >= REQUIRED_TOTAL_STARS_FOR_TIER_2
-      shouldBeUnlocked = totalStarsEarned >= LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_2;
-    } else if (levelNum >= 11) {
-      // Tier 3: Unlock when totalStars >= REQUIRED_TOTAL_STARS_FOR_TIER_3
-      shouldBeUnlocked = totalStarsEarned >= LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_3;
-    }
-
+    const shouldBeUnlocked = isLevelUnlocked(levelProgressMap, progress.levelNumber);
     progress.isLocked = !shouldBeUnlocked;
 
-    // Track newly unlocked levels
     if (wasLocked && shouldBeUnlocked) {
-      newlyUnlockedLevels.push(levelNum);
+      newlyUnlockedLevels.push(progress.levelNumber);
     }
   });
 
-  const progressReport = [
-    `📊 Progression Report:`,
-    `   Total Stars Earned: ${totalStarsEarned}`,
-    `   Tier 2 Requirement: ${LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_2} stars`,
-    `   Tier 3 Requirement: ${LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_3} stars`,
-    newlyUnlockedLevels.length > 0
-      ? `   🔓 Newly Unlocked: Levels ${newlyUnlockedLevels.join(', ')}`
-      : `   (No new unlocks at this time)`
-  ].join('\n');
+  const progressReport = `📊 Progression: ${totalStarsEarned} stars. Checkpoints: 13 stars per block (cumulative).`;
 
   return {
     totalStarsEarned,
@@ -210,8 +211,121 @@ export function updateLevelProgress(
   return {
     ...progress,
     isCompleted: true,
-    starsEarned: starResult.finalStars,
+    starsEarned: Math.max(progress.starsEarned, starResult.finalStars),
     bestTime: progress.bestTime === null ? timeTaken : Math.min(progress.bestTime, timeTaken)
+  };
+}
+
+/**
+ * Returns true for checkpoint levels (6, 11, 16, 21...) that require a star gate.
+ */
+export function isCheckpointLevel(levelNumber: number): boolean {
+  return levelNumber > 1 && (levelNumber - 1) % BLOCK_SIZE === 0;
+}
+
+/**
+ * Returns the level range for the block immediately before a checkpoint level.
+ * e.g. Level 6 → { start: 1, end: 5 }
+ */
+export function getPreviousBlockRange(levelNumber: number): { start: number; end: number } | null {
+  if (!isCheckpointLevel(levelNumber)) return null;
+  const blockIndex = Math.floor((levelNumber - 1) / BLOCK_SIZE);
+  return {
+    start: (blockIndex - 1) * BLOCK_SIZE + 1,
+    end: blockIndex * BLOCK_SIZE
+  };
+}
+
+/**
+ * Sums stars earned across a contiguous range of levels.
+ */
+export function getBlockStars(
+  levelMap: Map<number, LevelProgress>,
+  start: number,
+  end: number
+): number {
+  let total = 0;
+  for (let i = start; i <= end; i++) {
+    total += levelMap.get(i)?.starsEarned ?? 0;
+  }
+  return total;
+}
+
+/**
+ * Stars required to unlock a checkpoint level (cumulative across all prior levels).
+ * Level 6 → 13, Level 11 → 26, Level 16 → 39 …
+ */
+export function getCheckpointRequiredStars(levelNumber: number): number {
+  if (!isCheckpointLevel(levelNumber)) return 0;
+  const completedBlocks = Math.floor((levelNumber - 1) / BLOCK_SIZE);
+  return completedBlocks * LEVEL_CONFIG.STARS_REQUIRED_PER_BLOCK;
+}
+
+export type CheckpointGateProgress = {
+  targetLevel: number;
+  gateStart: number;
+  gateEnd: number;
+  requiredStars: number;
+  currentStars: number;
+  maxStars: number;
+  starsNeeded: number;
+  levelBreakdown: { level: number; stars: number }[];
+};
+
+/**
+ * Full star-gate progress for a checkpoint level (for popups / UI).
+ */
+export function getCheckpointGateProgress(
+  levelMap: Map<number, LevelProgress>,
+  levelNumber: number
+): CheckpointGateProgress | null {
+  if (!isCheckpointLevel(levelNumber)) return null;
+
+  const gateEnd = levelNumber - 1;
+  const requiredStars = getCheckpointRequiredStars(levelNumber);
+  const levelBreakdown: { level: number; stars: number }[] = [];
+  let currentStars = 0;
+
+  for (let i = 1; i <= gateEnd; i++) {
+    const stars = levelMap.get(i)?.starsEarned ?? 0;
+    levelBreakdown.push({ level: i, stars });
+    currentStars += stars;
+  }
+
+  return {
+    targetLevel: levelNumber,
+    gateStart: 1,
+    gateEnd,
+    requiredStars,
+    currentStars,
+    maxStars: gateEnd * LEVEL_CONFIG.MAX_STARS_PER_LEVEL,
+    starsNeeded: Math.max(0, requiredStars - currentStars),
+    levelBreakdown
+  };
+}
+
+/**
+ * @deprecated Use getCheckpointGateProgress for cumulative gates.
+ */
+export function getCheckpointBlockProgress(
+  levelMap: Map<number, LevelProgress>,
+  levelNumber: number
+): {
+  currentStars: number;
+  requiredStars: number;
+  maxStars: number;
+  blockStart: number;
+  blockEnd: number;
+} | null {
+  const gate = getCheckpointGateProgress(levelMap, levelNumber);
+  if (!gate) return null;
+
+  return {
+    currentStars: gate.currentStars,
+    requiredStars: gate.requiredStars,
+    maxStars: gate.maxStars,
+    blockStart: gate.gateStart,
+    blockEnd: gate.gateEnd
   };
 }
 
@@ -221,17 +335,13 @@ export function updateLevelProgress(
 
 /**
  * Creates a new level progress entry for a given level definition.
- * Levels 1-5 are unlocked by default. Levels 6+ start as locked.
- * 
- * @param levelNumber - The level number
- * @param totalArrows - The number of arrows (= baseline time in seconds)
- * @returns LevelProgress object
+ * Only level 1 starts unlocked; syncLevelLockFlags applies the rest.
  */
 export function createLevelProgress(levelNumber: number, totalArrows: number): LevelProgress {
   return {
     levelNumber,
     totalArrows,
-    isLocked: levelNumber > 5,  // Levels 6+ are locked initially
+    isLocked: levelNumber !== 1,  // Only Level 1 is unlocked by default
     starsEarned: 0,
     isCompleted: false,
     bestTime: null
@@ -239,34 +349,39 @@ export function createLevelProgress(levelNumber: number, totalArrows: number): L
 }
 
 /**
- * Initialize a complete level progression map with starter levels.
- * Easily extensible - just call addLevel() for each new level.
- * 
- * Example:
- *   const levels = initializeLevelMap();
- *   addLevel(levels, 7, 22);  // Add Level 7 with 22 arrows
- *   addLevel(levels, 8, 25);  // Add Level 8 with 25 arrows
- * 
- * @returns Map of level numbers to LevelProgress objects
+ * Builds a full progress map from level definitions, optionally merging saved data.
+ * Re-applies linear unlock + 13/15 star block gates every time.
  */
-export function initializeLevelMap(): Map<number, LevelProgress> {
+export function mergeLevelProgressMap(
+  savedMap: Map<number, LevelProgress> | null | undefined
+): Map<number, LevelProgress> {
   const levelMap = new Map<number, LevelProgress>();
 
-  // Starter levels - easily add more by calling addLevel()
-  const starterLevels = [
-    { levelNumber: 1, totalArrows: 8 },
-    { levelNumber: 2, totalArrows: 12 },
-    { levelNumber: 3, totalArrows: 15 },
-    { levelNumber: 4, totalArrows: 18 },
-    { levelNumber: 5, totalArrows: 20 },
-    { levelNumber: 6, totalArrows: 22 }  // Locked until REQUIRED_TOTAL_STARS_FOR_TIER_2 reached
-  ];
+  for (const level of levels) {
+    const totalArrows = level.arrows.length;
+    const saved = savedMap?.get(level.id);
 
-  starterLevels.forEach(({ levelNumber, totalArrows }) => {
-    levelMap.set(levelNumber, createLevelProgress(levelNumber, totalArrows));
-  });
+    if (saved) {
+      levelMap.set(level.id, {
+        ...saved,
+        levelNumber: level.id,
+        totalArrows
+      });
+    } else {
+      levelMap.set(level.id, createLevelProgress(level.id, totalArrows));
+    }
+  }
 
+  checkLevelUnlocks(levelMap);
   return levelMap;
+}
+
+/**
+ * Initialize a complete level progression map from all level definitions.
+ * Only Level 1 is unlocked until the player progresses.
+ */
+export function initializeLevelMap(): Map<number, LevelProgress> {
+  return mergeLevelProgressMap(null);
 }
 
 /**
@@ -320,10 +435,10 @@ export function getCompletedLevelCount(levelMap: Map<number, LevelProgress>): nu
 }
 
 /**
- * Gets the count of unlocked levels.
+ * Gets the count of unlocked levels (computed from progression rules).
  */
 export function getUnlockedLevelCount(levelMap: Map<number, LevelProgress>): number {
-  return Array.from(levelMap.values()).filter((p) => !p.isLocked).length;
+  return getAllLevelsSorted(levelMap).filter((p) => isLevelUnlocked(levelMap, p.levelNumber)).length;
 }
 
 // ============================================================================
@@ -356,7 +471,7 @@ export function generateProgressReport(levelMap: Map<number, LevelProgress>): st
     `Progress: ${completedCount}/${totalLevelCount} levels completed`,
     `Unlocked: ${unlockedCount}/${totalLevelCount} levels available`,
     `Total Stars: ${totalStars}`,
-    `Next Tier Requirement: ${LEVEL_CONFIG.REQUIRED_TOTAL_STARS_FOR_TIER_2} stars`,
+    `Block Requirement: ${LEVEL_CONFIG.STARS_REQUIRED_PER_BLOCK} stars per 5 levels`,
     ``,
     levelDetails,
     `${'='.repeat(50)}`

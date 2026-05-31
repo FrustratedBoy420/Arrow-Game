@@ -1,9 +1,11 @@
 import { useNavigation } from '@react-navigation/native';
+import { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { useEffect } from 'react';
 
 import { AmbientBackground } from '../components/AmbientBackground';
+import GearIcon from '../components/GearIcon';
+import { SettingsModal } from '../components/SettingsModal';
 import { useGameStore } from '../state/gameStore';
 import { audioManager } from '../utils/audio';
 import { theme } from '../theme/theme';
@@ -12,6 +14,7 @@ import type { AppNavigation } from '../types/navigation';
 export function FailScreen() {
   const navigation = useNavigation<AppNavigation>();
   const retry = useGameStore((state) => state.retry);
+  const [settingsVisible, setSettingsVisible] = useState(false);
 
   const btnScale = useSharedValue(1);
 
@@ -26,6 +29,17 @@ export function FailScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <AmbientBackground />
+      <View style={styles.header}>
+        <View style={styles.headerSpacer} />
+        <Pressable
+          style={styles.settingsBtn}
+          onPress={() => setSettingsVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+        >
+          <GearIcon size={28} color={theme.colors.arrowStroke} />
+        </Pressable>
+      </View>
       <View style={styles.content}>
         <Text style={styles.icon}>✖</Text>
         <Text style={styles.title}>Out of Moves</Text>
@@ -46,6 +60,15 @@ export function FailScreen() {
           </Animated.View>
         </Pressable>
       </View>
+      <SettingsModal
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+        onRestart={() => {
+          setSettingsVisible(false);
+          retry();
+          navigation.replace('Gameplay');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -54,6 +77,24 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: 'transparent',
     flex: 1
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 44,
+    height: 100
+  },
+  headerSpacer: { flex: 1 },
+  settingsBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 22,
+    ...theme.shadows.sm
   },
   content: {
     alignItems: 'center',

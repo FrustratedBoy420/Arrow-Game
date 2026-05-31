@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
-import { useEffect } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View, Image } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -14,6 +14,10 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { AmbientBackground } from '../components/AmbientBackground';
+import GearIcon from '../components/GearIcon';
+import { SettingsModal } from '../components/SettingsModal';
+import { getTotalStarsEarned, getUnlockedLevelCount } from '../systems/levelManagement';
+import { ensureLevelProgressMap } from '../systems/levelManagementStore';
 import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
@@ -23,14 +27,20 @@ export function HomeScreen() {
   const hasSeenTutorial = useGameStore((s) => s.hasSeenTutorial);
   const iconsConfig = useGameStore((s) => s.iconsConfig);
   const fetchGameConfig = useGameStore((s) => s.fetchGameConfig);
+  const levelProgressMap = useGameStore((s) => s.levelProgressMap);
 
+  const [settingsVisible, setSettingsVisible] = useState(false);
+
+  const progressMap = ensureLevelProgressMap(levelProgressMap);
+  const totalStars = getTotalStarsEarned(progressMap);
+  const maxPossibleStars = getUnlockedLevelCount(progressMap) * 3;
+
+  // Animations
   const titleScale = useSharedValue(0.8);
   const titleOpacity = useSharedValue(0);
   const btnOpacity = useSharedValue(0);
   const btnTranslateY = useSharedValue(30);
   const arrowBounce = useSharedValue(0);
-
-  // Button interactive scales
   const startScale = useSharedValue(1);
   const selectScale = useSharedValue(1);
   const multiScale = useSharedValue(1);
@@ -41,7 +51,6 @@ export function HomeScreen() {
         const savedUrl = await AsyncStorage.getItem('multiplayer_url');
         await fetchGameConfig(savedUrl || undefined);
       } catch (err) {
-        console.error('Failed to load server URL from AsyncStorage:', err);
         await fetchGameConfig();
       }
     }
@@ -50,7 +59,10 @@ export function HomeScreen() {
     titleScale.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.back(1.4)) });
     titleOpacity.value = withTiming(1, { duration: 500 });
     btnOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
-    btnTranslateY.value = withDelay(400, withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) }));
+    btnTranslateY.value = withDelay(
+      400,
+      withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) })
+    );
     arrowBounce.value = withDelay(
       800,
       withRepeat(
@@ -68,24 +80,19 @@ export function HomeScreen() {
     transform: [{ scale: titleScale.value }],
     opacity: titleOpacity.value
   }));
-
   const btnStyle = useAnimatedStyle(() => ({
     opacity: btnOpacity.value,
     transform: [{ translateY: btnTranslateY.value }]
   }));
-
   const arrowStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: arrowBounce.value }]
   }));
-
   const startAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: startScale.value }]
   }));
-
   const selectAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: selectScale.value }]
   }));
-
   const multiAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: multiScale.value }]
   }));
@@ -93,19 +100,33 @@ export function HomeScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <AmbientBackground />
+
+      {/* ── Top Header ── */}
+      <View style={styles.header}>
+        {/* Star counter: earned / max-possible */}
+        <View style={styles.starCounter}>
+          <Text style={styles.starEmoji}>⭐</Text>
+          <Text style={styles.starText}>
+            {totalStars}
+            <Text style={styles.starMax}> / {maxPossibleStars}</Text>
+          </Text>
+        </View>
+
+        {/* Gear settings button */}
+        <Pressable
+          style={styles.settingsBtn}
+          onPress={() => setSettingsVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+        >
+          <GearIcon size={28} color={theme.colors.arrowStroke} />
+        </Pressable>
+      </View>
+
+      {/* ── Content ── */}
       <View style={styles.content}>
         <Animated.View style={[styles.arrowDeco, arrowStyle]}>
-          {iconsConfig?.homeArrow && (iconsConfig.homeArrow.startsWith('http://') || iconsConfig.homeArrow.startsWith('https://')) ? (
-            <Image
-              source={{ uri: iconsConfig.homeArrow }}
-              style={styles.logoImage}
-            />
-          ) : (
-            <Image
-              source={require('../../assets/icon.png')}
-              style={styles.logoImage}
-            />
-          )}
+          <Text style={styles.arrowIcon}>{iconsConfig?.homeArrow || '➤'}</Text>
         </Animated.View>
 
         <Animated.View style={titleStyle}>
@@ -114,54 +135,127 @@ export function HomeScreen() {
         </Animated.View>
 
         <Animated.View style={[btnStyle, { width: '100%', alignItems: 'center' }]}>
+          {/* Start Now */}
           <Pressable
             style={{ width: '100%', alignItems: 'center' }}
-            onPressIn={() => { startScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
-            onPressOut={() => { startScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
-            onPress={() => navigation.replace(hasSeenTutorial ? 'Gameplay' : 'Tutorial')}
+            onPressIn={() => {
+              startScale.value = withSpring(0.94, { damping: 10, stiffness: 350 });
+            }}
+            onPressOut={() => {
+              startScale.value = withSpring(1, { damping: 10, stiffness: 350 });
+            }}
+            onPress={() =>
+              navigation.replace(hasSeenTutorial ? 'Gameplay' : 'Tutorial')
+            }
           >
-            <Animated.View style={[styles.startBtn, startAnimStyle]}>
-              <Text style={styles.startBtnText}>Start Now</Text>
-              <Text style={styles.startBtnArrow}>→</Text>
+            <Animated.View style={[styles.btn, startAnimStyle]}>
+              <Text style={styles.btnText}>Start Now</Text>
+              <Text style={styles.btnArrow}>→</Text>
             </Animated.View>
           </Pressable>
 
+          {/* Level Select */}
           <Pressable
             style={{ width: '100%', alignItems: 'center' }}
-            onPressIn={() => { selectScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
-            onPressOut={() => { selectScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
+            onPressIn={() => {
+              selectScale.value = withSpring(0.94, { damping: 10, stiffness: 350 });
+            }}
+            onPressOut={() => {
+              selectScale.value = withSpring(1, { damping: 10, stiffness: 350 });
+            }}
             onPress={() => navigation.navigate('LevelSelect')}
           >
-            <Animated.View style={[styles.startBtn, styles.levelSelectBtn, selectAnimStyle]}>
-              <Text style={[styles.startBtnText, styles.levelSelectText]}>Level Select</Text>
+            <Animated.View style={[styles.btn, styles.levelSelectBtn, selectAnimStyle]}>
+              <Text style={[styles.btnText, styles.levelSelectText]}>Level Select</Text>
             </Animated.View>
           </Pressable>
 
+          {/* Multiplayer */}
           <Pressable
             style={{ width: '100%', alignItems: 'center' }}
-            onPressIn={() => { multiScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
-            onPressOut={() => { multiScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
+            onPressIn={() => {
+              multiScale.value = withSpring(0.94, { damping: 10, stiffness: 350 });
+            }}
+            onPressOut={() => {
+              multiScale.value = withSpring(1, { damping: 10, stiffness: 350 });
+            }}
             onPress={() => navigation.navigate('Multiplayer')}
           >
-            <Animated.View style={[styles.startBtn, styles.multiplayerBtn, multiAnimStyle]}>
-              <Text style={[styles.startBtnText, styles.multiplayerText]}>⚔️ Multiplayer Mode ⚔️</Text>
+            <Animated.View style={[styles.btn, styles.multiplayerBtn, multiAnimStyle]}>
+              <Text style={[styles.btnText, styles.multiplayerText]}>
+                ⚔️ Multiplayer Mode ⚔️
+              </Text>
             </Animated.View>
           </Pressable>
         </Animated.View>
       </View>
+
+      <SettingsModal
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  arrowDeco: { marginBottom: 20, alignItems: 'center', justifyContent: 'center' },
-  logoImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 24,
-    resizeMode: 'contain',
+
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 44,
+    height: 100
+  },
+
+  starCounter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 22,
+    ...theme.shadows.sm
+  },
+  starEmoji: {
+    fontSize: 18,
+    marginRight: 6
+  },
+  starText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: theme.colors.arrowStroke
+  },
+  starMax: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.textMuted
+  },
+
+  settingsBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 22,
+    ...theme.shadows.sm
+  },
+
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    marginTop: -40
+  },
+  arrowDeco: { marginBottom: 20 },
+  arrowIcon: {
+    fontSize: 64,
+    color: theme.colors.arrowStroke,
+    opacity: 0.7
   },
   title: {
     fontSize: 52,
@@ -178,7 +272,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 2
   },
-  startBtn: {
+
+  btn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -190,17 +285,16 @@ const styles = StyleSheet.create({
     gap: 12,
     ...theme.shadows.md
   },
-  startBtnText: { color: '#FFF', fontSize: 20, fontWeight: '800' },
-  startBtnArrow: { color: '#FFF', fontSize: 22, fontWeight: '800' },
+  btnText: { color: '#FFF', fontSize: 20, fontWeight: '800' },
+  btnArrow: { color: '#FFF', fontSize: 22, fontWeight: '800' },
+
   levelSelectBtn: {
     backgroundColor: '#FFF',
-    borderWidth: 0,
     marginTop: 16,
     ...theme.shadows.md
   },
-  levelSelectText: {
-    color: theme.colors.arrowStroke,
-  },
+  levelSelectText: { color: theme.colors.arrowStroke },
+
   multiplayerBtn: {
     backgroundColor: '#6A4428',
     borderWidth: 2,
@@ -208,8 +302,5 @@ const styles = StyleSheet.create({
     marginTop: 16,
     ...theme.shadows.lg
   },
-  multiplayerText: {
-    color: '#FFD54F',
-    fontWeight: '800'
-  }
+  multiplayerText: { color: '#FFD54F', fontWeight: '800' }
 });

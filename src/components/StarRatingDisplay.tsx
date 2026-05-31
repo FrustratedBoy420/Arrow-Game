@@ -13,7 +13,7 @@
  *  FIX 3: Dispatches finalStarsCalculated to Zustand store for VictoryScreen sync
  */
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -38,7 +38,15 @@ export function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayPro
 
   const [timeTaken, setTimeTaken] = useState(0);
   const [heartsLost, setHeartsLost] = useState(0);
-  const [baseStars, setBaseStars] = useState(3);
+
+  // Calculate current stars for display
+  let currentTimeStars = 3;
+  if (timeTaken > levelBaselineSeconds + 5) {
+    currentTimeStars = 1;
+  } else if (timeTaken > levelBaselineSeconds) {
+    currentTimeStars = 2;
+  }
+  const currentFinalStars = Math.max(1, currentTimeStars - (heartsLost > 0 ? 1 : 0));
 
   // Animated values for star opacity and color
   const star3Opacity = useSharedValue(1);
@@ -69,40 +77,20 @@ export function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayPro
 
   // Calculate stars based on time AND hearts
   useEffect(() => {
-    // FIX 2: Default to 3 stars (optimistic) — only step DOWN when threshold is explicitly crossed
-    // Old bug: `let timeStars = 1` caused 1-star lock on first render when
-    // levelBaselineSeconds hadn't populated yet (0 <= undefined = false → fell to default 1)
-    let timeStars = 3;
+    // Push authoritative score to global store so VictoryScreen reads it instantly
+    setFinalStarsCalculated(currentFinalStars);
 
-    if (timeTaken > levelBaselineSeconds + 5) {
-      // Beyond grace period
-      timeStars = 1;
-    } else if (timeTaken > levelBaselineSeconds) {
-      // Inside grace period (levelBaselineSeconds+1 to +5)
-      timeStars = 2;
-    }
-    // else: timeTaken <= levelBaselineSeconds → stays at 3
-
-    setBaseStars(timeStars);
-
-    // Apply Heart Penalty: any hearts lost = -1 star (floor 1)
-    const penalty = heartsLost > 0 ? 1 : 0;
-    const finalStars = Math.max(1, timeStars - penalty);
-
-    // FIX 3: Push authoritative score to global store so VictoryScreen reads it instantly
-    setFinalStarsCalculated(finalStars);
-
-    // Visual Animations — fading stars based on time thresholds
-    if (timeTaken <= levelBaselineSeconds) {
+    // Visual Animations — fading stars based on FINAL result (Time + Health)
+    if (currentFinalStars === 3) {
       // All 3 stars bright gold
       star3Opacity.value = withTiming(1, { duration: 200 });
       star2Opacity.value = withTiming(1, { duration: 200 });
-    } else if (timeTaken <= levelBaselineSeconds + 5) {
-      // Grace period: rightmost star (star3) dims
+    } else if (currentFinalStars === 2) {
+      // 2 stars: dim the rightmost star (star3)
       star3Opacity.value = withTiming(0.3, { duration: 200 });
       star2Opacity.value = withTiming(1, { duration: 200 });
     } else {
-      // Beyond grace: star3 and star2 both dim, star1 pulses
+      // 1 star: dim star3 and star2, pulse star1
       star3Opacity.value = withTiming(0.3, { duration: 200 });
       star2Opacity.value = withTiming(0.3, { duration: 200 });
 
@@ -118,7 +106,7 @@ export function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayPro
         withSpring(1.0, { damping: 6, stiffness: 100 })
       );
     }
-  }, [timeTaken, heartsLost, levelBaselineSeconds]);
+  }, [currentFinalStars, heartsLost]);
 
   // Animated styles
   // FIX 1: star1 is leftmost and never dims — it's the last star standing
@@ -155,73 +143,58 @@ export function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayPro
 
   return (
     <View style={styles.container}>
-      {/* Stars Display
-          FIX 1: Correct left-to-right order: star1 (never dims) → star2 → star3 (dims first)
-          Old bug had star3 → star2 → star1, so the LEFTMOST star was greying out first */}
-      <View style={styles.statusRow}>
-        <View style={styles.starsContainer}>
-          <Animated.Text style={[styles.star, star1Style]}>⭐</Animated.Text>
-          <Animated.Text style={[styles.star, star2Style]}>⭐</Animated.Text>
-          <Animated.Text style={[styles.star, star3Style]}>⭐</Animated.Text>
-        </View>
-
-        <Animated.View style={[styles.timerContainer, timerStyle]}>
-          <Text style={[styles.timer, { color: timeColor }]}>{timeDisplay}</Text>
-          <Text style={styles.baseline}>{baselineDisplay}</Text>
-        </Animated.View>
+      <View style={styles.starsContainer}>
+        <Animated.Text style={[styles.star, star1Style]}>⭐</Animated.Text>
+        <Animated.Text style={[styles.star, star2Style]}>⭐</Animated.Text>
+        <Animated.Text style={[styles.star, star3Style]}>⭐</Animated.Text>
       </View>
+
+      <Animated.View style={[styles.timerContainer, timerStyle]}>
+        <Text style={[styles.timer, { color: timeColor }]}>{timeDisplay}</Text>
+        <Text style={styles.baseline}>{baselineDisplay}</Text>
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    borderRadius: 24,
-    marginHorizontal: 24,
-    marginTop: 8,
-    marginBottom: 8,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 213, 79, 0.4)',
-    ...theme.shadows.md
-  },
-  starsContainer: {
-    flexDirection: 'row',
-    gap: 14,
-    justifyContent: 'center'
-  },
-  star: {
-    fontSize: 30,
-    textShadowColor: 'rgba(255, 213, 79, 0.4)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4
-  },
-  statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%'
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 4,
+    marginHorizontal: 20,
+    marginTop: 4,
+    marginBottom: 4,
+    ...theme.shadows.sm
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center'
+  },
+  star: {
+    fontSize: 28,
+    textShadowColor: 'rgba(255, 213, 79, 0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3
   },
   timerContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.03)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4
+    alignItems: 'baseline',
+    gap: 2
   },
   timer: {
-    fontSize: 24,
-    fontWeight: '900',
+    fontSize: 22,
+    fontWeight: '800',
     fontVariant: ['tabular-nums']
   },
   baseline: {
     fontSize: 14,
     color: theme.colors.textMuted,
-    fontWeight: '700'
+    fontWeight: '600'
   }
 });

@@ -10,10 +10,24 @@ import type { LevelDefinition } from '../game/types';
 import {
   calculateStars,
   checkLevelUnlocks,
-  createLevelProgress,
   initializeLevelMap,
+  isLevelUnlocked,
+  mergeLevelProgressMap,
   type LevelProgress
 } from './levelManagement';
+
+/** AsyncStorage may deserialize into a plain object — always normalize to Map. */
+export function ensureLevelProgressMap(
+  levelMap: Map<number, LevelProgress> | Record<string, LevelProgress> | null | undefined
+): Map<number, LevelProgress> {
+  if (levelMap instanceof Map) return levelMap;
+  if (levelMap && typeof levelMap === 'object') {
+    return new Map(
+      Object.entries(levelMap).map(([key, value]) => [Number(key), value as LevelProgress])
+    );
+  }
+  return initializeLevelMap();
+}
 
 // ============================================================================
 // PERSISTENCE HELPERS
@@ -41,8 +55,11 @@ export async function loadLevelProgress(): Promise<Map<number, LevelProgress>> {
   try {
     const data = await AsyncStorage.getItem(LEVEL_PROGRESS_STORAGE_KEY);
     if (data) {
-      const entries = JSON.parse(data);
-      return new Map(entries);
+      const entries = JSON.parse(data) as [number, LevelProgress][];
+      const savedMap = new Map(entries);
+      const mergedMap = mergeLevelProgressMap(savedMap);
+      await saveLevelProgress(mergedMap);
+      return mergedMap;
     }
   } catch (error) {
     console.error('Failed to load level progress:', error);
@@ -91,10 +108,11 @@ export function completeLevelWithStars(
     breakdown = starResult.breakdown;
   }
 
-  // Update progress
+  // Update progress — keep best star count so replays cannot lower block totals
   progress.isCompleted = true;
-  progress.starsEarned = starsEarned;
+  progress.starsEarned = Math.max(progress.starsEarned, starsEarned);
   progress.bestTime = progress.bestTime === null ? timeTaken : Math.min(progress.bestTime, timeTaken);
+  starsEarned = progress.starsEarned;
 
   // Check for level unlocks
   const unlockResult = checkLevelUnlocks(levelMap);
@@ -126,11 +144,12 @@ export function getLevelStarConfig(levelMap: Map<number, LevelProgress>, levelId
 }
 
 /**
- * Checks if a level is locked.
+ * Checks if a level is locked (computed live — ignores stale saved flags).
  */
 export function isLevelLocked(levelMap: Map<number, LevelProgress>, levelId: number): boolean {
-  const progress = levelMap.get(levelId);
-  return progress?.isLocked ?? true;
+  const map = ensureLevelProgressMap(levelMap);
+  if (!map.has(levelId)) return true;
+  return !isLevelUnlocked(map, levelId);
 }
 
 /**
