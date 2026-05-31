@@ -1,7 +1,10 @@
 import type { LevelDefinition } from '../game/types';
 import levelData from './level.json';
 
-export let levels: LevelDefinition[] = levelData as unknown as LevelDefinition[];
+export const localLevelData = levelData as unknown as LevelDefinition[];
+
+// Initially load only the first 20 levels
+export let levels: LevelDefinition[] = localLevelData.slice(0, 20);
 
 export function setDynamicLevels(newLevels: LevelDefinition[]) {
   if (Array.isArray(newLevels) && newLevels.length > 0) {

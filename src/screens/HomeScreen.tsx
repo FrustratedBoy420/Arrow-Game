@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useEffect } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SafeAreaView, StyleSheet, Text, View, Image } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -95,7 +95,17 @@ export function HomeScreen() {
       <AmbientBackground />
       <View style={styles.content}>
         <Animated.View style={[styles.arrowDeco, arrowStyle]}>
-          <Text style={styles.arrowIcon}>{iconsConfig?.homeArrow || '➤'}</Text>
+          {iconsConfig?.homeArrow && (iconsConfig.homeArrow.startsWith('http://') || iconsConfig.homeArrow.startsWith('https://')) ? (
+            <Image
+              source={{ uri: iconsConfig.homeArrow }}
+              style={styles.logoImage}
+            />
+          ) : (
+            <Image
+              source={require('../../assets/icon.png')}
+              style={styles.logoImage}
+            />
+          )}
         </Animated.View>
 
         <Animated.View style={titleStyle}>
@@ -146,8 +156,13 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  arrowDeco: { marginBottom: 20 },
-  arrowIcon: { fontSize: 64, color: theme.colors.arrowStroke, opacity: 0.7 },
+  arrowDeco: { marginBottom: 20, alignItems: 'center', justifyContent: 'center' },
+  logoImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 24,
+    resizeMode: 'contain',
+  },
   title: {
     fontSize: 52,
     fontWeight: '900',
