@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useEffect } from 'react';
 
 import { audioManager } from './src/utils/audio';
+import { initializeLevelManagement } from './src/systems/levelManagementInit';
 
 import { FailScreen } from './src/screens/FailScreen';
 import { GameplayScreen } from './src/screens/GameplayScreen';
@@ -32,6 +33,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function App() {
   useEffect(() => {
     void audioManager.init();
+    void initializeLevelManagement();
   }, []);
 
   return (

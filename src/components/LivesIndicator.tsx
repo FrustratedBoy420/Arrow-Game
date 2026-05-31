@@ -35,7 +35,9 @@ export function LivesIndicator({ livesLeft }: Props) {
     flexDirection: 'row' as const,
     gap: 8,
     paddingHorizontal: 34,
-    paddingTop: 28
+    paddingTop: 12,
+    justifyContent: 'center',
+    width: '100%'
   }));
 
   return (
@@ -58,7 +60,7 @@ const styles = StyleSheet.create({
   },
   drop: {
     color: theme.colors.lifeRed,
-    fontSize: 28,
+    fontSize: 24,
   },
   empty: {
     color: theme.colors.lifeMuted,

@@ -16,6 +16,7 @@ import { GameHeader } from '../components/GameHeader';
 import { LivesIndicator } from '../components/LivesIndicator';
 import { PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
 import { SettingsModal } from '../components/SettingsModal';
+import { StarRatingDisplay } from '../components/StarRatingDisplay';
 import { isFrontClear } from '../game/engine';
 import type { ArrowNode } from '../game/types';
 import { useGameStore } from '../state/gameStore';
@@ -43,11 +44,11 @@ export function GameplayScreen() {
   const boardOpacity = useSharedValue(1);
 
   const maxW = width * 0.95;
-  const maxH = height * 0.60;
+  const maxH = height * 0.45;
   const { columns, rows } = board.level.gridSize;
   const sizeFromWidth = maxW / columns;
   const sizeFromHeight = maxH / rows;
-  const cellSize = Math.min(sizeFromWidth, sizeFromHeight, 60);
+  const cellSize = Math.min(sizeFromWidth, sizeFromHeight, 50);
   const boardWidth = cellSize * columns;
 
   const animatedBoardStyle = useAnimatedStyle(() => ({
@@ -120,6 +121,7 @@ export function GameplayScreen() {
         onSettings={() => setSettingsVisible(true)}
       />
       <LivesIndicator livesLeft={board.livesLeft} />
+      <StarRatingDisplay levelBaselineSeconds={board.level.arrows.length} />
       <View style={styles.boardStage}>
         <Animated.View style={animatedBoardStyle}>
           <PuzzleBoardCanvas
