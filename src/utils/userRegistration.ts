@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Pusher from 'pusher-js';
 import { useGameStore } from '../state/gameStore';
-import { setAllLevelsUnlocked, unlockAllLevelsInMap } from '../systems/levelManagementStore';
+import { setAllLevelsUnlocked } from '../systems/levelManagementStore';
 
 // Pusher instance for real-time level access updates
 let userChannel: any = null;
@@ -58,13 +58,14 @@ export async function registerUserProfile() {
       
       const allLevelsUnlocked = !!resData.allLevelsUnlocked;
       setAllLevelsUnlocked(allLevelsUnlocked);
-
-      if (allLevelsUnlocked) {
-        // Physically unlock every level in the persisted map so they remain
-        // unlocked after an app restart (not just for this session)
-        await unlockAllLevelsInMap();
-        console.log('🔓 Admin access: all levels unlocked and persisted.');
-      }
+      
+      // Update store value so that UI renders correctly if needed
+      useGameStore.setState((state) => ({
+        iconsConfig: {
+          ...state.iconsConfig,
+          unlockAllLevels: allLevelsUnlocked
+        }
+      }));
     } else {
       console.warn('⚠️ Failed to register user profile, status:', response.status);
     }
@@ -100,13 +101,14 @@ async function setupUserPusherListener(systemId: string) {
       console.log('⚡ Received level access change event:', data);
       const allLevelsUnlocked = !!data.allLevelsUnlocked;
       setAllLevelsUnlocked(allLevelsUnlocked);
-
-      if (allLevelsUnlocked) {
-        // Physically unlock all levels and persist — survives app restarts
-        unlockAllLevelsInMap().then(() => {
-          console.log('🔓 Real-time admin grant: all levels unlocked and persisted.');
-        });
-      }
+      
+      // Update iconsConfig state to match
+      useGameStore.setState((state) => ({
+        iconsConfig: {
+          ...state.iconsConfig,
+          unlockAllLevels: allLevelsUnlocked
+        }
+      }));
     });
 
   } catch (err) {

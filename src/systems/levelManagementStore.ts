@@ -152,41 +152,6 @@ export function setAllLevelsUnlocked(unlocked: boolean) {
 }
 
 /**
- * Physically unlocks every level in the progress map by setting isLocked: false.
- * Persists the result so the unlock survives app restarts.
- * Also updates the game store's levelProgressMap and highestUnlockedLevel.
- *
- * Call this when an admin grants full level access to a user.
- */
-export async function unlockAllLevelsInMap(): Promise<void> {
-  try {
-    // Import lazily to avoid circular dependency at module load time
-    const { useGameStore } = await import('../state/gameStore');
-
-    const currentMap = ensureLevelProgressMap(useGameStore.getState().levelProgressMap);
-
-    // Unlock every level in the map
-    for (const progress of currentMap.values()) {
-      progress.isLocked = false;
-    }
-
-    // Persist updated map so it survives app restart
-    await saveLevelProgress(currentMap);
-
-    // Update store so the UI re-renders immediately
-    const highestLevel = currentMap.size; // all levels now accessible
-    useGameStore.setState({
-      levelProgressMap: new Map(currentMap),
-      highestUnlockedLevel: highestLevel
-    });
-
-    console.log(`🔓 Admin: All ${currentMap.size} levels physically unlocked and persisted.`);
-  } catch (err) {
-    console.error('❌ unlockAllLevelsInMap failed:', err);
-  }
-}
-
-/**
  * Checks if a level is locked (computed live — ignores stale saved flags).
  */
 export function isLevelLocked(levelMap: Map<number, LevelProgress>, levelId: number): boolean {
