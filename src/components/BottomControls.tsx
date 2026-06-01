@@ -1,3 +1,4 @@
+import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
@@ -9,7 +10,7 @@ type Props = {
   onRestart: () => void;
 };
 
-export function BottomControls({ onUndo, onHint, onRestart }: Props) {
+export const BottomControls = memo(function BottomControls({ onUndo, onHint, onRestart }: Props) {
   return (
     <View style={styles.container}>
       <ControlButton label="Undo" icon="↶" onPress={onUndo} />
@@ -17,7 +18,7 @@ export function BottomControls({ onUndo, onHint, onRestart }: Props) {
       <ControlButton label="Restart" icon="↻" onPress={onRestart} />
     </View>
   );
-}
+});
 
 function ControlButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
   const scale = useSharedValue(1);

@@ -79,35 +79,29 @@ export function GameplayScreen() {
   }, []);
 
   const handleArrowPress = useCallback((arrowId: string) => {
-    const arrow = board.arrows.find((a) => a.id === arrowId);
+    const currentBoard = useGameStore.getState().board;
+    const arrow = currentBoard.arrows.find((a) => a.id === arrowId);
     const result = tapArrow(arrowId);
 
     if (result === 'REMOVED' && arrow) {
       setExitingArrows((prev) => [...prev, arrow]);
-      boardScale.value = withSequence(
-        withTiming(0.98, { duration: 70 }),
-        withSpring(1, { damping: 12, stiffness: 200 })
-      );
       void playCorrectFeedback();
     } else if (result === 'BLOCKED') {
       void playWrongFeedback(hapticsEnabled);
     }
-  }, [board.arrows, tapArrow, hapticsEnabled, boardScale]);
+  }, [tapArrow, hapticsEnabled]);
 
   const handleHint = useCallback(() => {
-    const hintArrow = board.arrows.find((a) => isFrontClear(a, board));
+    const currentBoard = useGameStore.getState().board;
+    const hintArrow = currentBoard.arrows.find((a) => isFrontClear(a, currentBoard));
     const hintedId = useHint();
     if (hintedId && hintArrow) {
       setExitingArrows((prev) => [...prev, hintArrow]);
-      boardScale.value = withSequence(
-        withTiming(0.97, { duration: 100 }),
-        withSpring(1, { damping: 12, stiffness: 180 })
-      );
       void playCorrectFeedback();
     } else {
       Alert.alert('No Hint', 'No valid move right now. Try Undo!');
     }
-  }, [board, useHint, boardScale]);
+  }, [useHint]);
 
   return (
     <SafeAreaView style={styles.screen}>

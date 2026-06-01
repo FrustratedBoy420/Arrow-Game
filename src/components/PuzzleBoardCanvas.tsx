@@ -1,5 +1,5 @@
 import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -29,7 +29,7 @@ const dirVec: Record<Direction, { x: number; y: number }> = {
   LEFT: { x: -1, y: 0 }, RIGHT: { x: 1, y: 0 }
 };
 
-export function PuzzleBoardCanvas({ board, exitingArrows, width, onArrowPress, onExitDone }: Props) {
+export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({ board, exitingArrows, width, onArrowPress, onExitDone }: Props) {
   const cellSize = width / board.level.gridSize.columns;
   const height = cellSize * board.level.gridSize.rows;
   const strokeW = Math.max(3, cellSize * 0.13);
@@ -117,7 +117,7 @@ export function PuzzleBoardCanvas({ board, exitingArrows, width, onArrowPress, o
       />
     </View>
   );
-}
+});
 
 function ExitingArrow({
   arrow, cellSize, strokeWidth: sw, onDone
@@ -167,11 +167,11 @@ function ExitingArrow({
 
   useEffect(() => {
     animProgress.value = withTiming(1, {
-      duration: 1200,
+      duration: 350,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1)
     });
     opacity.value = withTiming(0, {
-      duration: 1200,
+      duration: 350,
       easing: Easing.bezier(0.7, 0, 0.84, 0)
     }, (fin) => {
       if (fin) runOnJS(onDone)();
