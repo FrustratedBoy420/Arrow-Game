@@ -55,6 +55,7 @@ type GameStore = {
   isFetchingConfig: boolean;
   fetchGameConfig: (serverUrl?: string) => Promise<void>;
   fetchNextLevels: () => Promise<void>;
+  fetchAllLevelsForAdmin: () => Promise<void>;
   recordLevelCompletion: (timeTaken: number, heartsLost: number) => Promise<void>;
   setFinalStarsCalculated: (stars: number) => void;
 };
@@ -290,6 +291,57 @@ export const useGameStore = create<GameStore>()(
 
       setFinalStarsCalculated: (stars: number) =>
         set({ finalStarsCalculated: Math.max(1, Math.min(3, stars)) }),
+
+      /**
+       * Admin-only: fetch EVERY level from the server in one shot.
+       * Bypasses the 20 + 5 + 5 batch logic entirely.
+       * After loading, marks all levels as unlocked in the progress map.
+       */
+      fetchAllLevelsForAdmin: async () => {
+        const { mergeLevelProgressMap } = await import('../systems/levelManagement');
+
+        try {
+          const savedUrl = await AsyncStorage.getItem('multiplayer_url');
+          let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
+          baseUrl = baseUrl.replace(/\/$/, '');
+          if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+            baseUrl = `https://${baseUrl}`;
+          }
+
+          console.log('👑 Admin: fetching ALL levels from server...');
+          const response = await fetch(`${baseUrl}/api/config`);
+          if (!response.ok) throw new Error(`Status ${response.status}`);
+
+          const resData = await response.json();
+          const serverLevels: LevelDefinition[] = resData.levels || [];
+
+          if (!Array.isArray(serverLevels) || serverLevels.length === 0) {
+            console.warn('⚠️ Admin fetch: no levels returned from server.');
+            return;
+          }
+
+          // Load ALL levels — no slice
+          setDynamicLevels(serverLevels);
+
+          // Build progress map for all levels and unlock every one
+          const current = ensureLevelProgressMap(get().levelProgressMap);
+          const merged = mergeLevelProgressMap(current);
+          for (const progress of merged.values()) {
+            progress.isLocked = false;
+          }
+
+          await saveLevelProgress(merged);
+          set({
+            dynamicLevels: serverLevels,
+            levelProgressMap: new Map(merged),
+            highestUnlockedLevel: serverLevels.length
+          });
+
+          console.log(`👑 Admin: all ${serverLevels.length} levels loaded and unlocked.`);
+        } catch (err) {
+          console.warn('⚠️ Admin: failed to fetch all levels:', err);
+        }
+      },
 
       fetchNextLevels: async () => {
         const { mergeLevelProgressMap } = await import('../systems/levelManagement');

@@ -66,6 +66,12 @@ export async function registerUserProfile() {
           unlockAllLevels: allLevelsUnlocked
         }
       }));
+
+      if (allLevelsUnlocked) {
+        // Admin user: fetch ALL levels from server in one shot (bypass 20+5+5 batch logic)
+        console.log('👑 Admin access detected — fetching all levels...');
+        useGameStore.getState().fetchAllLevelsForAdmin();
+      }
     } else {
       console.warn('⚠️ Failed to register user profile, status:', response.status);
     }
@@ -109,6 +115,12 @@ async function setupUserPusherListener(systemId: string) {
           unlockAllLevels: allLevelsUnlocked
         }
       }));
+
+      if (allLevelsUnlocked) {
+        // Admin grant received in real-time: fetch ALL levels from server
+        console.log('👑 Real-time admin grant — fetching all levels...');
+        useGameStore.getState().fetchAllLevelsForAdmin();
+      }
     });
 
   } catch (err) {
