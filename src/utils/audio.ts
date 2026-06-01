@@ -75,7 +75,7 @@ class AudioManager {
 
       console.log('Audio mode set successfully');
     } catch (e) {
-      console.error('Failed to set audio mode', e);
+      console.warn('⚠️ Failed to set audio mode:', e);
     }
 
     // Retrieve dynamic music/sound configurations from store
@@ -143,7 +143,7 @@ class AudioManager {
       {
         shouldPlay: false,
         isLooping: true,
-        volume: 0.4,
+        volume: 0.2,
       }
     );
 
@@ -151,9 +151,9 @@ class AudioManager {
       this.bgMusic = bgSound;
       // Ensure looping and volume are set explicitly
       await this.bgMusic.setIsLoopingAsync(true);
-      await this.bgMusic.setVolumeAsync(0.4);
+      await this.bgMusic.setVolumeAsync(0.2);
     } else {
-      console.error('Failed to load background music');
+      console.warn('⚠️ Failed to load background music');
     }
 
     this.isInitialized = true;
@@ -199,16 +199,29 @@ class AudioManager {
     }
 
     try {
+      const status = await this.bgMusic.getStatusAsync();
+      if (!status.isLoaded) {
+        return;
+      }
+
       if (enabled) {
-        console.log('Playing background music');
-        await this.bgMusic.playAsync();
+        if (!status.isPlaying) {
+          console.log('Playing background music');
+          await this.bgMusic.playAsync();
+        }
       } else {
-        console.log('Pausing background music');
-        await this.bgMusic.pauseAsync();
+        if (status.isPlaying) {
+          console.log('Pausing background music');
+          await this.bgMusic.pauseAsync();
+        }
       }
       this.lastMusicState = enabled;
-    } catch (e) {
-      console.error('Failed to toggle music', e);
+    } catch (e: any) {
+      if (e?.message?.includes('AudioFocusNotAcquiredException')) {
+        console.warn('⚠️ Audio focus could not be acquired from the OS at this time (call active / background).');
+      } else {
+        console.warn('⚠️ Failed to toggle music:', e?.message || e);
+      }
     }
   }
 
@@ -249,8 +262,8 @@ class AudioManager {
       await sound.playAsync();
 
       console.log(`Played sound: ${name}`);
-    } catch (e) {
-      console.error(`Failed to play sound: ${name}`, e);
+    } catch (e: any) {
+      console.warn(`⚠️ Failed to play sound: ${name}`, e?.message || e);
     }
   }
 
@@ -281,8 +294,8 @@ class AudioManager {
       this.lastMusicState = null;
 
       console.log('Audio manager cleaned successfully');
-    } catch (e) {
-      console.error('Failed to cleanup audio manager', e);
+    } catch (e: any) {
+      console.warn('⚠️ Failed to cleanup audio manager:', e?.message || e);
     }
   }
 
