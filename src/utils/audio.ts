@@ -13,11 +13,13 @@ console.log('Audio assets imported successfully');
 class AudioManager {
   private bgMusic: Audio.Sound | null = null;
   private soundEffects: Record<string, Audio.Sound> = {};
+  private effectsLoadingPromises: Record<string, Promise<Audio.Sound | null>> = {};
   private isInitialized = false;
   private isInitializing = false;
   private subscriptionUnsubscribe: (() => void) | null = null;
   private lastMusicState: boolean | null = null;
-  private lastMusicUrlsJson = '{}';
+  private lastMusicUrlsJson = JSON.stringify(useGameStore.getState().musicUrls || {});
+  private activeInitId = 0;
 
   private async loadAsset(
     assetOrUri: any,
@@ -51,15 +53,11 @@ class AudioManager {
       return;
     }
 
-    if (this.isInitializing) {
-      console.log('Audio initialization already in progress');
-      return;
-    }
-
+    const initId = ++this.activeInitId;
     this.isInitializing = true;
 
     try {
-      console.log('Setting audio mode...');
+      console.log(`Setting audio mode (Init #${initId})...`);
 
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
@@ -77,6 +75,8 @@ class AudioManager {
     } catch (e) {
       console.warn('⚠️ Failed to set audio mode:', e);
     }
+
+    if (this.activeInitId !== initId) return;
 
     // Retrieve dynamic music/sound configurations from store
     const storeState = useGameStore.getState();
@@ -117,27 +117,32 @@ class AudioManager {
       },
     ];
 
-    // Load sound effects
+    // Load sound effects in parallel (background load)
     for (const item of soundSources) {
-      const sound = await this.loadAsset(
+      this.effectsLoadingPromises[item.name] = this.loadAsset(
         item.asset,
         item.name,
         item.options
-      );
-
-      if (sound) {
-        this.soundEffects[item.name] = sound;
-      } else {
-        console.warn(`Skipping sound: ${item.name}`);
-      }
+      ).then((sound) => {
+        if (this.activeInitId !== initId) {
+          if (sound) sound.unloadAsync().catch(() => {});
+          return null;
+        }
+        if (sound) {
+          this.soundEffects[item.name] = sound;
+        } else {
+          console.warn(`Skipping sound: ${item.name}`);
+        }
+        return sound;
+      });
     }
 
-    // Load background music
+    // Load background music concurrently
     console.log('Loading background music...');
     const musicEnabled = storeState.musicEnabled;
     const bgMusicSource = musicUrls.bgMusic || bgMusicAsset;
 
-    const bgSound = await this.loadAsset(
+    const bgSoundPromise = this.loadAsset(
       bgMusicSource,
       'bgMusic',
       {
@@ -147,11 +152,22 @@ class AudioManager {
       }
     );
 
+    // Only await the background music to start playing immediately
+    const bgSound = await bgSoundPromise;
+
+    if (this.activeInitId !== initId) {
+      if (bgSound) bgSound.unloadAsync().catch(() => {});
+      return;
+    }
+
     if (bgSound) {
       this.bgMusic = bgSound;
       // Ensure looping and volume are set explicitly
       await this.bgMusic.setIsLoopingAsync(true);
+      if (this.activeInitId !== initId) return;
+
       await this.bgMusic.setVolumeAsync(0.2);
+      if (this.activeInitId !== initId) return;
     } else {
       console.warn('⚠️ Failed to load background music');
     }
@@ -159,21 +175,21 @@ class AudioManager {
     this.isInitialized = true;
     this.isInitializing = false;
 
-    // Zustand subscription
+    // Setup Zustand subscription ONCE
     if (!this.subscriptionUnsubscribe) {
       console.log('Setting up music subscription');
 
       this.subscriptionUnsubscribe = useGameStore.subscribe(
         (state) => {
           // 1. Handle music toggle
-          if (this.isInitialized && state.musicEnabled !== this.lastMusicState) {
+          if (state.musicEnabled !== this.lastMusicState) {
             console.log(`Music enabled changed: ${state.musicEnabled}`);
             this.handleMusicToggle(state.musicEnabled);
           }
 
           // 2. Handle dynamic music config changes
           const currentUrlsJson = JSON.stringify((state as any).musicUrls || {});
-          if (this.isInitialized && this.lastMusicUrlsJson !== currentUrlsJson) {
+          if (this.lastMusicUrlsJson !== currentUrlsJson) {
             console.log('Dynamic music URLs changed, reloading audio manager...');
             this.lastMusicUrlsJson = currentUrlsJson;
             // Reload asynchronously to prevent blocking the store state update
@@ -241,10 +257,16 @@ class AudioManager {
       await this.init();
     }
 
-    const sound = this.soundEffects[name];
+    let sound = this.soundEffects[name];
+
+    // If the sound effect is still loading in the background, wait for it
+    if (!sound && this.effectsLoadingPromises[name]) {
+      console.log(`Sound effect '${name}' is still loading, waiting...`);
+      sound = (await this.effectsLoadingPromises[name]) || undefined;
+    }
 
     if (!sound) {
-      console.warn(`Sound not found: ${name}`);
+      console.warn(`Sound not found or failed to load: ${name}`);
       return;
     }
 
@@ -271,6 +293,10 @@ class AudioManager {
     console.log('Cleaning up audio manager...');
 
     try {
+      // Wait for any pending sound effects to load before unloading
+      await Promise.all(Object.values(this.effectsLoadingPromises)).catch(() => {});
+      this.effectsLoadingPromises = {};
+
       // Unload sound effects
       for (const sound of Object.values(this.soundEffects)) {
         await sound.unloadAsync();
@@ -284,11 +310,7 @@ class AudioManager {
         this.bgMusic = null;
       }
 
-      // Remove Zustand subscription
-      if (this.subscriptionUnsubscribe) {
-        this.subscriptionUnsubscribe();
-        this.subscriptionUnsubscribe = null;
-      }
+      // Keep Zustand subscription alive for app lifetime during reloads
 
       this.isInitialized = false;
       this.lastMusicState = null;

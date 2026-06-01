@@ -30,10 +30,13 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+import { registerUserProfile } from './src/utils/userRegistration';
+
 export default function App() {
   useEffect(() => {
     void audioManager.init();
     void initializeLevelManagement();
+    void registerUserProfile();
   }, []);
 
   return (

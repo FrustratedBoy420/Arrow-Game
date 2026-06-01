@@ -35,6 +35,7 @@ import type { ArrowNode, BoardState, LevelDefinition } from '../game/types';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
+import { registerUserProfile } from '../utils/userRegistration';
 
 type MultiplayerStep = 'setup' | 'lobby' | 'game' | 'results';
 
@@ -76,6 +77,7 @@ export function MultiplayerScreen() {
   const [matchWinner, setMatchWinner] = useState('');
   const [matchResults, setMatchResults] = useState<ServerPlayer[]>([]);
   const [rematchStates, setRematchStates] = useState<Record<string, boolean>>({});
+  const [requestingRematch, setRequestingRematch] = useState(false);
 
   const pusherRef = useRef<Pusher | null>(null);
   const channelRef = useRef<any>(null);
@@ -252,6 +254,14 @@ export function MultiplayerScreen() {
         setPlayers(data.players);
         setReadyStates({});
         setOpponentName('');
+        // Also update match results status if we are on results screen
+        setMatchResults((prev) =>
+          prev.map((r) =>
+            r.name.toLowerCase() === data.playerName.toLowerCase()
+              ? { ...r, status: 'abandoned' }
+              : r
+          )
+        );
         Alert.alert('Notice', `${data.playerName} left the lobby.`);
       });
 
@@ -291,6 +301,7 @@ export function MultiplayerScreen() {
         setOpponentName(other);
         setReadyStates({});
         setRematchStates({});
+        setRequestingRematch(false);
         setStep('lobby');
       });
 
@@ -335,6 +346,9 @@ export function MultiplayerScreen() {
       await AsyncStorage.setItem('multiplayer_name', playerName.trim());
       await AsyncStorage.setItem('multiplayer_url', serverUrl.trim());
       await AsyncStorage.setItem('multiplayer_pusher_key', pusherKey.trim());
+
+      // Update registration profile in DB with new name
+      void registerUserProfile();
 
       setRoomCode(newCode);
       setPlayers(roomPlayers);
@@ -381,6 +395,9 @@ export function MultiplayerScreen() {
       await AsyncStorage.setItem('multiplayer_url', serverUrl.trim());
       await AsyncStorage.setItem('multiplayer_pusher_key', pusherKey.trim());
 
+      // Update registration profile in DB with new name
+      void registerUserProfile();
+
       setRoomCode(newCode);
       setPlayers(roomPlayers);
       setLevel(newLevel);
@@ -410,6 +427,8 @@ export function MultiplayerScreen() {
   };
 
   const handleRequestRematch = async () => {
+    if (requestingRematch) return;
+    setRequestingRematch(true);
     try {
       await apiPost('/api/rematch-request', {
         name: playerName.trim(),
@@ -417,6 +436,8 @@ export function MultiplayerScreen() {
       });
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to request rematch.');
+    } finally {
+      setRequestingRematch(false);
     }
   };
 
@@ -779,23 +800,35 @@ export function MultiplayerScreen() {
           {/* Results Table */}
           <View style={styles.table}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.tableCol, styles.tableHeaderLabel]}>Player</Text>
-              <Text style={[styles.tableCol, styles.tableHeaderLabel, { textAlign: 'center' }]}>Status</Text>
-              <Text style={[styles.tableCol, styles.tableHeaderLabel, { textAlign: 'right' }]}>Time</Text>
+              <Text style={[styles.tableColPlayer, styles.tableHeaderLabel]}>Player</Text>
+              <Text style={[styles.tableColStatus, styles.tableHeaderLabel, { textAlign: 'center' }]}>Status</Text>
             </View>
 
             {matchResults.map((result) => {
-              const displayTime = result.timeMs ? `${(result.timeMs / 1000).toFixed(2)}s` : 'Failed';
+              const isWinner = matchWinner === result.name;
+              const isDraw = matchWinner === 'None';
+              
+              let statusText = 'Lost';
+              let statusStyle = styles.statusFailed as any;
+              
+              if (result.status === 'abandoned') {
+                statusText = 'guy resigned';
+                statusStyle = styles.statusResigned;
+              } else if (isWinner) {
+                statusText = 'Won';
+                statusStyle = styles.statusWon;
+              } else if (isDraw) {
+                statusText = 'Draw';
+                statusStyle = styles.statusFailed;
+              }
+
               return (
                 <View key={result.name} style={styles.tableRow}>
-                  <Text style={[styles.tableCol, styles.tableCellName, result.name === playerName && styles.tableCellHighlight]}>
+                  <Text style={[styles.tableColPlayer, styles.tableCellName, result.name === playerName && styles.tableCellHighlight]}>
                     {result.name} {result.name === playerName ? '(You)' : ''}
                   </Text>
-                  <Text style={[styles.tableCol, styles.tableCellStatus, { textAlign: 'center' }, result.status === 'won' ? styles.statusWon : styles.statusFailed]}>
-                    {result.status === 'won' ? 'FINISHED' : 'FAILED'}
-                  </Text>
-                  <Text style={[styles.tableCol, styles.tableCellTime, { textAlign: 'right' }]}>
-                    {displayTime}
+                  <Text style={[styles.tableColStatus, styles.tableCellStatus, { textAlign: 'center' }, statusStyle]}>
+                    {statusText}
                   </Text>
                 </View>
               );
@@ -809,14 +842,18 @@ export function MultiplayerScreen() {
             accessibilityRole="button"
             style={({ pressed }) => [
               styles.rematchBtn,
-              isRematchRequested ? styles.rematchBtnWaiting : styles.rematchBtnActive,
+              (isRematchRequested || requestingRematch) ? styles.rematchBtnWaiting : styles.rematchBtnActive,
               pressed && styles.btnPressed
             ]}
             onPress={handleRequestRematch}
-            disabled={isRematchRequested}
+            disabled={isRematchRequested || requestingRematch}
           >
             <Text style={styles.rematchBtnText}>
-              {isRematchRequested ? 'Waiting for opponent...' : 'Request Rematch'}
+              {requestingRematch
+                ? 'Sending...'
+                : isRematchRequested
+                ? 'Waiting for opponent...'
+                : 'Request Rematch'}
             </Text>
           </Pressable>
 
@@ -1267,6 +1304,12 @@ const styles = StyleSheet.create({
   tableCol: {
     flex: 1
   },
+  tableColPlayer: {
+    flex: 1.5
+  },
+  tableColStatus: {
+    flex: 1
+  },
   tableRow: {
     flexDirection: 'row',
     paddingVertical: 10,
@@ -1292,6 +1335,9 @@ const styles = StyleSheet.create({
   },
   statusFailed: {
     color: theme.colors.lifeRed
+  },
+  statusResigned: {
+    color: '#E65100'
   },
   tableCellTime: {
     fontSize: 15,

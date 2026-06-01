@@ -142,10 +142,20 @@ export function getLevelStarConfig(levelMap: Map<number, LevelProgress>, levelId
   return progress?.totalArrows ?? null;
 }
 
+let allLevelsUnlocked = false;
+
+/**
+ * Sets the administrative level bypass status (unlock all levels).
+ */
+export function setAllLevelsUnlocked(unlocked: boolean) {
+  allLevelsUnlocked = unlocked;
+}
+
 /**
  * Checks if a level is locked (computed live — ignores stale saved flags).
  */
 export function isLevelLocked(levelMap: Map<number, LevelProgress>, levelId: number): boolean {
+  if (allLevelsUnlocked) return false;
   const map = ensureLevelProgressMap(levelMap);
   if (!map.has(levelId)) return true;
   return !isLevelUnlocked(map, levelId);
