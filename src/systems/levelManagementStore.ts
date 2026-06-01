@@ -6,7 +6,6 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { LevelDefinition } from '../game/types';
 import {
   calculateStars,
   checkLevelUnlocks,
@@ -160,32 +159,3 @@ export function getLevelStars(levelMap: Map<number, LevelProgress>, levelId: num
   return progress?.starsEarned ?? 0;
 }
 
-/**
- * Synchronizes the level progress map with a list of level definitions.
- * Adds any missing levels to the map so they can track progress.
- */
-export function syncLevelProgressMap(
-  levelMap: Map<number, LevelProgress>,
-  levelsList: LevelDefinition[]
-): Map<number, LevelProgress> {
-  levelsList.forEach((lvl) => {
-    if (!levelMap.has(lvl.id)) {
-      // Level 1-5 unlocked by default, others start locked
-      levelMap.set(lvl.id, {
-        levelNumber: lvl.id,
-        totalArrows: lvl.arrows.length,
-        isLocked: lvl.id > 5,
-        starsEarned: 0,
-        isCompleted: false,
-        bestTime: null
-      });
-    } else {
-      const progress = levelMap.get(lvl.id)!;
-      // Update baseline arrow count if it changed
-      if (progress.totalArrows !== lvl.arrows.length) {
-        progress.totalArrows = lvl.arrows.length;
-      }
-    }
-  });
-  return levelMap;
-}
