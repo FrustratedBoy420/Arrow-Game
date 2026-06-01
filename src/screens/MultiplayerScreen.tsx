@@ -52,7 +52,7 @@ export function MultiplayerScreen() {
 
   // Connection & Room state
   const [playerName, setPlayerName] = useState('');
-  const [serverUrl, setServerUrl] = useState('https://arrow-game-backend.vercel.app');
+  const [serverUrl, setServerUrl] = useState('https://arrow-game-backend.vercel.app/');
   const [pusherKey, setPusherKey] = useState('1d9ae595090f679858b4');
   const [roomCode, setRoomCode] = useState('');
   const [step, setStep] = useState<MultiplayerStep>('setup');
@@ -117,8 +117,15 @@ export function MultiplayerScreen() {
     async function loadSavedData() {
       try {
         const savedName = await AsyncStorage.getItem('multiplayer_name');
-        const savedUrl = await AsyncStorage.getItem('multiplayer_url');
+        let savedUrl = await AsyncStorage.getItem('multiplayer_url');
         const savedPusherKey = await AsyncStorage.getItem('multiplayer_pusher_key');
+        
+        // If the URL is not set, or contains a local host address, point it to the production URL
+        if (!savedUrl || savedUrl.includes('localhost') || savedUrl.includes('127.0.0.1')) {
+          savedUrl = 'https://arrow-game-backend.vercel.app/';
+          await AsyncStorage.setItem('multiplayer_url', savedUrl);
+        }
+
         if (savedName) setPlayerName(savedName);
         if (savedUrl) setServerUrl(savedUrl);
         if (savedPusherKey) setPusherKey(savedPusherKey);
