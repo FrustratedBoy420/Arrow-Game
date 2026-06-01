@@ -2,6 +2,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useState } from 'react';
 import { Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useNetInfo } from '@react-native-community/netinfo';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { AmbientBackground } from '../components/AmbientBackground';
@@ -25,6 +26,13 @@ export function LevelSelectScreen() {
   const navigation = useNavigation<AppNavigation>();
   const levelProgressMap = useGameStore((state) => state.levelProgressMap);
   const startLevel = useGameStore((state) => state.startLevel);
+  const isFetchingConfig = useGameStore((state) => state.isFetchingConfig);
+  const fetchGameConfig = useGameStore((state) => state.fetchGameConfig);
+  const dynamicLevels = useGameStore((state) => state.dynamicLevels);
+
+  const netInfo = useNetInfo();
+  const isConnected = netInfo.isConnected ?? true;
+
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [checkpointGate, setCheckpointGate] = useState<CheckpointGateProgress | null>(null);
   const [, setLockRevision] = useState(0);
@@ -38,7 +46,15 @@ export function LevelSelectScreen() {
         useGameStore.setState({ levelProgressMap: map });
         setLockRevision((n) => n + 1);
       }
-    }, [])
+
+      // Sync levels if we don't have them yet and are online
+      const currentLevels = useGameStore.getState().dynamicLevels;
+      const isSyncing = useGameStore.getState().isFetchingConfig;
+      if (isConnected && (!currentLevels || currentLevels.length === 0) && !isSyncing) {
+        console.log('🌐 Auto syncing levels on focus...');
+        void fetchGameConfig();
+      }
+    }, [isConnected, fetchGameConfig])
   );
 
   const totalLevels = getTotalLevels();
@@ -112,6 +128,20 @@ export function LevelSelectScreen() {
         gate={checkpointGate}
         onClose={() => setCheckpointGate(null)}
       />
+
+      {/* Offline / Syncing Banner warning at the bottom */}
+      {(!isConnected || isFetchingConfig || !dynamicLevels || dynamicLevels.length === 0) && (
+        <SafeAreaView style={[
+          styles.offlineBanner,
+          isFetchingConfig ? styles.offlineBannerFetching : styles.offlineBannerOffline
+        ]}>
+          <Text style={styles.offlineBannerText}>
+            {isFetchingConfig 
+              ? '🔄 Syncing levels from database...' 
+              : '📡 Offline Mode: Playing default 5 levels. Connect to the internet to load more!'}
+          </Text>
+        </SafeAreaView>
+      )}
     </SafeAreaView>
   );
 }
@@ -191,7 +221,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 24,
-    paddingBottom: 60
+    paddingBottom: 85
   },
   grid: {
     flexDirection: 'row',
@@ -273,5 +303,29 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#C9A227',
     marginLeft: 2
+  },
+  offlineBanner: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    position: 'absolute',
+    bottom: 0,
+    borderTopWidth: 1,
+  },
+  offlineBannerOffline: {
+    backgroundColor: '#FFEBEE',
+    borderColor: '#FFCDD2',
+  },
+  offlineBannerFetching: {
+    backgroundColor: '#E3F2FD',
+    borderColor: '#BBDEFB',
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6A4428',
+    textAlign: 'center',
   }
 });

@@ -52,6 +52,7 @@ type GameStore = {
   toggleSound: () => void;
   toggleHaptics: () => void;
   toggleMusic: () => void;
+  isFetchingConfig: boolean;
   fetchGameConfig: (serverUrl?: string) => Promise<void>;
   fetchNextLevels: () => Promise<void>;
   recordLevelCompletion: (timeTaken: number, heartsLost: number) => Promise<void>;
@@ -89,6 +90,7 @@ export const useGameStore = create<GameStore>()(
       levelStartTime: Date.now(),
       gameStartTime: null,
       finalStarsCalculated: 3,
+      isFetchingConfig: false,
 
       resetAllProgress: () => {
         const freshMap = require('../systems/levelManagement').initializeLevelMap();
@@ -236,6 +238,7 @@ export const useGameStore = create<GameStore>()(
       toggleMusic: () => set((state) => ({ musicEnabled: !state.musicEnabled })),
 
       fetchGameConfig: async (serverUrl) => {
+        set({ isFetchingConfig: true });
         let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend.vercel.app';
         baseUrl = baseUrl.replace(/\/$/, '');
         if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
@@ -280,6 +283,8 @@ export const useGameStore = create<GameStore>()(
           }
         } catch (err) {
           console.warn('⚠️ Failed to fetch dynamic game config:', err);
+        } finally {
+          set({ isFetchingConfig: false });
         }
       },
 

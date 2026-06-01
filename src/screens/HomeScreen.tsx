@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useNetInfo } from '@react-native-community/netinfo';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -29,6 +30,12 @@ export function HomeScreen() {
   const fetchGameConfig = useGameStore((s) => s.fetchGameConfig);
   const levelProgressMap = useGameStore((s) => s.levelProgressMap);
 
+  const isFetchingConfig = useGameStore((s) => s.isFetchingConfig);
+  const dynamicLevels = useGameStore((s) => s.dynamicLevels);
+
+  const netInfo = useNetInfo();
+  const isConnected = netInfo.isConnected ?? true;
+
   const [settingsVisible, setSettingsVisible] = useState(false);
 
   const progressMap = ensureLevelProgressMap(levelProgressMap);
@@ -45,15 +52,16 @@ export function HomeScreen() {
   const selectScale = useSharedValue(1);
   const multiScale = useSharedValue(1);
 
-  useEffect(() => {
-    async function loadConfig() {
-      try {
-        const savedUrl = await AsyncStorage.getItem('multiplayer_url');
-        await fetchGameConfig(savedUrl || undefined);
-      } catch (err) {
-        await fetchGameConfig();
-      }
+  const loadConfig = useCallback(async () => {
+    try {
+      const savedUrl = await AsyncStorage.getItem('multiplayer_url');
+      await fetchGameConfig(savedUrl || undefined);
+    } catch (err) {
+      await fetchGameConfig();
     }
+  }, [fetchGameConfig]);
+
+  useEffect(() => {
     loadConfig();
 
     titleScale.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.back(1.4)) });
@@ -74,7 +82,14 @@ export function HomeScreen() {
         true
       )
     );
-  }, [fetchGameConfig]);
+  }, [loadConfig]);
+
+  useEffect(() => {
+    if (isConnected && (!dynamicLevels || dynamicLevels.length === 0) && !isFetchingConfig) {
+      console.log('🌐 Internet connection restored, attempting to fetch levels...');
+      loadConfig();
+    }
+  }, [isConnected, dynamicLevels, isFetchingConfig, loadConfig]);
 
   const titleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: titleScale.value }],
@@ -111,6 +126,22 @@ export function HomeScreen() {
             <Text style={styles.starMax}> / {maxPossibleStars}</Text>
           </Text>
         </View>
+
+        {/* Network / Fetching status badge */}
+        {(isFetchingConfig || !isConnected || !dynamicLevels || dynamicLevels.length === 0) && (
+          <View style={[
+            styles.statusBadge,
+            isFetchingConfig ? styles.statusBadgeFetching : styles.statusBadgeOffline
+          ]}>
+            <View style={[
+              styles.statusDot,
+              isFetchingConfig ? styles.statusDotFetching : styles.statusDotOffline
+            ]} />
+            <Text style={styles.statusText}>
+              {isFetchingConfig ? 'Syncing...' : 'Offline Mode'}
+            </Text>
+          </View>
+        )}
 
         {/* Gear settings button */}
         <Pressable
@@ -242,6 +273,40 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.7)',
     borderRadius: 22,
     ...theme.shadows.sm
+  },
+
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    ...theme.shadows.sm
+  },
+  statusBadgeOffline: {
+    borderColor: 'rgba(211, 47, 47, 0.25)',
+  },
+  statusBadgeFetching: {
+    borderColor: 'rgba(25, 118, 210, 0.25)',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6
+  },
+  statusDotOffline: {
+    backgroundColor: '#D32F2F',
+  },
+  statusDotFetching: {
+    backgroundColor: '#1976D2',
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: theme.colors.arrowStroke
   },
 
   content: {
