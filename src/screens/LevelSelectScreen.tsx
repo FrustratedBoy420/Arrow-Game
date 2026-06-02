@@ -29,6 +29,7 @@ export function LevelSelectScreen() {
   const isFetchingConfig = useGameStore((state) => state.isFetchingConfig);
   const fetchGameConfig = useGameStore((state) => state.fetchGameConfig);
   const dynamicLevels = useGameStore((state) => state.dynamicLevels);
+  const unlockAllLevels = useGameStore((state) => state.iconsConfig?.unlockAllLevels ?? false);
 
   const netInfo = useNetInfo();
   const isConnected = netInfo.isConnected ?? true;
@@ -138,7 +139,9 @@ export function LevelSelectScreen() {
           <Text style={styles.offlineBannerText}>
             {isFetchingConfig 
               ? '🔄 Syncing levels from database...' 
-              : '📡 Offline Mode: Playing default 5 levels. Connect to the internet to load more!'}
+              : unlockAllLevels
+                ? '👑 Offline Mode: Admin access active. All levels unlocked!'
+                : '📡 Offline Mode: Playing cached levels. Connect to the internet to load more!'}
           </Text>
         </SafeAreaView>
       )}

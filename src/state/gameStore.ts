@@ -34,6 +34,7 @@ type GameStore = {
   };
   iconsConfig: {
     homeArrow: string;
+    unlockAllLevels?: boolean;
   };
   resetAllProgress: () => void;
   // Level Management System Integration

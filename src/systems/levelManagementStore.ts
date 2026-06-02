@@ -12,7 +12,9 @@ import {
   initializeLevelMap,
   isLevelUnlocked,
   mergeLevelProgressMap,
-  type LevelProgress
+  type LevelProgress,
+  allLevelsUnlocked,
+  setAllLevelsUnlockedPure
 } from './levelManagement';
 
 /** AsyncStorage may deserialize into a plain object — always normalize to Map. */
@@ -52,6 +54,14 @@ export async function saveLevelProgress(levelMap: Map<number, LevelProgress>): P
  */
 export async function loadLevelProgress(): Promise<Map<number, LevelProgress>> {
   try {
+    // Load persisted admin bypass status
+    const unlockStatus = await AsyncStorage.getItem('arrow-escape-all-levels-unlocked');
+    if (unlockStatus === 'true') {
+      setAllLevelsUnlockedPure(true);
+    } else if (unlockStatus === 'false') {
+      setAllLevelsUnlockedPure(false);
+    }
+
     const data = await AsyncStorage.getItem(LEVEL_PROGRESS_STORAGE_KEY);
     if (data) {
       const entries = JSON.parse(data) as [number, LevelProgress][];
@@ -142,13 +152,14 @@ export function getLevelStarConfig(levelMap: Map<number, LevelProgress>, levelId
   return progress?.totalArrows ?? null;
 }
 
-let allLevelsUnlocked = false;
-
 /**
  * Sets the administrative level bypass status (unlock all levels).
  */
 export function setAllLevelsUnlocked(unlocked: boolean) {
-  allLevelsUnlocked = unlocked;
+  setAllLevelsUnlockedPure(unlocked);
+  AsyncStorage.setItem('arrow-escape-all-levels-unlocked', unlocked ? 'true' : 'false').catch((error) => {
+    console.error('Failed to save allLevelsUnlocked status:', error);
+  });
 }
 
 /**
