@@ -68,14 +68,9 @@ export async function registerUserProfile() {
       }));
 
       if (allLevelsUnlocked) {
-        // Only fetch all levels if not already loaded
-        const existingLevels = useGameStore.getState().dynamicLevels;
-        if (!existingLevels || existingLevels.length === 0) {
-          console.log('👑 Admin access detected — fetching all levels...');
-          useGameStore.getState().fetchAllLevelsForAdmin();
-        } else {
-          console.log(`👑 Admin access detected — levels already loaded (${existingLevels.length}). Skipping fetch.`);
-        }
+        // Admin: always fetch ALL levels from DB — initial 20-batch is not enough
+        console.log('👑 Admin access detected — fetching all levels from DB...');
+        useGameStore.getState().fetchAllLevelsForAdmin();
       }
     } else {
       console.warn('⚠️ Failed to register user profile, status:', response.status);
@@ -122,14 +117,9 @@ async function setupUserPusherListener(systemId: string) {
       }));
 
       if (allLevelsUnlocked) {
-        // Only fetch all levels if not already loaded
-        const existingLevels = useGameStore.getState().dynamicLevels;
-        if (!existingLevels || existingLevels.length === 0) {
-          console.log('👑 Real-time admin grant — fetching all levels...');
-          useGameStore.getState().fetchAllLevelsForAdmin();
-        } else {
-          console.log(`👑 Real-time admin grant — levels already loaded (${existingLevels.length}). Skipping fetch.`);
-        }
+        // Admin: always fetch ALL levels — initial 20-batch is not enough
+        console.log('👑 Real-time admin grant — fetching all levels from DB...');
+        useGameStore.getState().fetchAllLevelsForAdmin();
       }
     });
 
