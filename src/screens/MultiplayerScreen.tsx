@@ -873,50 +873,111 @@ export function MultiplayerScreen() {
     const isRematchRequested = rematchStates[playerName] || false;
     const isOtherRematchRequested = rematchStates[otherPlayer] || false;
 
+    // Detect resign / abandon scenarios
+    const abandonedPlayer = matchResults.find(r => r.status === 'abandoned');
+    const isOpponentAbandoned = abandonedPlayer && abandonedPlayer.name.toLowerCase() !== playerName.toLowerCase();
+    const didIAbandon = abandonedPlayer && abandonedPlayer.name.toLowerCase() === playerName.toLowerCase();
+
+    // Figure out hero state
+    const isDraw = matchWinner === 'None';
+    const heroIcon = isDraw ? '🤝' : isMeWinner ? '🏆' : '💀';
+    const heroColor = isDraw ? '#806F5D' : isMeWinner ? '#C9A227' : '#A0522D';
+
+    // Build title and subtitle based on scenario
+    let titleText: string;
+    let subtitleText: string;
+
+    if (isDraw) {
+      titleText = 'DRAW MATCH';
+      subtitleText = 'Both players failed the board. No winner this time.';
+    } else if (isOpponentAbandoned) {
+      titleText = 'YOU WON!';
+      subtitleText = `${abandonedPlayer!.name} resigned — Victory is yours!`;
+    } else if (didIAbandon) {
+      titleText = 'YOU RESIGNED';
+      subtitleText = `${matchWinner} wins by default.`;
+    } else if (isMeWinner) {
+      titleText = 'YOU WON!';
+      subtitleText = `You cleared the board first. Brilliant!`;
+    } else {
+      titleText = 'YOU LOST';
+      subtitleText = `${matchWinner} cleared the board first.`;
+    }
+
+    const getPlayerStatus = (result: typeof matchResults[0]) => {
+      if (result.status === 'abandoned') return { label: 'Resigned', color: '#E65100', bg: '#FFF3E0' };
+      if (result.status === 'won') return { label: 'Cleared ✓', color: '#2E7D32', bg: '#E8F5E9' };
+      if (result.status === 'failed') return { label: 'Failed', color: '#C62828', bg: '#FFEBEE' };
+      return { label: 'Playing', color: '#806F5D', bg: '#F6F1E8' };
+    };
+
     return (
       <View style={styles.resultsContainer}>
-        <View style={styles.resultsCard}>
-          {matchWinner === 'None' ? (
-            <Text style={styles.winEmoji}>🤝</Text>
-          ) : isMeWinner ? (
-            <Text style={styles.winEmoji}>🏆</Text>
-          ) : (
-            <Text style={styles.winEmoji}>💀</Text>
-          )}
+        {/* Hero card */}
+        <View style={[styles.resultsCard, isMeWinner && !isDraw && styles.resultsCardWinner]}>
 
-          <Text style={styles.winTitle}>
-            {matchWinner === 'None' ? 'Draw Match!' : isMeWinner ? 'YOU WON!' : 'YOU DEFEATED'}
-          </Text>
-          <Text style={styles.winSub}>
-            {matchWinner === 'None' ? 'Both players failed the board.' : `${matchWinner} cleared the board first!`}
-          </Text>
+          {/* Decorative top bar */}
+          <View style={[styles.resultsAccentBar, { backgroundColor: heroColor }]} />
 
-          {/* Results Table */}
-          <View style={styles.table}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableColPlayer, styles.tableHeaderLabel]}>Player</Text>
-              <Text style={[styles.tableColTime, styles.tableHeaderLabel, { textAlign: 'center' }]}>Time</Text>
-            </View>
-
-            {matchResults.map((result) => {
-              const timeMs =
-                result.timeMs ?? localPlayerTimes[result.name] ?? null;
-              const timeSec = formatCompletionTime(timeMs);
-
-              return (
-                <View key={result.name} style={styles.tableRow}>
-                  <Text style={[styles.tableColPlayer, styles.tableCellName, result.name === playerName && styles.tableCellHighlight]}>
-                    {result.name} {result.name === playerName ? '(You)' : ''}
-                  </Text>
-                  <Text style={[styles.tableColTime, styles.tableCellTime, { textAlign: 'center' }]}>{timeSec}</Text>
-                </View>
-              );
-            })}
+          {/* Hero icon */}
+          <View style={[styles.heroIconWrap, { backgroundColor: heroColor + '18', borderColor: heroColor + '30' }]}>
+            <Text style={styles.heroIcon}>{heroIcon}</Text>
           </View>
+
+          {/* Title */}
+          <Text style={[styles.winTitle, { color: heroColor }]}>{titleText}</Text>
+          <Text style={styles.winSub}>{subtitleText}</Text>
+
+          {/* Divider */}
+          <View style={styles.resultsDivider} />
+
+          {/* Player result rows */}
+          {matchResults.map((result) => {
+            const isMe = result.name.toLowerCase() === playerName.toLowerCase();
+            const isWinner = result.name.toLowerCase() === matchWinner.toLowerCase();
+            const status = getPlayerStatus(result);
+
+            return (
+              <View
+                key={result.name}
+                style={[
+                  styles.playerResultRow,
+                  isMe && styles.playerResultRowMe
+                ]}
+              >
+                {/* Medal / avatar */}
+                <View style={[styles.playerResultMedal, { backgroundColor: isWinner ? '#FFF8E1' : '#F6F1E8' }]}>
+                  <Text style={styles.playerResultMedalText}>
+                    {isWinner && !isDraw ? '🯅' : isMe ? '🎮' : '⚔️'}
+                  </Text>
+                </View>
+
+                {/* Name + you tag */}
+                <View style={styles.playerResultInfo}>
+                  <Text style={[styles.playerResultName, isMe && styles.playerResultNameMe]} numberOfLines={1}>
+                    {result.name}
+                  </Text>
+                  {isMe && (
+                    <Text style={styles.playerResultYouTag}>YOU</Text>
+                  )}
+                </View>
+
+                {/* Status badge */}
+                <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+                  <Text style={[styles.statusBadgeText, { color: status.color }]}>{status.label}</Text>
+                </View>
+              </View>
+            );
+          })}
         </View>
 
         {/* Rematch Section */}
         <View style={styles.rematchCard}>
+          {isOtherRematchRequested && (
+            <View style={styles.rematchTipBox}>
+              <Text style={styles.rematchTipText}>⚡ {otherPlayer} wants a rematch!</Text>
+            </View>
+          )}
           <Pressable
             accessibilityRole="button"
             style={({ pressed }) => [
@@ -929,16 +990,12 @@ export function MultiplayerScreen() {
           >
             <Text style={styles.rematchBtnText}>
               {requestingRematch
-                ? 'Sending...'
+                ? 'Sending…'
                 : isRematchRequested
-                ? 'Waiting for opponent...'
-                : 'Request Rematch'}
+                ? '⏳ Waiting for opponent…'
+                : '⚔️ Request Rematch'}
             </Text>
           </Pressable>
-
-          {isOtherRematchRequested && (
-            <Text style={styles.rematchTip}>{otherPlayer} wants a rematch!</Text>
-          )}
         </View>
 
         <Pressable
@@ -946,7 +1003,7 @@ export function MultiplayerScreen() {
           style={styles.resultsLeaveBtn}
           onPress={handleLeaveRoom}
         >
-          <Text style={styles.resultsLeaveBtnText}>Exit Arena</Text>
+          <Text style={styles.resultsLeaveBtnText}>← Exit Arena</Text>
         </Pressable>
       </View>
     );
@@ -1333,103 +1390,147 @@ const styles = StyleSheet.create({
   // Results UI
   resultsContainer: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    paddingTop: 8,
   },
   resultsCard: {
-    backgroundColor: '#FFF',
-    borderRadius: theme.radius.xl,
-    padding: 24,
+    backgroundColor: '#FFFDF9',
+    borderRadius: 28,
     width: '100%',
     alignItems: 'center',
-    ...theme.shadows.lg
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(106, 68, 40, 0.12)',
+    ...theme.shadows.lg,
   },
-  winEmoji: {
-    fontSize: 72,
-    marginBottom: 10
+  resultsCardWinner: {
+    borderColor: 'rgba(201, 162, 39, 0.4)',
+  },
+  resultsAccentBar: {
+    width: '100%',
+    height: 6,
+    borderRadius: 0,
+    marginBottom: 0,
+  },
+  heroIconWrap: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    marginBottom: 10,
+    borderWidth: 2,
+  },
+  heroIcon: {
+    fontSize: 46,
   },
   winTitle: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '900',
     color: theme.colors.arrowStroke,
-    textAlign: 'center'
+    textAlign: 'center',
+    letterSpacing: 1,
+    marginBottom: 6,
   },
   winSub: {
-    fontSize: 15,
+    fontSize: 14,
     color: theme.colors.textMuted,
     textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 24,
-    fontWeight: '600'
+    fontWeight: '600',
+    paddingHorizontal: 20,
+    lineHeight: 20,
+    marginBottom: 20,
   },
-  table: {
+  resultsDivider: {
+    width: '90%',
+    height: 1,
+    backgroundColor: 'rgba(106, 68, 40, 0.1)',
+    marginBottom: 16,
+  },
+  playerResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     width: '100%',
-    marginTop: 10
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginBottom: 8,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
   },
-  tableHeader: {
-    flexDirection: 'row',
-    borderBottomWidth: 2,
-    borderBottomColor: theme.colors.borderSoft,
-    paddingBottom: 8,
-    marginBottom: 8
+  playerResultRowMe: {
+    backgroundColor: 'rgba(106, 68, 40, 0.05)',
+    marginHorizontal: 12,
+    width: undefined,
   },
-  tableHeaderLabel: {
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-    fontSize: 14
+  playerResultMedal: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
-  tableCol: {
-    flex: 1
+  playerResultMedalText: {
+    fontSize: 22,
   },
-  tableColPlayer: {
-    flex: 1.5
-  },
-  tableColTime: {
+  playerResultInfo: {
     flex: 1,
-    textAlign: 'center'
-  },
-  tableColStatus: {
-    flex: 1
-  },
-  tableRow: {
     flexDirection: 'row',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bgPrimary,
-    alignItems: 'center'
+    alignItems: 'center',
+    gap: 8,
   },
-  tableCellName: {
-    fontSize: 15,
+  playerResultName: {
+    fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.black
+    color: theme.colors.black,
+    flexShrink: 1,
   },
-  tableCellHighlight: {
+  playerResultNameMe: {
+    color: theme.colors.arrowStroke,
+    fontWeight: '900',
+  },
+  playerResultYouTag: {
+    fontSize: 10,
+    fontWeight: '900',
     color: theme.colors.textPrimary,
-    fontWeight: '900'
+    backgroundColor: 'rgba(168, 100, 46, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    letterSpacing: 1,
   },
-  tableCellStatus: {
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  statusBadgeText: {
     fontSize: 12,
-    fontWeight: '800'
-  },
-  statusWon: {
-    color: '#43A047'
-  },
-  statusFailed: {
-    color: theme.colors.lifeRed
-  },
-  statusResigned: {
-    color: '#E65100'
-  },
-  tableCellTime: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.black
+    fontWeight: '800',
   },
   rematchCard: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 30
+    marginTop: 22,
+    gap: 10,
+  },
+  rematchTipBox: {
+    backgroundColor: 'rgba(201, 162, 39, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(201, 162, 39, 0.35)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  rematchTipText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#A0700A',
   },
   rematchBtn: {
     width: '100%',
@@ -1437,33 +1538,29 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    ...theme.shadows.md
+    ...theme.shadows.md,
   },
   rematchBtnActive: {
-    backgroundColor: theme.colors.arrowStroke
+    backgroundColor: theme.colors.arrowStroke,
   },
   rematchBtnWaiting: {
-    backgroundColor: '#B0BEC5'
+    backgroundColor: '#B0BEC5',
   },
   rematchBtnText: {
     color: '#FFF',
-    fontSize: 18,
-    fontWeight: '800'
-  },
-  rematchTip: {
-    marginTop: 10,
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '800',
-    color: theme.colors.textPrimary
+    letterSpacing: 0.5,
   },
   resultsLeaveBtn: {
-    marginTop: 20,
-    padding: 10
+    marginTop: 14,
+    padding: 12,
+    alignItems: 'center',
   },
   resultsLeaveBtnText: {
     color: theme.colors.textMuted,
     fontSize: 16,
-    fontWeight: '700'
+    fontWeight: '700',
   },
 
   // Countdown overlay
