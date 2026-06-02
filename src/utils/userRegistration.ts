@@ -68,8 +68,8 @@ export async function registerUserProfile() {
       }));
 
       if (allLevelsUnlocked) {
-        // Admin user: fetch ALL levels from server in one shot (bypass 20+5+5 batch logic)
-        console.log('👑 Admin access detected — fetching all levels...');
+        // Admin: always fetch ALL levels from DB — initial 20-batch is not enough
+        console.log('👑 Admin access detected — fetching all levels from DB...');
         useGameStore.getState().fetchAllLevelsForAdmin();
       }
     } else {
@@ -117,10 +117,18 @@ async function setupUserPusherListener(systemId: string) {
       }));
 
       if (allLevelsUnlocked) {
-        // Admin grant received in real-time: fetch ALL levels from server
-        console.log('👑 Real-time admin grant — fetching all levels...');
+        // Admin: always fetch ALL levels — initial 20-batch is not enough
+        console.log('👑 Real-time admin grant — fetching all levels from DB...');
         useGameStore.getState().fetchAllLevelsForAdmin();
       }
+    });
+
+    // Listen to global configuration updates (e.g. version updates, assets, levels)
+    const globalChannel = pusher.subscribe('global-config');
+    globalChannel.bind('config_updated', (data: any) => {
+      console.log('⚡ Received global config update event:', data);
+      // Trigger config refresh in real-time
+      useGameStore.getState().fetchGameConfig();
     });
 
   } catch (err) {

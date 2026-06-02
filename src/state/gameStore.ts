@@ -35,7 +35,12 @@ type GameStore = {
   };
   iconsConfig: {
     homeArrow: string;
+    unlockAllLevels?: boolean;
   };
+  versionConfig: {
+    latest: string;
+    critical: string;
+  } | null;
   resetAllProgress: () => void;
   // Level Management System Integration
   levelProgressMap: Map<number, LevelProgress>;
@@ -55,6 +60,7 @@ type GameStore = {
   toggleMusic: () => void;
   isFetchingConfig: boolean;
   fetchGameConfig: (serverUrl?: string) => Promise<void>;
+  fetchVersionConfig: (serverUrl?: string) => Promise<void>;
   fetchNextLevels: () => Promise<void>;
   fetchAllLevelsForAdmin: () => Promise<void>;
   recordLevelCompletion: (timeTaken: number, heartsLost: number) => Promise<void>;
@@ -88,6 +94,7 @@ export const useGameStore = create<GameStore>()(
       iconsConfig: {
         homeArrow: '➤'
       },
+      versionConfig: null,
       levelProgressMap: initialLevelMap,
       starsEarnedThisLevel: 0,
       levelStartTime: Date.now(),
@@ -256,9 +263,11 @@ export const useGameStore = create<GameStore>()(
           const resData = await response.json();
 
           if (resData) {
-            const { levels: serverLevels, music, icons } = resData;
+            const { levels: serverLevels, music, icons, version } = resData;
 
-            if (Array.isArray(serverLevels) && serverLevels.length > 0) {
+            // Only load levels from DB if not already cached locally
+            const existingLevels = get().dynamicLevels;
+            if (Array.isArray(serverLevels) && serverLevels.length > 0 && (!existingLevels || existingLevels.length === 0)) {
               // ── Load only the first INITIAL_LEVEL_BATCH levels ──
               const first20 = serverLevels.slice(0, INITIAL_LEVEL_BATCH);
               setDynamicLevels(first20);
@@ -273,6 +282,8 @@ export const useGameStore = create<GameStore>()(
 
               set({ dynamicLevels: first20 });
               console.log(`✅ Loaded first ${first20.length} levels from DB.`);
+            } else if (existingLevels && existingLevels.length > 0) {
+              console.log(`ℹ️ Levels already cached (${existingLevels.length}). Skipping level reload.`);
             }
 
             set({
@@ -283,13 +294,38 @@ export const useGameStore = create<GameStore>()(
                 outOfMove: null,
                 bgMusic: null
               },
-              iconsConfig: icons || { homeArrow: '➤' }
+              iconsConfig: icons ? { ...get().iconsConfig, ...icons } : get().iconsConfig,
+              versionConfig: version || null
             });
           }
         } catch (err) {
           console.warn('⚠️ Failed to fetch dynamic game config:', err);
         } finally {
           set({ isFetchingConfig: false });
+        }
+      },
+
+      /**
+       * Lightweight version-only check — does NOT reload levels.
+       * Use this on internet reconnect to check for updates without heavy data fetch.
+       */
+      fetchVersionConfig: async (serverUrl) => {
+        let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend.vercel.app';
+        baseUrl = baseUrl.replace(/\/$/, '');
+        if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+          baseUrl = `https://${baseUrl}`;
+        }
+
+        try {
+          const response = await fetch(`${baseUrl}/api/config`);
+          if (!response.ok) return;
+          const resData = await response.json();
+          if (resData?.version) {
+            set({ versionConfig: resData.version });
+            console.log(`✅ Version config refreshed: ${JSON.stringify(resData.version)}`);
+          }
+        } catch (err) {
+          console.warn('⚠️ Failed to fetch version config:', err);
         }
       },
 
@@ -452,7 +488,8 @@ export const useGameStore = create<GameStore>()(
         // Persist the loaded batch so levels survive a background-kill restart
         dynamicLevels: state.dynamicLevels,
         musicUrls: state.musicUrls,
-        iconsConfig: state.iconsConfig
+        iconsConfig: state.iconsConfig,
+        versionConfig: state.versionConfig
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

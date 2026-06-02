@@ -18,6 +18,10 @@ import { TutorialScreen } from './src/screens/TutorialScreen';
 import { VictoryScreen } from './src/screens/VictoryScreen';
 import { theme } from './src/theme/theme';
 
+import { useGameStore } from './src/state/gameStore';
+import { CURRENT_APP_VERSION, isVersionOlder } from './src/config/version';
+import { ForcedUpdateScreen } from './src/components/ForcedUpdateScreen';
+
 export type RootStackParamList = {
   Home: undefined;
   Tutorial: undefined;
@@ -39,6 +43,8 @@ import { registerUserProfile } from './src/utils/userRegistration';
 // SplashScreen.preventAutoHideAsync();
 
 export default function App() {
+  const versionConfig = useGameStore((s) => s.versionConfig);
+
   const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
@@ -56,6 +62,23 @@ export default function App() {
     };
     void prepare();
   }, []);
+
+  // Determine if a critical forced update is required
+  const isForcedUpdateRequired = 
+    versionConfig && 
+    versionConfig.critical && 
+    isVersionOlder(CURRENT_APP_VERSION, versionConfig.critical);
+
+  if (isForcedUpdateRequired) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ForcedUpdateScreen 
+          currentVersion={CURRENT_APP_VERSION} 
+          requiredVersion={versionConfig!.critical} 
+        />
+      </GestureHandlerRootView>
+    );
+  }
 
 
   if (!appIsReady) {

@@ -131,6 +131,15 @@ export function calculateStars(
 // LEVEL PROGRESSION MANAGEMENT
 // ============================================================================
 
+export let allLevelsUnlocked = false;
+
+/**
+ * Sets the administrative level bypass status (pure in-memory).
+ */
+export function setAllLevelsUnlockedPure(unlocked: boolean) {
+  allLevelsUnlocked = unlocked;
+}
+
 /**
  * Computes whether a level should be playable right now.
  * Never trust persisted isLocked — always derive from completion + star gates.
@@ -139,6 +148,7 @@ export function isLevelUnlocked(
   levelMap: Map<number, LevelProgress>,
   levelNumber: number
 ): boolean {
+  if (allLevelsUnlocked) return true;
   if (levelNumber === 1) return true;
 
   const prev = levelMap.get(levelNumber - 1);

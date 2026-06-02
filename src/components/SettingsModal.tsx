@@ -2,6 +2,7 @@ import { Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useGameStore } from '../state/gameStore';
+import { CURRENT_APP_VERSION } from '../config/version';
 import { theme } from '../theme/theme';
 
 type Props = {
@@ -64,6 +65,12 @@ export function SettingsModal({ visible, onClose, onRestart }: Props) {
               <Text style={styles.restartText}>Restart</Text>
             </Pressable>
           )}
+
+          {/* App version badge */}
+          <View style={styles.versionBadge}>
+            <Ionicons name="information-circle-outline" size={14} color={theme.colors.textMuted} style={{ marginRight: 5, opacity: 0.6 }} />
+            <Text style={styles.versionText}>v{CURRENT_APP_VERSION}</Text>
+          </View>
         </View>
       </View>
     </Modal>
@@ -131,10 +138,24 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
+    marginBottom: 16,
   },
   restartText: {
     color: 'white',
     fontSize: 20,
     fontWeight: '700',
-  }
+  },
+  versionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 4,
+  },
+  versionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
+    opacity: 0.6,
+    letterSpacing: 0.5,
+  },
 });

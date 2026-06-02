@@ -17,6 +17,8 @@ import Animated, {
 import { AmbientBackground } from '../components/AmbientBackground';
 import GearIcon from '../components/GearIcon';
 import { SettingsModal } from '../components/SettingsModal';
+import { OptionalUpdateModal } from '../components/OptionalUpdateModal';
+import { CURRENT_APP_VERSION, isVersionOlder } from '../config/version';
 import { getTotalStarsEarned, getUnlockedLevelCount } from '../systems/levelManagement';
 import { ensureLevelProgressMap } from '../systems/levelManagementStore';
 import { useGameStore } from '../state/gameStore';
@@ -32,11 +34,29 @@ export function HomeScreen() {
 
   const isFetchingConfig = useGameStore((s) => s.isFetchingConfig);
   const dynamicLevels = useGameStore((s) => s.dynamicLevels);
+  const versionConfig = useGameStore((s) => s.versionConfig);
+  const fetchVersionConfig = useGameStore((s) => s.fetchVersionConfig);
 
   const netInfo = useNetInfo();
   const isConnected = netInfo.isConnected ?? true;
 
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [updateModalVisible, setUpdateModalVisible] = useState(false);
+  const [hasDismissedUpdate, setHasDismissedUpdate] = useState(false);
+
+  useEffect(() => {
+    if (
+      versionConfig &&
+      versionConfig.latest &&
+      !hasDismissedUpdate &&
+      isVersionOlder(CURRENT_APP_VERSION, versionConfig.latest) &&
+      !isVersionOlder(CURRENT_APP_VERSION, versionConfig.critical)
+    ) {
+      setUpdateModalVisible(true);
+    } else {
+      setUpdateModalVisible(false);
+    }
+  }, [versionConfig, hasDismissedUpdate]);
 
   const progressMap = ensureLevelProgressMap(levelProgressMap);
   const totalStars = getTotalStarsEarned(progressMap);
@@ -85,11 +105,19 @@ export function HomeScreen() {
   }, [loadConfig]);
 
   useEffect(() => {
-    if (isConnected && (!dynamicLevels || dynamicLevels.length === 0) && !isFetchingConfig) {
-      console.log('🌐 Internet connection restored, attempting to fetch levels...');
-      loadConfig();
+    if (isConnected) {
+      // On reconnect: only do a lightweight version check (not full config reload)
+      // This avoids re-downloading levels on every internet reconnect
+      void (async () => {
+        try {
+          const savedUrl = await AsyncStorage.getItem('multiplayer_url');
+          await fetchVersionConfig(savedUrl || undefined);
+        } catch {
+          await fetchVersionConfig();
+        }
+      })();
     }
-  }, [isConnected, dynamicLevels, isFetchingConfig, loadConfig]);
+  }, [isConnected, fetchVersionConfig]);
 
   const titleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: titleScale.value }],
@@ -224,6 +252,15 @@ export function HomeScreen() {
       <SettingsModal
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
+      />
+
+      <OptionalUpdateModal
+        visible={updateModalVisible}
+        latestVersion={versionConfig?.latest || ''}
+        onClose={() => {
+          setUpdateModalVisible(false);
+          setHasDismissedUpdate(true);
+        }}
       />
     </SafeAreaView>
   );

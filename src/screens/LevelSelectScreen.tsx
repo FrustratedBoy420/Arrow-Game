@@ -28,7 +28,9 @@ export function LevelSelectScreen() {
   const startLevel = useGameStore((state) => state.startLevel);
   const isFetchingConfig = useGameStore((state) => state.isFetchingConfig);
   const fetchGameConfig = useGameStore((state) => state.fetchGameConfig);
+  const fetchVersionConfig = useGameStore((state) => state.fetchVersionConfig);
   const dynamicLevels = useGameStore((state) => state.dynamicLevels);
+  const unlockAllLevels = useGameStore((state) => state.iconsConfig?.unlockAllLevels ?? false);
 
   const netInfo = useNetInfo();
   const isConnected = netInfo.isConnected ?? true;
@@ -47,14 +49,19 @@ export function LevelSelectScreen() {
         setLockRevision((n) => n + 1);
       }
 
-      // Sync levels if we don't have them yet and are online
+      // Sync levels from DB only if not cached yet; otherwise just do a version check
       const currentLevels = useGameStore.getState().dynamicLevels;
       const isSyncing = useGameStore.getState().isFetchingConfig;
-      if (isConnected && (!currentLevels || currentLevels.length === 0) && !isSyncing) {
-        console.log('🌐 Auto syncing levels on focus...');
-        void fetchGameConfig();
+      if (isConnected && !isSyncing) {
+        if (!currentLevels || currentLevels.length === 0) {
+          console.log('🌐 No levels cached — syncing from DB...');
+          void fetchGameConfig();
+        } else {
+          // Already have levels — just do lightweight version check
+          void fetchVersionConfig();
+        }
       }
-    }, [isConnected, fetchGameConfig])
+    }, [isConnected, fetchGameConfig, fetchVersionConfig])
   );
 
   const totalLevels = getTotalLevels();
@@ -138,7 +145,9 @@ export function LevelSelectScreen() {
           <Text style={styles.offlineBannerText}>
             {isFetchingConfig 
               ? '🔄 Syncing levels from database...' 
-              : '📡 Offline Mode: Playing default 5 levels. Connect to the internet to load more!'}
+              : unlockAllLevels
+                ? '👑 Offline Mode: Admin access active. All levels unlocked!'
+                : '📡 Offline Mode: Playing cached levels. Connect to the internet to load more!'}
           </Text>
         </SafeAreaView>
       )}
