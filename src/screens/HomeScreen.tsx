@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState, useCallback } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { useNetInfo } from '@react-native-community/netinfo';
 import Animated, {
   Easing,
@@ -18,6 +18,7 @@ import { AmbientBackground } from '../components/AmbientBackground';
 import GearIcon from '../components/GearIcon';
 import { SettingsModal } from '../components/SettingsModal';
 import { OptionalUpdateModal } from '../components/OptionalUpdateModal';
+import { ExitConfirmModal } from '../components/ExitConfirmModal';
 import { CURRENT_APP_VERSION, isVersionOlder } from '../config/version';
 import { getTotalStarsEarned, getUnlockedLevelCount } from '../systems/levelManagement';
 import { ensureLevelProgressMap } from '../systems/levelManagementStore';
@@ -43,6 +44,7 @@ export function HomeScreen() {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [updateModalVisible, setUpdateModalVisible] = useState(false);
   const [hasDismissedUpdate, setHasDismissedUpdate] = useState(false);
+  const [exitModalVisible, setExitModalVisible] = useState(false);
 
   useEffect(() => {
     if (
@@ -118,6 +120,22 @@ export function HomeScreen() {
       })();
     }
   }, [isConnected, fetchVersionConfig]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        onBackPress
+      );
+
+      return () => subscription.remove();
+    }, [])
+  );
 
   const titleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: titleScale.value }],
@@ -260,6 +278,15 @@ export function HomeScreen() {
         onClose={() => {
           setUpdateModalVisible(false);
           setHasDismissedUpdate(true);
+        }}
+      />
+
+      <ExitConfirmModal
+        visible={exitModalVisible}
+        onClose={() => setExitModalVisible(false)}
+        onConfirm={() => {
+          setExitModalVisible(false);
+          BackHandler.exitApp();
         }}
       />
     </SafeAreaView>

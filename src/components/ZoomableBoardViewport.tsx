@@ -152,24 +152,6 @@ export function ZoomableBoardViewport({
       applyClampedTranslation();
     });
 
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .maxDuration(300)
-    .onEnd(() => {
-      if (scale.value > 1) {
-        scale.value = withTiming(1);
-        savedScale.value = 1;
-        translateX.value = withTiming(0);
-        translateY.value = withTiming(0);
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      } else {
-        const target = 2;
-        scale.value = withTiming(target);
-        savedScale.value = target;
-      }
-    });
-
   const singleTap = Gesture.Tap()
     .numberOfTaps(1)
     .maxDuration(250)
@@ -188,8 +170,7 @@ export function ZoomableBoardViewport({
 
   const boardGesture = Gesture.Simultaneous(
     pinch,
-    Gesture.Exclusive(pan, singleTap),
-    doubleTap
+    Gesture.Exclusive(pan, singleTap)
   );
 
   const stageTransformStyle = useAnimatedStyle(() => ({

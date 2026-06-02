@@ -1,4 +1,5 @@
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -77,6 +78,14 @@ export function VictoryScreen() {
 
       {/* ── Top Header ── */}
       <View style={styles.header}>
+        <Pressable
+          style={styles.backBtn}
+          onPress={() => navigation.navigate('Home')}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Home"
+        >
+          <Ionicons name="arrow-back" size={26} color={theme.colors.arrowStroke} />
+        </Pressable>
         <View style={styles.starCounter}>
           <Text style={styles.starEmoji}>⭐</Text>
           <Text style={styles.starText}>
@@ -183,6 +192,15 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted
   },
   settingsBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 22,
+    ...theme.shadows.sm
+  },
+  backBtn: {
     width: 44,
     height: 44,
     justifyContent: 'center',
