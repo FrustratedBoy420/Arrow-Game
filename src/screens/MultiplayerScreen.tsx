@@ -22,14 +22,14 @@ import Animated, {
   useSharedValue,
   withDelay,
   withRepeat,
-  withSequence,
   withSpring,
   withTiming
 } from 'react-native-reanimated';
 
 import { AmbientBackground } from '../components/AmbientBackground';
 import { LivesIndicator } from '../components/LivesIndicator';
-import { PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
+import { findArrowAtPoint, PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
+import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
 import { createInitialBoard, resolveTap } from '../game/engine';
 import type { ArrowNode, BoardState, LevelDefinition } from '../game/types';
 import { theme } from '../theme/theme';
@@ -38,6 +38,22 @@ import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
 import { registerUserProfile } from '../utils/userRegistration';
 
 type MultiplayerStep = 'setup' | 'lobby' | 'game' | 'results';
+
+function formatCompletionTime(timeMs: number | null | undefined): string {
+  if (timeMs == null || timeMs < 0) return '-';
+  const totalSec = Math.round(timeMs / 1000);
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  if (minutes > 0) {
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+  return `${seconds}s`;
+}
+
+function getElapsedMs(startedAt: number | null): number | null {
+  if (startedAt == null) return null;
+  return Math.max(0, Date.now() - startedAt);
+}
 
 interface ServerPlayer {
   name: string;
@@ -72,6 +88,8 @@ export function MultiplayerScreen() {
   const [opponentName, setOpponentName] = useState('');
   const [opponentArrowsLeft, setOpponentArrowsLeft] = useState<number>(0);
   const [myArrowsInitial, setMyArrowsInitial] = useState(0);
+  const [myElapsedSec, setMyElapsedSec] = useState(0);
+  const [localPlayerTimes, setLocalPlayerTimes] = useState<Record<string, number>>({});
 
   // Results state
   const [matchWinner, setMatchWinner] = useState('');
@@ -87,18 +105,46 @@ export function MultiplayerScreen() {
 
   // Refs to avoid stale closures in event handlers
   const playerNameRef = useRef(playerName);
+  const opponentNameRef = useRef(opponentName);
+  const boardRef = useRef(board);
   const levelRef = useRef(level);
   const playersRef = useRef(players);
   const stepRef = useRef(step);
   const roomCodeRef = useRef(roomCode);
+  const gameStartedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     playerNameRef.current = playerName;
   }, [playerName]);
 
   useEffect(() => {
+    opponentNameRef.current = opponentName;
+  }, [opponentName]);
+
+  useEffect(() => {
+    boardRef.current = board;
+  }, [board]);
+
+  useEffect(() => {
     levelRef.current = level;
   }, [level]);
+
+  useEffect(() => {
+    if (step !== 'game' || gameStartedAtRef.current == null) {
+      return;
+    }
+
+    const tick = () => {
+      const elapsed = getElapsedMs(gameStartedAtRef.current);
+      if (elapsed != null) {
+        setMyElapsedSec(Math.floor(elapsed / 1000));
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [step]);
 
   useEffect(() => {
     playersRef.current = players;
@@ -212,10 +258,13 @@ export function MultiplayerScreen() {
 
         const currentLevel = levelRef.current;
         if (currentLevel) {
+          gameStartedAtRef.current = Date.now();
+          setMyElapsedSec(0);
+          setLocalPlayerTimes({});
           setBoard(createInitialBoard(currentLevel, 3));
           setMyArrowsInitial(currentLevel.arrows.length);
           setOpponentArrowsLeft(currentLevel.arrows.length);
-          
+
           const other = playersRef.current.find(p => p.toLowerCase() !== playerNameRef.current.toLowerCase()) || 'Opponent';
           setOpponentName(other);
           setExitingArrows([]);
@@ -284,13 +333,40 @@ export function MultiplayerScreen() {
 
       channel.bind('opponent_progress', (data: any) => {
         console.log('Pusher received: [opponent_progress]', data);
-        setOpponentArrowsLeft(data.arrowsLeft);
+        const progressName = String(data.name || data.playerName || '').trim();
+        const me = playerNameRef.current.trim().toLowerCase();
+        const opponent = opponentNameRef.current.trim().toLowerCase();
+
+        if (progressName) {
+          if (progressName.toLowerCase() === me) return;
+          if (opponent && progressName.toLowerCase() !== opponent) return;
+        } else if (
+          typeof data.arrowsLeft === 'number' &&
+          boardRef.current &&
+          data.arrowsLeft === boardRef.current.arrows.length
+        ) {
+          // Ignore echoed self-progress when the server omits player name.
+          return;
+        }
+
+        if (typeof data.arrowsLeft === 'number') {
+          setOpponentArrowsLeft(data.arrowsLeft);
+        }
       });
 
       channel.bind('match_results', (data: any) => {
         console.log('Pusher received: [match_results]', data);
         setMatchWinner(data.winner);
-        setMatchResults(data.players);
+        setLocalPlayerTimes((localTimes) => {
+          const serverPlayers: ServerPlayer[] = data.players || [];
+          setMatchResults(
+            serverPlayers.map((p) => ({
+              ...p,
+              timeMs: p.timeMs ?? localTimes[p.name] ?? null
+            }))
+          );
+          return localTimes;
+        });
         setRematchStates({});
         setStep('results');
       });
@@ -458,12 +534,22 @@ export function MultiplayerScreen() {
       console.warn('leave-room API call failed/ignored:', err);
     }
     disconnectPusher();
+    gameStartedAtRef.current = null;
     setStep('setup');
     setRoomCode('');
     setPlayers([]);
     setLevel(null);
     setBoard(null);
+    setLocalPlayerTimes({});
   };
+
+  const recordMyCompletionTime = useCallback((): number | null => {
+    const elapsedMs = getElapsedMs(gameStartedAtRef.current);
+    if (elapsedMs == null) return null;
+    const me = playerNameRef.current.trim();
+    setLocalPlayerTimes((prev) => ({ ...prev, [me]: elapsedMs }));
+    return elapsedMs;
+  }, []);
 
   // Gameplay Board interactions
   const handleExitDone = useCallback((arrowId: string) => {
@@ -478,10 +564,6 @@ export function MultiplayerScreen() {
 
     if (result.type === 'REMOVED' && arrow) {
       setExitingArrows((prev) => [...prev, arrow]);
-      boardScale.value = withSequence(
-        withTiming(0.98, { duration: 70 }),
-        withSpring(1, { damping: 12, stiffness: 200 })
-      );
       void playCorrectFeedback();
 
       const nextBoard = result.board;
@@ -494,9 +576,11 @@ export function MultiplayerScreen() {
       }).catch(err => console.error('Failed to update progress:', err));
 
       if (nextBoard.arrows.length === 0) {
+        const timeMs = recordMyCompletionTime();
         apiPost('/api/player-finished', {
           name: playerNameRef.current,
-          roomCode: roomCode.trim().toUpperCase()
+          roomCode: roomCode.trim().toUpperCase(),
+          timeMs
         }).catch(err => console.error('Failed to notify finished:', err));
       }
 
@@ -506,13 +590,15 @@ export function MultiplayerScreen() {
       setBoard(nextBoard);
 
       if (nextBoard.livesLeft <= 0) {
+        const timeMs = recordMyCompletionTime();
         apiPost('/api/player-failed', {
           name: playerNameRef.current,
-          roomCode: roomCode.trim().toUpperCase()
+          roomCode: roomCode.trim().toUpperCase(),
+          timeMs
         }).catch(err => console.error('Failed to notify failed:', err));
       }
     }
-  }, [board, roomCode, soundEnabled, hapticsEnabled, boardScale, apiPost]);
+  }, [board, roomCode, hapticsEnabled, boardScale, apiPost, recordMyCompletionTime]);
 
   const handleUndo = useCallback(() => {
     if (!board || !roomCode) return;
@@ -536,18 +622,6 @@ export function MultiplayerScreen() {
       arrowsLeft: nextBoard.arrows.length
     }).catch(err => console.error('Failed to update progress:', err));
   }, [board, roomCode, apiPost]);
-
-  const handleRestart = useCallback(() => {
-    if (!level || !roomCode) return;
-    const nextBoard = createInitialBoard(level, 3);
-    setBoard(nextBoard);
-
-    apiPost('/api/update-progress', {
-      name: playerNameRef.current,
-      roomCode: roomCode.trim().toUpperCase(),
-      arrowsLeft: nextBoard.arrows.length
-    }).catch(err => console.error('Failed to update progress:', err));
-  }, [level, roomCode, apiPost]);
 
   // Animated Board styling
   const animatedBoardStyle = useAnimatedStyle(() => ({
@@ -714,6 +788,12 @@ export function MultiplayerScreen() {
     const sizeFromHeight = maxH / rows;
     const cellSize = Math.min(sizeFromWidth, sizeFromHeight, 60);
     const boardWidth = cellSize * columns;
+    const boardHeight = cellSize * rows;
+
+    const handleBoardPress = (x: number, y: number) => {
+      const arrow = findArrowAtPoint(board.arrows, x, y, cellSize);
+      if (arrow) handleArrowPress(arrow.id);
+    };
 
     // Progress calculations
     const myArrowsLeft = board.arrows.length;
@@ -729,7 +809,9 @@ export function MultiplayerScreen() {
         <View style={styles.vsContainer}>
           <View style={styles.vsPlayerColumn}>
             <Text style={styles.vsPlayerName} numberOfLines={1}>{playerName}</Text>
-            <Text style={styles.vsProgressSub}>{myArrowsLeft} left</Text>
+            <Text style={styles.vsProgressSub}>
+              {myArrowsLeft} left · {myElapsedSec}s
+            </Text>
             <View style={styles.vsProgressBarBg}>
               <View style={[styles.vsProgressBarFill, { width: `${myProgress * 100}%`, backgroundColor: '#43A047' }]} />
             </View>
@@ -753,15 +835,23 @@ export function MultiplayerScreen() {
 
         {/* Puzzle Canvas */}
         <View style={styles.boardStage}>
-          <Animated.View style={animatedBoardStyle}>
-            <PuzzleBoardCanvas
-              board={board}
-              exitingArrows={exitingArrows}
-              width={boardWidth}
-              onArrowPress={handleArrowPress}
-              onExitDone={handleExitDone}
-            />
-          </Animated.View>
+          <ZoomableBoardViewport
+            key={`${roomCode}-${level.id}`}
+            boardWidth={boardWidth}
+            boardHeight={boardHeight}
+            onBoardPress={handleBoardPress}
+          >
+            <Animated.View style={animatedBoardStyle}>
+              <PuzzleBoardCanvas
+                board={board}
+                exitingArrows={exitingArrows}
+                width={boardWidth}
+                enableTouch={false}
+                onArrowPress={handleArrowPress}
+                onExitDone={handleExitDone}
+              />
+            </Animated.View>
+          </ZoomableBoardViewport>
         </View>
 
         {/* Battle Controls (Hint hidden for fairness) */}
@@ -769,11 +859,8 @@ export function MultiplayerScreen() {
           <Pressable style={styles.controlBtn} onPress={handleUndo}>
             <Text style={styles.controlBtnText}>↩ Undo</Text>
           </Pressable>
-          <Pressable style={styles.controlBtn} onPress={handleRestart}>
-            <Text style={styles.controlBtnText}>🔄 Restart</Text>
-          </Pressable>
           <Pressable style={[styles.controlBtn, styles.controlLeaveBtn]} onPress={handleLeaveRoom}>
-            <Text style={[styles.controlBtnText, styles.controlLeaveText]}>🏳️ Forfeit</Text>
+            <Text style={[styles.controlBtnText, styles.controlLeaveText]}>🏳️ Resign</Text>
           </Pressable>
         </View>
       </View>
@@ -798,7 +885,7 @@ export function MultiplayerScreen() {
           )}
 
           <Text style={styles.winTitle}>
-            {matchWinner === 'None' ? 'Draw Match!' : isMeWinner ? 'YOU VICTORY!' : 'YOU DEFEATED'}
+            {matchWinner === 'None' ? 'Draw Match!' : isMeWinner ? 'YOU WON!' : 'YOU DEFEATED'}
           </Text>
           <Text style={styles.winSub}>
             {matchWinner === 'None' ? 'Both players failed the board.' : `${matchWinner} cleared the board first!`}
@@ -808,35 +895,20 @@ export function MultiplayerScreen() {
           <View style={styles.table}>
             <View style={styles.tableHeader}>
               <Text style={[styles.tableColPlayer, styles.tableHeaderLabel]}>Player</Text>
-              <Text style={[styles.tableColStatus, styles.tableHeaderLabel, { textAlign: 'center' }]}>Status</Text>
+              <Text style={[styles.tableColTime, styles.tableHeaderLabel, { textAlign: 'center' }]}>Time</Text>
             </View>
 
             {matchResults.map((result) => {
-              const isWinner = matchWinner === result.name;
-              const isDraw = matchWinner === 'None';
-              
-              let statusText = 'Lost';
-              let statusStyle = styles.statusFailed as any;
-              
-              if (result.status === 'abandoned') {
-                statusText = 'guy resigned';
-                statusStyle = styles.statusResigned;
-              } else if (isWinner) {
-                statusText = 'Won';
-                statusStyle = styles.statusWon;
-              } else if (isDraw) {
-                statusText = 'Draw';
-                statusStyle = styles.statusFailed;
-              }
+              const timeMs =
+                result.timeMs ?? localPlayerTimes[result.name] ?? null;
+              const timeSec = formatCompletionTime(timeMs);
 
               return (
                 <View key={result.name} style={styles.tableRow}>
                   <Text style={[styles.tableColPlayer, styles.tableCellName, result.name === playerName && styles.tableCellHighlight]}>
                     {result.name} {result.name === playerName ? '(You)' : ''}
                   </Text>
-                  <Text style={[styles.tableColStatus, styles.tableCellStatus, { textAlign: 'center' }, statusStyle]}>
-                    {statusText}
-                  </Text>
+                  <Text style={[styles.tableColTime, styles.tableCellTime, { textAlign: 'center' }]}>{timeSec}</Text>
                 </View>
               );
             })}
@@ -1227,9 +1299,8 @@ const styles = StyleSheet.create({
   },
   boardStage: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 10
+    width: '100%',
+    marginVertical: 6
   },
   battleControls: {
     flexDirection: 'row',
@@ -1313,6 +1384,10 @@ const styles = StyleSheet.create({
   },
   tableColPlayer: {
     flex: 1.5
+  },
+  tableColTime: {
+    flex: 1,
+    textAlign: 'center'
   },
   tableColStatus: {
     flex: 1

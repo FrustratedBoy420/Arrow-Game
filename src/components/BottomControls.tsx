@@ -8,19 +8,35 @@ type Props = {
   onUndo: () => void;
   onHint: () => void;
   onRestart: () => void;
+  hintDisabled?: boolean;
 };
 
-export const BottomControls = memo(function BottomControls({ onUndo, onHint, onRestart }: Props) {
+export const BottomControls = memo(function BottomControls({
+  onUndo,
+  onHint,
+  onRestart,
+  hintDisabled = false
+}: Props) {
   return (
     <View style={styles.container}>
       <ControlButton label="Undo" icon="↶" onPress={onUndo} />
-      <ControlButton label="Hint" icon="?" onPress={onHint} />
+      <ControlButton label="Hint" icon="?" onPress={onHint} disabled={hintDisabled} />
       <ControlButton label="Restart" icon="↻" onPress={onRestart} />
     </View>
   );
 });
 
-function ControlButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
+function ControlButton({
+  label,
+  icon,
+  onPress,
+  disabled = false
+}: {
+  label: string;
+  icon: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -31,15 +47,21 @@ function ControlButton({ label, icon, onPress }: { label: string; icon: string; 
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      onPressIn={() => { scale.value = withSpring(0.9, { damping: 10, stiffness: 350 }); }}
-      onPressOut={() => { scale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
-      onPress={onPress}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPressIn={() => {
+        if (!disabled) scale.value = withSpring(0.9, { damping: 10, stiffness: 350 });
+      }}
+      onPressOut={() => {
+        if (!disabled) scale.value = withSpring(1, { damping: 10, stiffness: 350 });
+      }}
+      onPress={disabled ? undefined : onPress}
       style={styles.button}
     >
-      <Animated.View style={[styles.iconContainer, animatedStyle]}>
-        <Text style={styles.icon}>{icon}</Text>
+      <Animated.View style={[styles.iconContainer, disabled && styles.iconContainerDisabled, animatedStyle]}>
+        <Text style={[styles.icon, disabled && styles.iconDisabled]}>{icon}</Text>
       </Animated.View>
-      <Text style={styles.labelText}>{label}</Text>
+      <Text style={[styles.labelText, disabled && styles.labelDisabled]}>{label}</Text>
     </Pressable>
   );
 }
@@ -69,10 +91,18 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     ...theme.shadows.sm
   },
+  iconContainerDisabled: {
+    backgroundColor: 'rgba(200, 189, 174, 0.35)',
+    borderColor: 'rgba(106, 68, 40, 0.08)',
+    opacity: 0.55
+  },
   icon: {
     color: theme.colors.arrowStroke,
     fontSize: 22,
     fontWeight: '700'
+  },
+  iconDisabled: {
+    color: theme.colors.textMuted
   },
   labelText: {
     color: theme.colors.textMuted,
@@ -80,5 +110,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5
+  },
+  labelDisabled: {
+    opacity: 0.45
   }
 });
