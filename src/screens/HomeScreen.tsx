@@ -35,6 +35,7 @@ export function HomeScreen() {
   const isFetchingConfig = useGameStore((s) => s.isFetchingConfig);
   const dynamicLevels = useGameStore((s) => s.dynamicLevels);
   const versionConfig = useGameStore((s) => s.versionConfig);
+  const fetchVersionConfig = useGameStore((s) => s.fetchVersionConfig);
 
   const netInfo = useNetInfo();
   const isConnected = netInfo.isConnected ?? true;
@@ -104,11 +105,19 @@ export function HomeScreen() {
   }, [loadConfig]);
 
   useEffect(() => {
-    if (isConnected && !isFetchingConfig) {
-      console.log('🌐 Internet connection restored, fetching latest config...');
-      loadConfig();
+    if (isConnected) {
+      // On reconnect: only do a lightweight version check (not full config reload)
+      // This avoids re-downloading levels on every internet reconnect
+      void (async () => {
+        try {
+          const savedUrl = await AsyncStorage.getItem('multiplayer_url');
+          await fetchVersionConfig(savedUrl || undefined);
+        } catch {
+          await fetchVersionConfig();
+        }
+      })();
     }
-  }, [isConnected, isFetchingConfig, loadConfig]);
+  }, [isConnected, fetchVersionConfig]);
 
   const titleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: titleScale.value }],
