@@ -123,6 +123,14 @@ async function setupUserPusherListener(systemId: string) {
       }
     });
 
+    // Listen to global configuration updates (e.g. version updates, assets, levels)
+    const globalChannel = pusher.subscribe('global-config');
+    globalChannel.bind('config_updated', (data: any) => {
+      console.log('⚡ Received global config update event:', data);
+      // Trigger config refresh in real-time
+      useGameStore.getState().fetchGameConfig();
+    });
+
   } catch (err) {
     console.error('❌ Failed to setup user Pusher listener:', err);
   }

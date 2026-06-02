@@ -18,6 +18,10 @@ import { TutorialScreen } from './src/screens/TutorialScreen';
 import { VictoryScreen } from './src/screens/VictoryScreen';
 import { theme } from './src/theme/theme';
 
+import { useGameStore } from './src/state/gameStore';
+import { CURRENT_APP_VERSION, isVersionOlder } from './src/config/version';
+import { ForcedUpdateScreen } from './src/components/ForcedUpdateScreen';
+
 export type RootStackParamList = {
   Home: undefined;
   Tutorial: undefined;
@@ -33,11 +37,30 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 import { registerUserProfile } from './src/utils/userRegistration';
 
 export default function App() {
+  const versionConfig = useGameStore((s) => s.versionConfig);
+
   useEffect(() => {
     void audioManager.init();
     void initializeLevelManagement();
     void registerUserProfile();
   }, []);
+
+  // Determine if a critical forced update is required
+  const isForcedUpdateRequired = 
+    versionConfig && 
+    versionConfig.critical && 
+    isVersionOlder(CURRENT_APP_VERSION, versionConfig.critical);
+
+  if (isForcedUpdateRequired) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ForcedUpdateScreen 
+          currentVersion={CURRENT_APP_VERSION} 
+          requiredVersion={versionConfig!.critical} 
+        />
+      </GestureHandlerRootView>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

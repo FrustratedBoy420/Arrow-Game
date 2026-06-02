@@ -36,6 +36,10 @@ type GameStore = {
     homeArrow: string;
     unlockAllLevels?: boolean;
   };
+  versionConfig: {
+    latest: string;
+    critical: string;
+  } | null;
   resetAllProgress: () => void;
   // Level Management System Integration
   levelProgressMap: Map<number, LevelProgress>;
@@ -87,6 +91,7 @@ export const useGameStore = create<GameStore>()(
       iconsConfig: {
         homeArrow: '➤'
       },
+      versionConfig: null,
       levelProgressMap: initialLevelMap,
       starsEarnedThisLevel: 0,
       levelStartTime: Date.now(),
@@ -253,7 +258,7 @@ export const useGameStore = create<GameStore>()(
           const resData = await response.json();
 
           if (resData) {
-            const { levels: serverLevels, music, icons } = resData;
+            const { levels: serverLevels, music, icons, version } = resData;
 
             if (Array.isArray(serverLevels) && serverLevels.length > 0) {
               // ── Load only the first INITIAL_LEVEL_BATCH levels ──
@@ -280,7 +285,8 @@ export const useGameStore = create<GameStore>()(
                 outOfMove: null,
                 bgMusic: null
               },
-              iconsConfig: icons || { homeArrow: '➤' }
+              iconsConfig: icons || { homeArrow: '➤' },
+              versionConfig: version || null
             });
           }
         } catch (err) {
@@ -449,7 +455,8 @@ export const useGameStore = create<GameStore>()(
         // Persist the loaded batch so levels survive a background-kill restart
         dynamicLevels: state.dynamicLevels,
         musicUrls: state.musicUrls,
-        iconsConfig: state.iconsConfig
+        iconsConfig: state.iconsConfig,
+        versionConfig: state.versionConfig
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
