@@ -7,6 +7,7 @@ import Animated, {
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
+  withDelay,
   withTiming
 } from 'react-native-reanimated';
 
@@ -20,16 +21,39 @@ type Props = {
   width: number;
   onArrowPress: (arrowId: string) => void;
   onExitDone: (arrowId: string) => void;
+  /** When false, taps are handled by an outer zoom wrapper (Gameplay / Multiplayer). */
+  enableTouch?: boolean;
 };
 
 const arrowHeadSize = 12;
+
+/** How far past the head the arrow slides off-screen (in grid cells). */
+const EXIT_EXTENSION_CELLS = 6;
+/** Target slide speed — scales duration by path length so all arrows feel snappy but smooth. */
+const EXIT_SPEED_PX_PER_SEC = 400; // Faster exit speed for smoother feel
+const EXIT_DURATION_MIN_MS = 200; // Shorter minimum duration
+const EXIT_DURATION_MAX_MS = 600; // Upper bound for longer arrows
+// Adjusted speed and duration to improve animation smoothness
+
+function computeExitDurationMs(totalPathLengthPx: number): number {
+  if (totalPathLengthPx <= 0) return EXIT_DURATION_MIN_MS;
+  const ms = Math.round((totalPathLengthPx / EXIT_SPEED_PX_PER_SEC) * 1000);
+  return Math.min(EXIT_DURATION_MAX_MS, Math.max(EXIT_DURATION_MIN_MS, ms));
+}
 
 const dirVec: Record<Direction, { x: number; y: number }> = {
   UP: { x: 0, y: -1 }, DOWN: { x: 0, y: 1 },
   LEFT: { x: -1, y: 0 }, RIGHT: { x: 1, y: 0 }
 };
 
-export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({ board, exitingArrows, width, onArrowPress, onExitDone }: Props) {
+export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
+  board,
+  exitingArrows,
+  width,
+  onArrowPress,
+  onExitDone,
+  enableTouch = true
+}: Props) {
   const cellSize = width / board.level.gridSize.columns;
   const height = cellSize * board.level.gridSize.rows;
   const strokeW = Math.max(3, cellSize * 0.13);
@@ -106,15 +130,16 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({ board, exitin
         />
       ))}
 
-      {/* Touch layer */}
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={(event) => {
-          const { locationX, locationY } = event.nativeEvent;
-          const arrow = findArrowAtPoint(board.arrows, locationX, locationY, cellSize);
-          if (arrow) onArrowPress(arrow.id);
-        }}
-      />
+      {enableTouch ? (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={(event) => {
+            const { locationX, locationY } = event.nativeEvent;
+            const arrow = findArrowAtPoint(board.arrows, locationX, locationY, cellSize);
+            if (arrow) onArrowPress(arrow.id);
+          }}
+        />
+      ) : null}
     </View>
   );
 });
@@ -146,8 +171,7 @@ function ExitingArrow({
     const v = dirVec[exitDir];
     const lastCenter = centerOf(head, cellSize);
     
-    // Extend the path by 12 cells in the exit direction so it goes fully off-screen
-    const extensionLength = cellSize * 12;
+    const extensionLength = cellSize * EXIT_EXTENSION_CELLS;
     const exitEnd = {
       x: lastCenter.x + v.x * extensionLength,
       y: lastCenter.y + v.y * extensionLength,
@@ -161,22 +185,36 @@ function ExitingArrow({
     const it = Skia.ContourMeasureIter(trackPath, false, 1);
     const contourVal = it.next();
     const trackLen = contourVal ? contourVal.length() : 0;
-    const arrowLen = Math.max(0, trackLen - cellSize * 12);
+    const arrowLen = Math.max(0, trackLen - cellSize * EXIT_EXTENSION_CELLS);
     return { totalLength: trackLen, arrowLength: arrowLen, contour: contourVal };
   }, [trackPath, cellSize]);
 
   useEffect(() => {
-    animProgress.value = withTiming(1, {
-      duration: 350,
-      easing: Easing.bezier(0.25, 0.1, 0.25, 1)
-    });
-    opacity.value = withTiming(0, {
-      duration: 350,
-      easing: Easing.bezier(0.7, 0, 0.84, 0)
-    }, (fin) => {
-      if (fin) runOnJS(onDone)();
-    });
-  }, []);
+    const duration = computeExitDurationMs(totalLength);
+    const moveEasing = Easing.bezier(0.22, 1, 0.36, 1);
+    const fadeDelay = Math.round(duration * 0.38);
+    const fadeDuration = Math.max(120, duration - fadeDelay);
+
+    animProgress.value = 0;
+    opacity.value = 1;
+
+    animProgress.value = withTiming(
+      1,
+      { duration, easing: moveEasing },
+      (finished) => {
+        if (finished) runOnJS(onDone)();
+      }
+    );
+
+    opacity.value = withDelay(
+      fadeDelay,
+      withTiming(0, {
+        duration: fadeDuration,
+        easing: Easing.out(Easing.quad)
+      })
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per mounted exit arrow
+  }, [totalLength]);
 
   const startVal = useDerivedValue(() => {
     const t = animProgress.value;
@@ -188,32 +226,7 @@ function ExitingArrow({
     return (arrowLength + t * (totalLength - arrowLength)) / totalLength;
   });
 
-  const arrowheadPath = useDerivedValue(() => {
-    const path = Skia.Path.Make();
-    if (!contour) return path;
 
-    const t = animProgress.value;
-    const posHead = arrowLength + t * (totalLength - arrowLength);
-
-    const posTan = contour.getPosTan(posHead);
-    if (!posTan) return path;
-
-    const [pos, tangent] = posTan;
-    const sz = Math.min(arrowHeadSize, cellSize * 0.32);
-    const tx = tangent.x;
-    const ty = tangent.y;
-
-    const leftX = pos.x - sz * tx - sz * ty;
-    const leftY = pos.y - sz * ty + sz * tx;
-    const rightX = pos.x - sz * tx + sz * ty;
-    const rightY = pos.y - sz * ty - sz * tx;
-
-    path.moveTo(leftX, leftY);
-    path.lineTo(pos.x, pos.y);
-    path.lineTo(rightX, rightY);
-
-    return path;
-  });
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: opacity.value
@@ -234,14 +247,7 @@ function ExitingArrow({
           strokeWidth={sw}
         />
         {/* Draw the moving arrowhead */}
-        <Path
-          path={arrowheadPath}
-          color={theme.colors.arrowStroke}
-          style="stroke"
-          strokeCap="round"
-          strokeJoin="round"
-          strokeWidth={sw}
-        />
+
       </Canvas>
     </Animated.View>
   );
@@ -293,7 +299,7 @@ function getHeadPoints(pt: { x: number; y: number }, dir: Direction, cellSize: n
   }
 }
 
-function findArrowAtPoint(arrows: ArrowNode[], x: number, y: number, cellSize: number) {
+export function findArrowAtPoint(arrows: ArrowNode[], x: number, y: number, cellSize: number) {
   return arrows.find((arrow) =>
     getArrowCells(arrow).some((cell) => {
       const c = centerOf(cell, cellSize);

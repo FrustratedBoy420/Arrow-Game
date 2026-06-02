@@ -24,6 +24,7 @@ type GameStore = {
   hapticsEnabled: boolean;
   musicEnabled: boolean;
   lastHintArrowId: string | null;
+  hintUsedThisLevel: boolean;
   dynamicLevels: LevelDefinition[] | null;
   musicUrls: {
     correct: string | null;
@@ -80,6 +81,7 @@ export const useGameStore = create<GameStore>()(
       hapticsEnabled: true,
       musicEnabled: true,
       lastHintArrowId: null,
+      hintUsedThisLevel: false,
       dynamicLevels: null,
       musicUrls: {
         correct: null,
@@ -131,6 +133,7 @@ export const useGameStore = create<GameStore>()(
           currentLevelId: level.id,
           status: 'playing',
           lastHintArrowId: null,
+          hintUsedThisLevel: false,
           levelStartTime: Date.now(),
           gameStartTime: null,
           finalStarsCalculated: 3
@@ -212,8 +215,8 @@ export const useGameStore = create<GameStore>()(
       },
 
       useHint: () => {
-        const { board, status, gameStartTime } = get();
-        if (status !== 'playing') return null;
+        const { board, status, gameStartTime, hintUsedThisLevel } = get();
+        if (status !== 'playing' || hintUsedThisLevel) return null;
 
         if (gameStartTime === null) {
           set({ gameStartTime: Date.now() });
@@ -234,7 +237,8 @@ export const useGameStore = create<GameStore>()(
         set({
           board: result.board,
           status: nextStatus,
-          lastHintArrowId: hintArrow.id
+          lastHintArrowId: hintArrow.id,
+          hintUsedThisLevel: true
         });
 
         return hintArrow.id;

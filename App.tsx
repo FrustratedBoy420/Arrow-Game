@@ -4,7 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { audioManager } from './src/utils/audio';
 import { initializeLevelManagement } from './src/systems/levelManagementInit';
@@ -36,13 +36,31 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 import { registerUserProfile } from './src/utils/userRegistration';
 
+// Removed SplashScreen import and usage as the package is missing
+// import * as SplashScreen from 'expo-splash-screen';
+
+// Prevent splash screen from auto-hiding until we finish loading resources
+// SplashScreen.preventAutoHideAsync();
+
 export default function App() {
   const versionConfig = useGameStore((s) => s.versionConfig);
 
+  const [appIsReady, setAppIsReady] = useState(false);
+
   useEffect(() => {
-    void audioManager.init();
-    void initializeLevelManagement();
-    void registerUserProfile();
+    const prepare = async () => {
+      try {
+        await audioManager.init();
+        await initializeLevelManagement();
+        await registerUserProfile();
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setAppIsReady(true);
+        // await SplashScreen.hideAsync();
+      }
+    };
+    void prepare();
   }, []);
 
   // Determine if a critical forced update is required
@@ -62,6 +80,10 @@ export default function App() {
     );
   }
 
+
+  if (!appIsReady) {
+    return null;
+  }
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer>

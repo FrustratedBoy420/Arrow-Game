@@ -5,7 +5,6 @@ import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
-  withSequence,
   withSpring,
   withTiming
 } from 'react-native-reanimated';
@@ -14,7 +13,8 @@ import { AmbientBackground } from '../components/AmbientBackground';
 import { BottomControls } from '../components/BottomControls';
 import { GameHeader } from '../components/GameHeader';
 import { LivesIndicator } from '../components/LivesIndicator';
-import { PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
+import { findArrowAtPoint, PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
+import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
 import { SettingsModal } from '../components/SettingsModal';
 import { StarRatingDisplay } from '../components/StarRatingDisplay';
 import { isFrontClear } from '../game/engine';
@@ -36,6 +36,7 @@ export function GameplayScreen() {
   const retry = useGameStore((s) => s.retry);
   const undo = useGameStore((s) => s.undo);
   const useHint = useGameStore((s) => s.useHint);
+  const hintUsedThisLevel = useGameStore((s) => s.hintUsedThisLevel);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
@@ -50,6 +51,7 @@ export function GameplayScreen() {
   const sizeFromHeight = maxH / rows;
   const cellSize = Math.min(sizeFromWidth, sizeFromHeight, 50);
   const boardWidth = cellSize * columns;
+  const boardHeight = cellSize * rows;
 
   const animatedBoardStyle = useAnimatedStyle(() => ({
     transform: [{ scale: boardScale.value }],
@@ -91,7 +93,21 @@ export function GameplayScreen() {
     }
   }, [tapArrow, hapticsEnabled]);
 
+  const handleBoardPress = useCallback(
+    (x: number, y: number) => {
+      const currentBoard = useGameStore.getState().board;
+      const arrow = findArrowAtPoint(currentBoard.arrows, x, y, cellSize);
+      if (arrow) handleArrowPress(arrow.id);
+    },
+    [cellSize, handleArrowPress]
+  );
+
   const handleHint = useCallback(() => {
+    if (useGameStore.getState().hintUsedThisLevel) {
+      Alert.alert('Hint Used', 'You only get one hint per level.');
+      return;
+    }
+
     const currentBoard = useGameStore.getState().board;
     const hintArrow = currentBoard.arrows.find((a) => isFrontClear(a, currentBoard));
     const hintedId = useHint();
@@ -117,17 +133,30 @@ export function GameplayScreen() {
       <LivesIndicator livesLeft={board.livesLeft} />
       <StarRatingDisplay levelBaselineSeconds={board.level.arrows.length} />
       <View style={styles.boardStage}>
-        <Animated.View style={animatedBoardStyle}>
-          <PuzzleBoardCanvas
-            board={board}
-            exitingArrows={exitingArrows}
-            width={boardWidth}
-            onArrowPress={handleArrowPress}
-            onExitDone={handleExitDone}
-          />
-        </Animated.View>
+        <ZoomableBoardViewport
+          key={currentLevelId}
+          boardWidth={boardWidth}
+          boardHeight={boardHeight}
+          onBoardPress={handleBoardPress}
+        >
+          <Animated.View style={animatedBoardStyle}>
+            <PuzzleBoardCanvas
+              board={board}
+              exitingArrows={exitingArrows}
+              width={boardWidth}
+              enableTouch={false}
+              onArrowPress={handleArrowPress}
+              onExitDone={handleExitDone}
+            />
+          </Animated.View>
+        </ZoomableBoardViewport>
       </View>
-      <BottomControls onUndo={undo} onHint={handleHint} onRestart={retry} />
+      <BottomControls
+        onUndo={undo}
+        onHint={handleHint}
+        onRestart={retry}
+        hintDisabled={hintUsedThisLevel}
+      />
       <SettingsModal 
         visible={settingsVisible} 
         onClose={() => setSettingsVisible(false)} 
@@ -142,5 +171,5 @@ export function GameplayScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
-  boardStage: { flex: 1, alignItems: 'center', justifyContent: 'center' }
+  boardStage: { flex: 1, width: '100%' }
 });
