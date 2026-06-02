@@ -10,9 +10,14 @@
     "assetBundlePatterns": [
       "**/*"
     ],
-    "splash": {
-      "backgroundColor": "#F6F1E8"
-    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F6F1E8"
+        }
+      ]
+    ],
     "android": {
       "package": "com.arrowescape.mvp",
       "adaptiveIcon": {
