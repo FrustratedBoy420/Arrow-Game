@@ -251,58 +251,71 @@ export const useGameStore = create<GameStore>()(
 
       fetchGameConfig: async (serverUrl) => {
         set({ isFetchingConfig: true });
-        let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend.vercel.app';
-        baseUrl = baseUrl.replace(/\/$/, '');
-        if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-          baseUrl = `https://${baseUrl}`;
-        }
-
-        try {
-          const response = await fetch(`${baseUrl}/api/config`);
-          if (!response.ok) throw new Error(`Server returned status ${response.status}`);
-          const resData = await response.json();
-
-          if (resData) {
-            const { levels: serverLevels, music, icons, version } = resData;
-
-            // Only load levels from DB if not already cached locally
-            const existingLevels = get().dynamicLevels;
-            if (Array.isArray(serverLevels) && serverLevels.length > 0 && (!existingLevels || existingLevels.length === 0)) {
-              // ── Load only the first INITIAL_LEVEL_BATCH levels ──
-              const first20 = serverLevels.slice(0, INITIAL_LEVEL_BATCH);
-              setDynamicLevels(first20);
-
-              // Re-sync the progress map with the newly loaded levels
-              await refreshLevelProgressForLevels();
-
-              // Now that levels are in memory, start the correct level
-              const { currentLevelId } = get();
-              const targetId = getLevel(currentLevelId) ? currentLevelId : 1;
-              get().startLevel(targetId);
-
-              set({ dynamicLevels: first20 });
-              console.log(`✅ Loaded first ${first20.length} levels from DB.`);
-            } else if (existingLevels && existingLevels.length > 0) {
-              console.log(`ℹ️ Levels already cached (${existingLevels.length}). Skipping level reload.`);
-            }
-
-            set({
-              musicUrls: music || {
-                correct: null,
-                wrong: null,
-                victory: null,
-                outOfMove: null,
-                bgMusic: null
-              },
-              iconsConfig: icons ? { ...get().iconsConfig, ...icons } : get().iconsConfig,
-              versionConfig: version || null
-            });
+        
+        let urlsToTry = ['https://arrow-game-backend.vercel.app'];
+        if (serverUrl && serverUrl.trim()) {
+          let customUrl = serverUrl.trim().replace(/\/$/, '');
+          if (!customUrl.startsWith('http://') && !customUrl.startsWith('https://')) {
+            customUrl = `https://${customUrl}`;
           }
-        } catch (err) {
-          console.warn('⚠️ Failed to fetch dynamic game config:', err);
-        } finally {
-          set({ isFetchingConfig: false });
+          urlsToTry = [customUrl, 'https://arrow-game-backend.vercel.app'];
         }
+
+        for (const baseUrl of urlsToTry) {
+          try {
+            console.log(`📡 Fetching game config from: ${baseUrl}/api/config`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const response = await fetch(`${baseUrl}/api/config`, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) throw new Error(`Server returned status ${response.status}`);
+            const resData = await response.json();
+
+            if (resData) {
+              const { levels: serverLevels, music, icons, version } = resData;
+
+              // Only load levels from DB if not already cached locally
+              const existingLevels = get().dynamicLevels;
+              if (Array.isArray(serverLevels) && serverLevels.length > 0 && (!existingLevels || existingLevels.length === 0)) {
+                // ── Load only the first INITIAL_LEVEL_BATCH levels ──
+                const first20 = serverLevels.slice(0, INITIAL_LEVEL_BATCH);
+                setDynamicLevels(first20);
+
+                // Re-sync the progress map with the newly loaded levels
+                await refreshLevelProgressForLevels();
+
+                // Now that levels are in memory, start the correct level
+                const { currentLevelId } = get();
+                const targetId = getLevel(currentLevelId) ? currentLevelId : 1;
+                get().startLevel(targetId);
+
+                set({ dynamicLevels: first20 });
+                console.log(`✅ Loaded first ${first20.length} levels from DB.`);
+              } else if (existingLevels && existingLevels.length > 0) {
+                console.log(`ℹ️ Levels already cached (${existingLevels.length}). Skipping level reload.`);
+              }
+
+              set({
+                musicUrls: music || {
+                  correct: null,
+                  wrong: null,
+                  victory: null,
+                  outOfMove: null,
+                  bgMusic: null
+                },
+                iconsConfig: icons ? { ...get().iconsConfig, ...icons } : get().iconsConfig,
+                versionConfig: version || null
+              });
+              console.log(`✅ Game config loaded successfully from ${baseUrl}`);
+              break; // exit loop on success
+            }
+          } catch (err) {
+            console.warn(`⚠️ Failed to fetch config from ${baseUrl}:`, err);
+          }
+        }
+
+        set({ isFetchingConfig: false });
       },
 
       /**
@@ -310,22 +323,32 @@ export const useGameStore = create<GameStore>()(
        * Use this on internet reconnect to check for updates without heavy data fetch.
        */
       fetchVersionConfig: async (serverUrl) => {
-        let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend.vercel.app';
-        baseUrl = baseUrl.replace(/\/$/, '');
-        if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-          baseUrl = `https://${baseUrl}`;
+        let urlsToTry = ['https://arrow-game-backend.vercel.app'];
+        if (serverUrl && serverUrl.trim()) {
+          let customUrl = serverUrl.trim().replace(/\/$/, '');
+          if (!customUrl.startsWith('http://') && !customUrl.startsWith('https://')) {
+            customUrl = `https://${customUrl}`;
+          }
+          urlsToTry = [customUrl, 'https://arrow-game-backend.vercel.app'];
         }
 
-        try {
-          const response = await fetch(`${baseUrl}/api/config`);
-          if (!response.ok) return;
-          const resData = await response.json();
-          if (resData?.version) {
-            set({ versionConfig: resData.version });
-            console.log(`✅ Version config refreshed: ${JSON.stringify(resData.version)}`);
+        for (const baseUrl of urlsToTry) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const response = await fetch(`${baseUrl}/api/config`, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) throw new Error(`Server returned status ${response.status}`);
+            const resData = await response.json();
+            if (resData?.version) {
+              set({ versionConfig: resData.version });
+              console.log(`✅ Version config refreshed from ${baseUrl}: ${JSON.stringify(resData.version)}`);
+              break;
+            }
+          } catch (err) {
+            console.warn(`⚠️ Failed to fetch version config from ${baseUrl}:`, err);
           }
-        } catch (err) {
-          console.warn('⚠️ Failed to fetch version config:', err);
         }
       },
 
@@ -340,46 +363,56 @@ export const useGameStore = create<GameStore>()(
       fetchAllLevelsForAdmin: async () => {
         const { mergeLevelProgressMap } = await import('../systems/levelManagement');
 
-        try {
-          const savedUrl = await AsyncStorage.getItem('multiplayer_url');
-          let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
-          baseUrl = baseUrl.replace(/\/$/, '');
-          if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-            baseUrl = `https://${baseUrl}`;
+        const savedUrl = await AsyncStorage.getItem('multiplayer_url');
+        let urlsToTry = ['https://arrow-game-backend.vercel.app'];
+        if (savedUrl && savedUrl.trim()) {
+          let customUrl = savedUrl.trim().replace(/\/$/, '');
+          if (!customUrl.startsWith('http://') && !customUrl.startsWith('https://')) {
+            customUrl = `https://${customUrl}`;
           }
+          urlsToTry = [customUrl, 'https://arrow-game-backend.vercel.app'];
+        }
 
-          console.log('👑 Admin: fetching ALL levels from server...');
-          const response = await fetch(`${baseUrl}/api/config`);
-          if (!response.ok) throw new Error(`Status ${response.status}`);
+        for (const baseUrl of urlsToTry) {
+          try {
+            console.log(`👑 Admin: fetching ALL levels from server: ${baseUrl}...`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const response = await fetch(`${baseUrl}/api/config`, { signal: controller.signal });
+            clearTimeout(timeoutId);
 
-          const resData = await response.json();
-          const serverLevels: LevelDefinition[] = resData.levels || [];
+            if (!response.ok) throw new Error(`Status ${response.status}`);
 
-          if (!Array.isArray(serverLevels) || serverLevels.length === 0) {
-            console.warn('⚠️ Admin fetch: no levels returned from server.');
-            return;
+            const resData = await response.json();
+            const serverLevels: LevelDefinition[] = resData.levels || [];
+
+            if (!Array.isArray(serverLevels) || serverLevels.length === 0) {
+              console.warn(`⚠️ Admin fetch: no levels returned from server ${baseUrl}.`);
+              continue;
+            }
+
+            // Load ALL levels — no slice
+            setDynamicLevels(serverLevels);
+
+            // Build progress map for all levels and unlock every one
+            const current = ensureLevelProgressMap(get().levelProgressMap);
+            const merged = mergeLevelProgressMap(current);
+            for (const progress of merged.values()) {
+              progress.isLocked = false;
+            }
+
+            await saveLevelProgress(merged);
+            set({
+              dynamicLevels: serverLevels,
+              levelProgressMap: new Map(merged),
+              highestUnlockedLevel: serverLevels.length
+            });
+
+            console.log(`👑 Admin: all ${serverLevels.length} levels loaded and unlocked from ${baseUrl}.`);
+            break; // exit loop on success
+          } catch (err) {
+            console.warn(`⚠️ Admin: failed to fetch all levels from ${baseUrl}:`, err);
           }
-
-          // Load ALL levels — no slice
-          setDynamicLevels(serverLevels);
-
-          // Build progress map for all levels and unlock every one
-          const current = ensureLevelProgressMap(get().levelProgressMap);
-          const merged = mergeLevelProgressMap(current);
-          for (const progress of merged.values()) {
-            progress.isLocked = false;
-          }
-
-          await saveLevelProgress(merged);
-          set({
-            dynamicLevels: serverLevels,
-            levelProgressMap: new Map(merged),
-            highestUnlockedLevel: serverLevels.length
-          });
-
-          console.log(`👑 Admin: all ${serverLevels.length} levels loaded and unlocked.`);
-        } catch (err) {
-          console.warn('⚠️ Admin: failed to fetch all levels:', err);
         }
       },
 
@@ -390,43 +423,52 @@ export const useGameStore = create<GameStore>()(
         const targetCount = currentCount + NEXT_LEVEL_BATCH;
         console.log(`🔓 Fetching next ${NEXT_LEVEL_BATCH} levels (total: ${targetCount}).`);
 
-        try {
-          const savedUrl = await AsyncStorage.getItem('multiplayer_url');
-          let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
-          baseUrl = baseUrl.replace(/\/$/, '');
-          if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-            baseUrl = `https://${baseUrl}`;
+        const savedUrl = await AsyncStorage.getItem('multiplayer_url');
+        let urlsToTry = ['https://arrow-game-backend.vercel.app'];
+        if (savedUrl && savedUrl.trim()) {
+          let customUrl = savedUrl.trim().replace(/\/$/, '');
+          if (!customUrl.startsWith('http://') && !customUrl.startsWith('https://')) {
+            customUrl = `https://${customUrl}`;
           }
+          urlsToTry = [customUrl, 'https://arrow-game-backend.vercel.app'];
+        }
 
-          const response = await fetch(`${baseUrl}/api/config`);
-          if (!response.ok) throw new Error(`Status ${response.status}`);
+        for (const baseUrl of urlsToTry) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const response = await fetch(`${baseUrl}/api/config`, { signal: controller.signal });
+            clearTimeout(timeoutId);
 
-          const resData = await response.json();
-          const serverLevels: LevelDefinition[] = resData.levels || [];
+            if (!response.ok) throw new Error(`Status ${response.status}`);
 
-          if (Array.isArray(serverLevels) && serverLevels.length > 0) {
-            const nextLevels = serverLevels.slice(0, targetCount);
+            const resData = await response.json();
+            const serverLevels: LevelDefinition[] = resData.levels || [];
 
-            if (nextLevels.length <= currentCount) {
-              console.log('ℹ️ No new levels available on server yet.');
+            if (Array.isArray(serverLevels) && serverLevels.length > 0) {
+              const nextLevels = serverLevels.slice(0, targetCount);
+
+              if (nextLevels.length <= currentCount) {
+                console.log('ℹ️ No new levels available on server yet.');
+                return;
+              }
+
+              setDynamicLevels(nextLevels);
+
+              const current = ensureLevelProgressMap(get().levelProgressMap);
+              const merged = mergeLevelProgressMap(current);
+              await saveLevelProgress(merged);
+              set({
+                dynamicLevels: nextLevels,
+                levelProgressMap: new Map(merged),
+                highestUnlockedLevel: Math.max(get().highestUnlockedLevel, currentCount + 1)
+              });
+              console.log(`✅ Levels expanded from ${baseUrl}: now showing 1–${nextLevels.length}.`);
               return;
             }
-
-            setDynamicLevels(nextLevels);
-
-            const current = ensureLevelProgressMap(get().levelProgressMap);
-            const merged = mergeLevelProgressMap(current);
-            await saveLevelProgress(merged);
-            set({
-              dynamicLevels: nextLevels,
-              levelProgressMap: new Map(merged),
-              highestUnlockedLevel: Math.max(get().highestUnlockedLevel, currentCount + 1)
-            });
-            console.log(`✅ Levels expanded: now showing 1–${nextLevels.length}.`);
-            return;
+          } catch (err) {
+            console.warn(`⚠️ Could not fetch next levels from ${baseUrl}:`, err);
           }
-        } catch (err) {
-          console.warn('⚠️ Could not fetch next levels (offline or server error):', err);
         }
 
         // No offline fallback — level.json is intentionally empty.
