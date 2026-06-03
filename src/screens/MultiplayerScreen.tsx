@@ -653,10 +653,21 @@ export function MultiplayerScreen() {
 
       channel.bind('rematch_start', (data: any) => {
         console.log('Pusher received: [rematch_start]', data);
-        setLevel(data.level);
-        setPlayers(data.players);
-        const other = data.players.find((p: string) => p.toLowerCase() !== playerNameRef.current.toLowerCase()) || 'Opponent';
-        setOpponentName(other);
+        
+        const code = roomCodeRef.current;
+        if (code) {
+          apiPost('/api/get-room', { roomCode: code })
+            .then((res) => {
+              if (res.success && res.data) {
+                setLevel(res.data.level);
+                setPlayers(res.data.players);
+                const other = res.data.players.find((p: string) => p.toLowerCase() !== playerNameRef.current.toLowerCase()) || 'Opponent';
+                setOpponentName(other);
+              }
+            })
+            .catch((err) => console.error('Failed to get room details after rematch:', err));
+        }
+
         setReadyStates({});
         setRematchStates({});
         setRequestingRematch(false);
