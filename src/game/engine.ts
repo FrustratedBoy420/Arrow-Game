@@ -89,6 +89,55 @@ export function isFrontClear(arrow: ArrowNode, board: BoardState): boolean {
   return true;
 }
 
+/**
+ * Find the first arrow that is physically blocking this arrow's exit path.
+ * Returns the blocking ArrowNode, or undefined if the path is clear (or exits grid).
+ */
+export function findBlockingArrow(arrow: ArrowNode, board: BoardState): ArrowNode | undefined {
+  const dir = getExitDirection(arrow);
+  const vector = directionVector[dir];
+  const head = getArrowHead(arrow);
+
+  let cursor = { x: head.x + vector.x, y: head.y + vector.y };
+
+  const otherArrows = board.arrows.filter((a) => a.id !== arrow.id);
+
+  while (isInsideGrid(cursor, board.level)) {
+    const blocker = otherArrows.find((a) =>
+      getArrowCells(a).some((cell) => samePosition(cell, cursor))
+    );
+    if (blocker) return blocker;
+    cursor = { x: cursor.x + vector.x, y: cursor.y + vector.y };
+  }
+
+  return undefined;
+}
+
+/**
+ * Find the cell distance to the first blocker (or to the grid boundary).
+ */
+export function getCollisionDistance(arrow: ArrowNode, board: BoardState): number {
+  const dir = getExitDirection(arrow);
+  const vector = directionVector[dir];
+  const head = getArrowHead(arrow);
+
+  let cursor = { x: head.x + vector.x, y: head.y + vector.y };
+  let steps = 1;
+
+  const otherArrows = board.arrows.filter((a) => a.id !== arrow.id);
+
+  while (isInsideGrid(cursor, board.level)) {
+    const blocker = otherArrows.find((a) =>
+      getArrowCells(a).some((cell) => samePosition(cell, cursor))
+    );
+    if (blocker) return steps;
+    steps++;
+    cursor = { x: cursor.x + vector.x, y: cursor.y + vector.y };
+  }
+
+  return steps;
+}
+
 export function resolveTap(arrowId: string, board: BoardState): TapResult {
   const arrow = board.arrows.find((candidate) => candidate.id === arrowId);
 

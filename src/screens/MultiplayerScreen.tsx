@@ -17,7 +17,6 @@ import {
   useWindowDimensions,
   View
 } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -32,7 +31,7 @@ import { AmbientBackground } from '../components/AmbientBackground';
 import { LivesIndicator } from '../components/LivesIndicator';
 import { findArrowAtPoint, PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
 import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
-import { createInitialBoard, resolveTap } from '../game/engine';
+import { createInitialBoard, findBlockingArrow, resolveTap } from '../game/engine';
 import type { ArrowNode, BoardState, LevelDefinition } from '../game/types';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
@@ -99,6 +98,8 @@ export function MultiplayerScreen() {
   const [level, setLevel] = useState<LevelDefinition | null>(null);
   const [board, setBoard] = useState<BoardState | null>(null);
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
+  const [blockedArrows, setBlockedArrows] = useState<{ arrow: ArrowNode; blocker: ArrowNode | null }[]>([]);
+  const [flashingArrows, setFlashingArrows] = useState<ArrowNode[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   
@@ -740,10 +741,9 @@ export function MultiplayerScreen() {
   const handleCopyCode = async () => {
     if (!roomCode) return;
     try {
-      await Clipboard.setStringAsync(roomCode);
-      Alert.alert('Copied', 'Room code copied to clipboard!');
+      await Share.share({ message: roomCode, title: 'Room Code' });
     } catch (err) {
-      console.error('Failed to copy room code:', err);
+      console.error('Failed to share room code:', err);
     }
   };
 
@@ -829,6 +829,18 @@ export function MultiplayerScreen() {
     setExitingArrows((prev) => prev.filter((a) => a.id !== arrowId));
   }, []);
 
+  const handleBlockedDone = useCallback((arrowId: string) => {
+    setBlockedArrows((prev) => prev.filter((b) => b.arrow.id !== arrowId));
+  }, []);
+
+  const handleCollisionPoint = useCallback((blocker: import('../game/types').ArrowNode | null) => {
+    if (!blocker) return;
+    setFlashingArrows((prev) => [...prev, blocker]);
+    setTimeout(() => {
+      setFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
+    }, 520);
+  }, []);
+
   const handleArrowPress = useCallback((arrowId: string) => {
     if (!roomCode) return;
 
@@ -887,7 +899,10 @@ export function MultiplayerScreen() {
         }
 
         return nextBoard;
-      } else if (result.type === 'BLOCKED') {
+      } else if (result.type === 'BLOCKED' && arrow) {
+        // Find which arrow is physically blocking, then start the red-slide animation.
+        const blocker = findBlockingArrow(arrow, currentBoard) ?? null;
+        setBlockedArrows((prev) => [...prev, { arrow, blocker }]);
         void playWrongFeedback(hapticsEnabled);
       }
 
@@ -1171,10 +1186,14 @@ export function MultiplayerScreen() {
               <PuzzleBoardCanvas
                 board={board}
                 exitingArrows={exitingArrows}
+                blockedArrows={blockedArrows}
+                flashingArrows={flashingArrows}
                 width={boardWidth}
                 enableTouch={false}
                 onArrowPress={handleArrowPress}
                 onExitDone={handleExitDone}
+                onBlockedDone={handleBlockedDone}
+                onCollisionPoint={handleCollisionPoint}
               />
             </Animated.View>
           </ZoomableBoardViewport>

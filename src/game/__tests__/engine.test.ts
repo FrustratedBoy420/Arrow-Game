@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createInitialBoard, isFrontClear, resolveTap } from '../engine';
+import { createInitialBoard, isFrontClear, resolveTap, getCollisionDistance } from '../engine';
 import type { LevelDefinition } from '../types';
 
 const level: LevelDefinition = {
@@ -50,5 +50,19 @@ describe('engine', () => {
 
     expect(result.type).toBe('BLOCKED');
     expect(result.board.livesLeft).toBe(2);
+  });
+
+  describe('getCollisionDistance', () => {
+    it('returns the exact cell distance to a blocking arrow', () => {
+      const board = createInitialBoard(level);
+      const arrow = board.arrows.find((candidate) => candidate.id === 'blocked')!;
+      expect(getCollisionDistance(arrow, board)).toBe(2);
+    });
+
+    it('returns the cell distance to the boundary when the front is clear', () => {
+      const board = createInitialBoard(level);
+      const arrow = board.arrows.find((candidate) => candidate.id === 'clear')!;
+      expect(getCollisionDistance(arrow, board)).toBe(4);
+    });
   });
 });
