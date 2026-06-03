@@ -29,7 +29,7 @@ export type RootStackParamList = {
   LevelSelect: undefined;
   Victory: undefined;
   Fail: undefined;
-  Multiplayer: undefined;
+  Multiplayer: { roomCode?: string } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

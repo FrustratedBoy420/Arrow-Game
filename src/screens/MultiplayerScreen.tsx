@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Pusher from 'pusher-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -10,12 +10,14 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
   View
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -64,6 +66,8 @@ interface ServerPlayer {
 
 export function MultiplayerScreen() {
   const navigation = useNavigation<AppNavigation>();
+  const route = useRoute<any>();
+  const linkRoomCode = route.params?.roomCode;
   const { width, height } = useWindowDimensions();
 
   // Connection & Room state
@@ -158,13 +162,119 @@ export function MultiplayerScreen() {
     roomCodeRef.current = roomCode;
   }, [roomCode]);
 
+  const joinRoomWithDetails = async (
+    nameVal: string,
+    codeVal: string,
+    urlVal: string,
+    keyVal: string
+  ) => {
+    const trimmedName = nameVal.trim();
+    const formattedCode = codeVal.trim().toUpperCase();
+    const trimmedUrl = urlVal.trim();
+    const trimmedKey = keyVal.trim();
+
+    if (!trimmedName) {
+      Alert.alert('Name Required', 'Please enter your name first.');
+      return;
+    }
+    if (!formattedCode) {
+      Alert.alert('Code Required', 'Please enter a 4-letter room code.');
+      return;
+    }
+    if (!trimmedUrl) {
+      Alert.alert('Server URL Required', 'Please enter a valid Server URL.');
+      return;
+    }
+    if (!trimmedKey) {
+      Alert.alert('Pusher Key Required', 'Please enter your Pusher App Key.');
+      return;
+    }
+
+    // If already in a room/lobby/game, leave the old room first
+    if (stepRef.current !== 'setup' && roomCodeRef.current && roomCodeRef.current.trim().toUpperCase() !== formattedCode) {
+      try {
+        let cleanUrl = trimmedUrl;
+        cleanUrl = cleanUrl.replace(/\/$/, '');
+        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+          cleanUrl = `https://${cleanUrl}`;
+        }
+        await fetch(`${cleanUrl}/api/leave-room`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: playerNameRef.current.trim(),
+            roomCode: roomCodeRef.current.trim().toUpperCase()
+          })
+        });
+      } catch (err) {
+        console.warn('leave-room during auto-join failed:', err);
+      }
+    }
+
+    setConnecting(true);
+    try {
+      let cleanUrl = trimmedUrl;
+      cleanUrl = cleanUrl.replace(/\/$/, '');
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+        cleanUrl = `https://${cleanUrl}`;
+      }
+
+      const response = await fetch(`${cleanUrl}/api/join-room`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: trimmedName,
+          roomCode: formattedCode
+        }),
+      });
+
+      const text = await response.text();
+      let resData;
+      try {
+        resData = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Invalid response: ${text.slice(0, 100)}`);
+      }
+
+      if (!response.ok) {
+        throw new Error(resData?.data?.message || resData?.error || 'Request failed');
+      }
+
+      const { roomCode: newCode, players: roomPlayers, level: newLevel } = resData.data;
+
+      await AsyncStorage.setItem('multiplayer_name', trimmedName);
+      await AsyncStorage.setItem('multiplayer_url', trimmedUrl);
+      await AsyncStorage.setItem('multiplayer_pusher_key', trimmedKey);
+
+      // Update registration profile in DB with new name
+      void registerUserProfile();
+
+      setRoomCode(newCode);
+      setPlayers(roomPlayers);
+      setLevel(newLevel);
+      setReadyStates({});
+      setStep('lobby');
+
+      const other = roomPlayers.find((p: string) => p.toLowerCase() !== trimmedName.toLowerCase());
+      if (other) setOpponentName(other);
+
+      connectAndSubscribePusher(newCode, trimmedKey);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to join room.');
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   // Load saved credentials on start
   useEffect(() => {
     async function loadSavedData() {
       try {
         const savedName = await AsyncStorage.getItem('multiplayer_name');
         let savedUrl = await AsyncStorage.getItem('multiplayer_url');
-        const savedPusherKey = await AsyncStorage.getItem('multiplayer_pusher_key');
+        let savedPusherKey = await AsyncStorage.getItem('multiplayer_pusher_key');
         
         // If the URL is not set, or contains a local host address, point it to the production URL
         if (!savedUrl || savedUrl.includes('localhost') || savedUrl.includes('127.0.0.1')) {
@@ -172,9 +282,33 @@ export function MultiplayerScreen() {
           await AsyncStorage.setItem('multiplayer_url', savedUrl);
         }
 
+        if (!savedPusherKey) {
+          savedPusherKey = '1d9ae595090f679858b4';
+        }
+
         if (savedName) setPlayerName(savedName);
         if (savedUrl) setServerUrl(savedUrl);
         if (savedPusherKey) setPusherKey(savedPusherKey);
+
+        // If there's an incoming roomCode from deep linking, auto-join if we have player name
+        if (linkRoomCode) {
+          const code = linkRoomCode.trim().toUpperCase();
+          setRoomCode(code);
+          
+          const nameToUse = savedName || playerNameRef.current;
+          const urlToUse = savedUrl;
+          const keyToUse = savedPusherKey;
+
+          if (nameToUse && nameToUse.trim()) {
+            console.log(`[Deep Link] Auto-joining room ${code} as ${nameToUse}`);
+            void joinRoomWithDetails(nameToUse, code, urlToUse, keyToUse);
+          } else {
+            Alert.alert(
+              'Battle Invitation',
+              `Welcome! Enter your name to join room "${code}".`
+            );
+          }
+        }
       } catch (err) {
         console.error('AsyncStorage load error:', err);
       }
@@ -184,7 +318,7 @@ export function MultiplayerScreen() {
     return () => {
       disconnectPusher();
     };
-  }, []);
+  }, [linkRoomCode]);
 
   const disconnectPusher = () => {
     if (countdownIntervalRef.current) {
@@ -447,54 +581,39 @@ export function MultiplayerScreen() {
     }
   };
 
-  const handleJoinRoom = async () => {
-    if (!playerName.trim()) {
-      Alert.alert('Name Required', 'Please enter your name first.');
-      return;
-    }
-    if (!roomCode.trim()) {
-      Alert.alert('Code Required', 'Please enter a 4-letter room code.');
-      return;
-    }
-    if (!serverUrl.trim()) {
-      Alert.alert('Server URL Required', 'Please enter a valid Server URL.');
-      return;
-    }
-    if (!pusherKey.trim()) {
-      Alert.alert('Pusher Key Required', 'Please enter your Pusher App Key.');
-      return;
-    }
+  const handleJoinRoom = () => {
+    void joinRoomWithDetails(playerName, roomCode, serverUrl, pusherKey);
+  };
 
-    setConnecting(true);
+  const handleCopyCode = async () => {
+    if (!roomCode) return;
     try {
-      const formattedCode = roomCode.trim().toUpperCase();
-      const res = await apiPost('/api/join-room', {
-        name: playerName.trim(),
-        roomCode: formattedCode
+      await Clipboard.setStringAsync(roomCode);
+      Alert.alert('Copied', 'Room code copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy room code:', err);
+    }
+  };
+
+  const handleShareRoom = async () => {
+    if (!roomCode) return;
+    try {
+      let cleanUrl = serverUrl.trim();
+      cleanUrl = cleanUrl.replace(/\/$/, '');
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+        cleanUrl = `https://${cleanUrl}`;
+      }
+
+      const inviteUrl = `${cleanUrl}/api/join?code=${roomCode}`;
+      const message = `⚔️ Join my Arrow Escape Battle Arena!\n\nUse Room Code: *${roomCode}*\nClick here to join directly: ${inviteUrl}`;
+
+      await Share.share({
+        message,
+        url: inviteUrl,
+        title: 'Arrow Escape Arena Invitation',
       });
-      const { roomCode: newCode, players: roomPlayers, level: newLevel } = res.data;
-
-      await AsyncStorage.setItem('multiplayer_name', playerName.trim());
-      await AsyncStorage.setItem('multiplayer_url', serverUrl.trim());
-      await AsyncStorage.setItem('multiplayer_pusher_key', pusherKey.trim());
-
-      // Update registration profile in DB with new name
-      void registerUserProfile();
-
-      setRoomCode(newCode);
-      setPlayers(roomPlayers);
-      setLevel(newLevel);
-      setReadyStates({});
-      setStep('lobby');
-
-      const other = roomPlayers.find((p: string) => p.toLowerCase() !== playerName.trim().toLowerCase());
-      if (other) setOpponentName(other);
-
-      connectAndSubscribePusher(newCode, pusherKey.trim());
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to join room.');
-    } finally {
-      setConnecting(false);
+      console.error('Sharing failed:', err);
     }
   };
 
@@ -715,11 +834,34 @@ export function MultiplayerScreen() {
     return (
       <View style={styles.lobbyContainer}>
         <Text style={styles.lobbyLabel}>ROOM CODE</Text>
-        <View style={styles.codeContainer}>
-          <Text style={styles.lobbyCode}>{roomCode}</Text>
+
+        <View style={styles.codeShareRow}>
+          <Pressable 
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.codeContainer, 
+              pressed && styles.btnPressed
+            ]}
+            onPress={handleCopyCode}
+          >
+            <Text style={styles.lobbyCode}>{roomCode}</Text>
+            <Text style={styles.copyLabel}>📋 Copy Code</Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.lobbyShareBtn,
+              pressed && styles.btnPressed
+            ]}
+            onPress={handleShareRoom}
+          >
+            <Text style={styles.lobbyShareBtnIcon}>🔗</Text>
+            <Text style={styles.lobbyShareBtnText}>Share Link</Text>
+          </Pressable>
         </View>
 
-        <Text style={styles.lobbySub}>Share this code with your friend to connect</Text>
+        <Text style={styles.lobbySub}>Tap code to copy, or Share Link with friends</Text>
 
         <View style={styles.playersCard}>
           <Text style={styles.cardHeader}>PLAYERS IN LOBBY</Text>
@@ -1177,22 +1319,59 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     letterSpacing: 2
   },
+  codeShareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginVertical: 12,
+    width: '100%'
+  },
   codeContainer: {
+    flex: 2,
     backgroundColor: '#FFF',
     borderWidth: 3,
     borderColor: theme.colors.arrowStroke,
     borderRadius: theme.radius.lg,
-    paddingHorizontal: 40,
-    paddingVertical: 12,
-    marginVertical: 12,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
     ...theme.shadows.md
   },
   lobbyCode: {
-    fontSize: 48,
+    fontSize: 32,
     fontWeight: '900',
-    letterSpacing: 8,
+    letterSpacing: 6,
     color: theme.colors.arrowStroke,
     textAlign: 'center'
+  },
+  copyLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: theme.colors.textMuted,
+    marginTop: 2,
+    textTransform: 'uppercase'
+  },
+  lobbyShareBtn: {
+    flex: 1,
+    backgroundColor: '#25D366',
+    borderColor: '#1EBE57',
+    borderWidth: 2,
+    borderRadius: theme.radius.lg,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...theme.shadows.md
+  },
+  lobbyShareBtnIcon: {
+    fontSize: 22,
+    marginBottom: 2
+  },
+  lobbyShareBtnText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5
   },
   lobbySub: {
     fontSize: 14,
