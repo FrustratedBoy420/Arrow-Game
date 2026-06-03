@@ -251,7 +251,7 @@ export const useGameStore = create<GameStore>()(
 
       fetchGameConfig: async (serverUrl) => {
         set({ isFetchingConfig: true });
-        let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend-git-multip-2f60ad-frustratedboy420s-projects.vercel.app';
+        let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend.vercel.app';
         baseUrl = baseUrl.replace(/\/$/, '');
         if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
           baseUrl = `https://${baseUrl}`;
@@ -310,7 +310,7 @@ export const useGameStore = create<GameStore>()(
        * Use this on internet reconnect to check for updates without heavy data fetch.
        */
       fetchVersionConfig: async (serverUrl) => {
-        let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend-git-multip-2f60ad-frustratedboy420s-projects.vercel.app';
+        let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend.vercel.app';
         baseUrl = baseUrl.replace(/\/$/, '');
         if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
           baseUrl = `https://${baseUrl}`;
@@ -342,7 +342,7 @@ export const useGameStore = create<GameStore>()(
 
         try {
           const savedUrl = await AsyncStorage.getItem('multiplayer_url');
-          let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend-git-multip-2f60ad-frustratedboy420s-projects.vercel.app';
+          let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
           baseUrl = baseUrl.replace(/\/$/, '');
           if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
             baseUrl = `https://${baseUrl}`;
@@ -392,7 +392,7 @@ export const useGameStore = create<GameStore>()(
 
         try {
           const savedUrl = await AsyncStorage.getItem('multiplayer_url');
-          let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend-git-multip-2f60ad-frustratedboy420s-projects.vercel.app';
+          let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
           baseUrl = baseUrl.replace(/\/$/, '');
           if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
             baseUrl = `https://${baseUrl}`;
