@@ -531,8 +531,7 @@ export function MultiplayerScreen() {
         const progressName = String(data.name || data.playerName || '').trim();
         const me = playerNameRef.current.trim().toLowerCase();
 
-        if (!progressName || progressName.toLowerCase() === me) {
-          // Ignore self-progress updates
+        if (!progressName) {
           return;
         }
 
@@ -550,64 +549,84 @@ export function MultiplayerScreen() {
           }
         }
 
+        // Reconcile arrowOwners using functional state to prevent rollback race conditions
+        setArrowOwners((currentOwners) => {
+          const serverOwners: Record<string, string> = data.arrowOwners || {};
+          const nextOwners = { ...currentOwners };
+
+          // 1. Merge server verified owners (this resolves conflicts and confirms claims)
+          Object.entries(serverOwners).forEach(([id, owner]) => {
+            nextOwners[id] = owner;
+          });
+
+          // 2. Set scores based on reconciled owners to prevent score jumps/rollbacks due to network latency
+          setScores(computeScores(nextOwners));
+
+          // 3. Mark server verified arrows as confirmed clears
+          setConfirmedClears((currentConfirmed) => {
+            const nextConfirmed = { ...currentConfirmed };
+            Object.keys(serverOwners).forEach((id) => {
+              nextConfirmed[id] = true;
+            });
+            return nextConfirmed;
+          });
+
+          // 4. Update the board state to filter out any cleared arrows
+          setBoard((currentBoard) => {
+            if (!currentBoard) return null;
+
+            // An arrow is removed if it is in nextOwners
+            const remainingArrows = currentBoard.arrows.filter((a) => !nextOwners[a.id]);
+            const removedIds = currentBoard.removedIds.slice();
+            Object.keys(nextOwners).forEach((id) => {
+              if (!removedIds.includes(id)) {
+                removedIds.push(id);
+              }
+            });
+
+            // Trigger exited animation if opponent cleared a new arrow in our current active board
+            const arrowNode = currentBoard.arrows.find((a) => a.id === arrowId);
+            if (arrowNode && progressName.toLowerCase() !== me) {
+              setExitingArrows((prev) => {
+                if (!prev.some((a) => a.id === arrowNode.id)) {
+                  return [...prev, arrowNode];
+                }
+                return prev;
+              });
+              void playCorrectFeedback();
+            }
+
+            const nextBoard = {
+              ...currentBoard,
+              arrows: remainingArrows,
+              removedIds: removedIds
+            };
+
+            if (nextBoard.arrows.length === 0 && currentBoard.arrows.length > 0) {
+              const timeMs = recordMyCompletionTime();
+              apiPost('/api/player-finished', {
+                name: playerNameRef.current,
+                roomCode: roomCodeRef.current.trim().toUpperCase(),
+                timeMs
+              }).catch((err) => console.error('Failed to notify finished:', err));
+            }
+
+            return nextBoard;
+          });
+
+          return nextOwners;
+        });
+
         if (typeof data.arrowsLeft === 'number') {
           setOpponentArrowsLeft(Math.floor(data.arrowsLeft));
         }
+      });
 
-        if (arrowId) {
-          const currentBoard = boardRef.current;
-          if (currentBoard) {
-            const currentOwners = arrowOwnersRef.current;
-            const currentConfirmed = confirmedClearsRef.current;
-
-            if (progressName.toLowerCase() === me) {
-              // Self event E2: mark as confirmed!
-              if (currentOwners[arrowId]?.toLowerCase() === me) {
-                setConfirmedClears((prev) => ({ ...prev, [arrowId]: true }));
-              }
-              return;
-            }
-
-            // Opponent event E1
-            const isAlreadyConfirmed = currentConfirmed[arrowId];
-            if (isAlreadyConfirmed) {
-              // We already confirmed our own clear first, ignore opponent's event
-              return;
-            }
-
-            const nextOwners = {
-              ...currentOwners,
-              [arrowId]: progressName
-            };
-            setArrowOwners(nextOwners);
-            setConfirmedClears((prev) => ({ ...prev, [arrowId]: true }));
-
-            const newScores = computeScores(nextOwners);
-            setScores(newScores);
-
-            const arrowNode = currentBoard.arrows.find((a) => a.id === arrowId);
-            if (arrowNode) {
-              setExitingArrows((prev) => [...prev, arrowNode]);
-              void playCorrectFeedback();
-
-              const nextBoard = {
-                ...currentBoard,
-                arrows: currentBoard.arrows.filter((a) => a.id !== arrowId),
-                removedIds: [...currentBoard.removedIds, arrowId]
-              };
-              setBoard(nextBoard);
-
-              if (nextBoard.arrows.length === 0) {
-                const timeMs = recordMyCompletionTime();
-                apiPost('/api/player-finished', {
-                  name: playerNameRef.current,
-                  roomCode: roomCodeRef.current.trim().toUpperCase(),
-                  timeMs
-                }).catch((err) => console.error('Failed to notify finished:', err));
-              }
-            }
-          }
-        }
+      channel.bind('room_terminated', (data: any) => {
+        console.log('Pusher received: [room_terminated]', data);
+        Alert.alert('Room Terminated', data.message || 'This room has been terminated by the administrator.');
+        setStep('setup');
+        disconnectPusher();
       });
 
       channel.bind('match_results', (data: any) => {
@@ -800,65 +819,70 @@ export function MultiplayerScreen() {
   }, []);
 
   const handleArrowPress = useCallback((arrowId: string) => {
-    if (!board || !roomCode) return;
+    if (!roomCode) return;
 
-    // Check if the arrow is already owned by someone else
-    const currentOwners = arrowOwnersRef.current;
-    if (currentOwners[arrowId]) {
-      return; // Already cleared, ignore tap
-    }
+    setBoard((currentBoard) => {
+      if (!currentBoard) return null;
 
-    const arrow = board.arrows.find((a) => a.id === arrowId);
-    const result = resolveTap(arrowId, board);
-
-    if (result.type === 'REMOVED' && arrow) {
-      setExitingArrows((prev) => [...prev, arrow]);
-      void playCorrectFeedback();
-
-      const nextBoard = result.board;
-      setBoard(nextBoard);
-
-      // Claim ownership locally
-      const myName = playerNameRef.current;
-      const nextOwners = {
-        ...currentOwners,
-        [arrowId]: myName
-      };
-      setArrowOwners(nextOwners);
-
-      const newScores = computeScores(nextOwners);
-      setScores(newScores);
-
-      // Encode arrowsLeft
-      const levelArrows = levelRef.current?.arrows || [];
-      const encodedProgress = encodeArrowsLeft(nextBoard.arrows.length, arrowId, levelArrows);
-
-      apiPost('/api/update-progress', {
-        name: myName,
-        roomCode: roomCode.trim().toUpperCase(),
-        arrowsLeft: encodedProgress,
-        removedArrowId: arrowId,
-        scores: newScores,
-        boardState: {
-          removedArrowId: arrowId,
-          scores: newScores
-        }
-      }).catch(err => console.error('Failed to update progress:', err));
-
-      if (nextBoard.arrows.length === 0) {
-        const timeMs = recordMyCompletionTime();
-        apiPost('/api/player-finished', {
-          name: myName,
-          roomCode: roomCode.trim().toUpperCase(),
-          timeMs
-        }).catch(err => console.error('Failed to notify finished:', err));
+      // Check if the arrow is already owned by someone else
+      const currentOwners = arrowOwnersRef.current;
+      if (currentOwners[arrowId]) {
+        return currentBoard; // Already cleared, ignore tap
       }
 
-    } else if (result.type === 'BLOCKED') {
-      void playWrongFeedback(hapticsEnabled);
-      // In shared board mode, blocked tapping does not deduct lives.
-    }
-  }, [board, roomCode, hapticsEnabled, boardScale, apiPost, recordMyCompletionTime, computeScores]);
+      const arrow = currentBoard.arrows.find((a) => a.id === arrowId);
+      const result = resolveTap(arrowId, currentBoard);
+
+      if (result.type === 'REMOVED' && arrow) {
+        setExitingArrows((prev) => [...prev, arrow]);
+        void playCorrectFeedback();
+
+        const nextBoard = result.board;
+
+        // Claim ownership locally
+        const myName = playerNameRef.current;
+        const nextOwners = {
+          ...currentOwners,
+          [arrowId]: myName
+        };
+        setArrowOwners(nextOwners);
+
+        const newScores = computeScores(nextOwners);
+        setScores(newScores);
+
+        // Encode arrowsLeft
+        const levelArrows = levelRef.current?.arrows || [];
+        const encodedProgress = encodeArrowsLeft(nextBoard.arrows.length, arrowId, levelArrows);
+
+        apiPost('/api/update-progress', {
+          name: myName,
+          roomCode: roomCode.trim().toUpperCase(),
+          arrowsLeft: encodedProgress,
+          removedArrowId: arrowId,
+          scores: newScores,
+          boardState: {
+            removedArrowId: arrowId,
+            scores: newScores
+          }
+        }).catch(err => console.error('Failed to update progress:', err));
+
+        if (nextBoard.arrows.length === 0) {
+          const timeMs = recordMyCompletionTime();
+          apiPost('/api/player-finished', {
+            name: myName,
+            roomCode: roomCode.trim().toUpperCase(),
+            timeMs
+          }).catch(err => console.error('Failed to notify finished:', err));
+        }
+
+        return nextBoard;
+      } else if (result.type === 'BLOCKED') {
+        void playWrongFeedback(hapticsEnabled);
+      }
+
+      return currentBoard;
+    });
+  }, [roomCode, hapticsEnabled, apiPost, recordMyCompletionTime, computeScores]);
 
   const handleUndo = useCallback(() => {
     // No undo in Shared Board Mode
