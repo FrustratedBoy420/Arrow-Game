@@ -180,6 +180,16 @@ If the backend server is unreachable or offline, the app automatically:
 1. Uses the previously cached config saved in `AsyncStorage`.
 2. Falls back to the bundled local `levels.json` and static asset soundtracks if no cache is available.
 
+## ⚔️ Multiplayer Mode Features
+
+The **Multiplayer Arena** provides a real-time head-to-head shared board competitive gameplay:
+- **Shared Board Scoring**: Both players solve the same board. Tap clear arrows to gain points.
+- **3-Hearts Life System**: Protected lives prevent reckless tapping. Every blocked tap decrements a heart. Running out of 3 lives forces an automatic loss.
+- **Lobby Inactivity Timer**: The lobby displays a ticking 2-minute countdown. If no activity (joins, ready state toggles) occurs for 120 seconds, the lobby terminates and kicks players back to setup.
+- **1-Hour Session Expiration**: To maintain system sanity, every room code expires exactly 1 hour after creation. This happens automatically in the background and terminates the active session with a clean notification.
+- **Pinch Zoom-Out & Layout Scaling**: The board supports pinch-to-zoom gestures (zoom out down to 0.5x scale) to let players inspect full grids and corner layouts comfortably.
+- **Pusher Real-time Communication**: Syncs board removes, score values, and rematch requests in real-time. Suppresses developer Redbox connection LogBox popups under WebSocket network drops.
+
 ## Notes
 
 - Game progress is persisted locally under `arrow-escape-progress`.
