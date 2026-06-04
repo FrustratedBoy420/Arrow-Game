@@ -90,6 +90,8 @@ export function MultiplayerScreen() {
   const [roomCode, setRoomCode] = useState('');
   const [step, setStep] = useState<MultiplayerStep>('setup');
   const [connecting, setConnecting] = useState(false);
+  const [lobbySecondsLeft, setLobbySecondsLeft] = useState(120);
+  const roomCreatedAtRef = useRef<number | null>(null);
   const [players, setPlayers] = useState<string[]>([]);
   const [readyStates, setReadyStates] = useState<Record<string, boolean>>({});
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -137,6 +139,8 @@ export function MultiplayerScreen() {
   useEffect(() => {
     confirmedClearsRef.current = confirmedClears;
   }, [confirmedClears]);
+
+
 
   const computeScores = useCallback((owners: Record<string, string>) => {
     const nextScores: Record<string, number> = {};
@@ -295,7 +299,12 @@ export function MultiplayerScreen() {
         throw new Error(resData?.data?.message || resData?.error || 'Request failed');
       }
 
-      const { roomCode: newCode, players: roomPlayers, level: newLevel } = resData.data;
+      const { roomCode: newCode, players: roomPlayers, level: newLevel, createdAt } = resData.data;
+      if (createdAt) {
+        roomCreatedAtRef.current = createdAt;
+      } else {
+        roomCreatedAtRef.current = Date.now();
+      }
 
       await AsyncStorage.setItem('multiplayer_name', trimmedName);
       await AsyncStorage.setItem('multiplayer_url', trimmedUrl);
@@ -423,6 +432,72 @@ export function MultiplayerScreen() {
     }
     return resData;
   }, [serverUrl]);
+
+  const handleLobbyTimeout = useCallback(async (reason: 'lobby' | 'session' = 'lobby') => {
+    const code = roomCodeRef.current;
+    if (code) {
+      try {
+        await apiPost('/api/leave-room', {
+          name: playerNameRef.current,
+          roomCode: code.trim().toUpperCase(),
+          terminate: true
+        });
+      } catch (err) {
+        console.warn('Lobby timeout leave-room API call failed:', err);
+      }
+    }
+    if (reason === 'session') {
+      Alert.alert('Session Expired', 'The room code has expired after 1 hour. Please generate a new code.');
+    } else {
+      Alert.alert('Lobby Terminated', 'Lobby has been terminated due to 2-minute inactivity.');
+    }
+    disconnectPusher();
+    gameStartedAtRef.current = null;
+    setStep('setup');
+    setRoomCode('');
+    setPlayers([]);
+    setLevel(null);
+    setBoard(null);
+    setLocalPlayerTimes({});
+    setArrowOwners({});
+    setConfirmedClears({});
+  }, [apiPost]);
+
+  useEffect(() => {
+    if (step !== 'lobby') return;
+
+    setLobbySecondsLeft(120);
+
+    const intervalId = setInterval(() => {
+      setLobbySecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(intervalId);
+          void handleLobbyTimeout('lobby');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [step, players, readyStates, handleLobbyTimeout]);
+
+  // 1-hour room expiration check
+  useEffect(() => {
+    if (!roomCode || !roomCreatedAtRef.current) return;
+
+    const checkExpiration = () => {
+      const elapsed = Date.now() - roomCreatedAtRef.current!;
+      if (elapsed >= 3600000) { // 1 hour in ms
+        void handleLobbyTimeout('session');
+      }
+    };
+
+    checkExpiration();
+    const intervalId = setInterval(checkExpiration, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [roomCode, handleLobbyTimeout]);
 
   const startCountdownTimer = (gameStartsAt: number, countdownSeconds: number) => {
     if (countdownIntervalRef.current) {
@@ -692,7 +767,7 @@ export function MultiplayerScreen() {
       });
 
       pusher.connection.bind('error', (err: any) => {
-        console.error('Pusher connection error:', err);
+        console.warn('Pusher connection warning/error:', err);
       });
 
       pusher.connection.bind('state_change', (states: any) => {
@@ -727,7 +802,12 @@ export function MultiplayerScreen() {
     setConnecting(true);
     try {
       const res = await apiPost('/api/create-room', { name: playerName.trim() });
-      const { roomCode: newCode, players: roomPlayers, level: newLevel } = res.data;
+      const { roomCode: newCode, players: roomPlayers, level: newLevel, createdAt } = res.data;
+      if (createdAt) {
+        roomCreatedAtRef.current = createdAt;
+      } else {
+        roomCreatedAtRef.current = Date.now();
+      }
       
       await AsyncStorage.setItem('multiplayer_name', playerName.trim());
       await AsyncStorage.setItem('multiplayer_url', serverUrl.trim());
@@ -1065,6 +1145,10 @@ export function MultiplayerScreen() {
 
         <Text style={styles.lobbySub}>Tap code to copy, or Share Link with friends</Text>
 
+        <Text style={styles.lobbyTimer}>
+          ⏳ Lobby expires in {Math.floor(lobbySecondsLeft / 60)}:{(lobbySecondsLeft % 60).toString().padStart(2, '0')} (auto-terminate)
+        </Text>
+
         <View style={styles.playersCard}>
           <Text style={styles.cardHeader}>PLAYERS IN LOBBY</Text>
           
@@ -1255,6 +1339,9 @@ export function MultiplayerScreen() {
     const didIAbandon = abandonedPlayer && abandonedPlayer.name.toLowerCase() === playerName.toLowerCase();
 
     const getSharedBoardWinner = (): string => {
+      if (matchWinner) {
+        return matchWinner;
+      }
       if (abandonedPlayer) {
         return matchWinner || 'None'; // Use server winner if someone resigned
       }
@@ -1650,6 +1737,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 30,
     fontWeight: '600'
+  },
+  lobbyTimer: {
+    fontSize: 14,
+    color: theme.colors.lifeRed,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 20,
+    backgroundColor: '#FFEBEE',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: '#FFCDD2'
   },
   playersCard: {
     backgroundColor: '#FFF',
