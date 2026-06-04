@@ -25,6 +25,11 @@
         "backgroundColor": "#F6F1E8"
       }
     },
-    
+    "extra": {
+      "eas": {
+        "projectId": "0ab70a89-5c0a-4533-8065-7447ea1d4a5f"
+      }
+    },
+    "owner": "mridul_jaiswal_420"
   }
 }
