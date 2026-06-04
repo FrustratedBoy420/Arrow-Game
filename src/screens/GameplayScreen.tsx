@@ -113,7 +113,7 @@ export function GameplayScreen() {
       const result = tapArrow(arrowId);
 
       if (result === 'REMOVED' && arrow) {
-        setExitingArrows((prev) => [...prev, arrow]);
+        setExitingArrows((prev) => [...prev, { ...arrow, color: '#43A047' }]);
         void playCorrectFeedback();
       } else if (result === 'BLOCKED' && arrow) {
         // Find which arrow is physically blocking, then start the red-slide animation.
@@ -144,7 +144,7 @@ export function GameplayScreen() {
     const hintArrow = currentBoard.arrows.find((a) => isFrontClear(a, currentBoard));
     const hintedId = useHint();
     if (hintedId && hintArrow) {
-      setExitingArrows((prev) => [...prev, hintArrow]);
+      setExitingArrows((prev) => [...prev, { ...hintArrow, color: '#43A047' }]);
       void playCorrectFeedback();
     } else {
       Alert.alert('No Hint', 'No valid move right now. Try Undo!');

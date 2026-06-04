@@ -590,7 +590,7 @@ export function MultiplayerScreen() {
             if (arrowNode && progressName.toLowerCase() !== me) {
               setExitingArrows((prev) => {
                 if (!prev.some((a) => a.id === arrowNode.id)) {
-                  return [...prev, arrowNode];
+                  return [...prev, { ...arrowNode, color: '#2196F3' }]; // Opponent exit color is blue
                 }
                 return prev;
               });
@@ -857,7 +857,7 @@ export function MultiplayerScreen() {
       const result = resolveTap(arrowId, currentBoard);
 
       if (result.type === 'REMOVED' && arrow) {
-        setExitingArrows((prev) => [...prev, arrow]);
+        setExitingArrows((prev) => [...prev, { ...arrow, color: '#43A047' }]);
         void playCorrectFeedback();
 
         const nextBoard = result.board;

@@ -214,6 +214,9 @@ function ExitingArrow({
   const animProgress = useSharedValue(0);
   const opacity = useSharedValue(1);
 
+  const exitDir = getExitDirection(arrow);
+  const v = dirVec[exitDir];
+
   const trackPath = useMemo(() => {
     const path = Skia.Path.Make();
     const cells = arrow.fullPath;
@@ -229,8 +232,6 @@ function ExitingArrow({
     }
 
     const head = cells[cells.length - 1]!;
-    const exitDir = getExitDirection(arrow);
-    const v = dirVec[exitDir];
     const lastCenter = centerOf(head, cellSize);
 
     const extensionLength = cellSize * EXIT_EXTENSION_CELLS;
@@ -243,12 +244,12 @@ function ExitingArrow({
     return path;
   }, [arrow, cellSize]);
 
-  const { totalLength, arrowLength, contour } = useMemo(() => {
+  const { totalLength, arrowLength } = useMemo(() => {
     const it = Skia.ContourMeasureIter(trackPath, false, 1);
     const contourVal = it.next();
     const trackLen = contourVal ? contourVal.length() : 0;
     const arrowLen = Math.max(0, trackLen - cellSize * EXIT_EXTENSION_CELLS);
-    return { totalLength: trackLen, arrowLength: arrowLen, contour: contourVal };
+    return { totalLength: trackLen, arrowLength: arrowLen };
   }, [trackPath, cellSize]);
 
   useEffect(() => {
@@ -292,19 +293,44 @@ function ExitingArrow({
     opacity: opacity.value
   }));
 
+  const originalHead = getArrowHead(arrow);
+  const originalHeadCenter = useMemo(() => centerOf(originalHead, cellSize), [originalHead, cellSize]);
+
+  const headPath = useMemo(() => makeHeadPath(originalHeadCenter, exitDir, cellSize), [originalHeadCenter, exitDir, cellSize]);
+
+  const headTransform = useDerivedValue(() => {
+    const t = animProgress.value;
+    const offset = t * (totalLength - arrowLength);
+    return [{ translateX: v.x * offset }, { translateY: v.y * offset }];
+  });
+
+  const pathColor = arrow.color || theme.colors.arrowStroke;
+
   return (
     <Animated.View style={[StyleSheet.absoluteFill, animStyle, { zIndex: 10 }]} pointerEvents="none">
       <Canvas style={StyleSheet.absoluteFill}>
+        {/* Draw the moving shaft segment */}
         <Path
           path={trackPath}
           start={startVal}
           end={endVal}
-          color={theme.colors.arrowStroke}
+          color={pathColor}
           style="stroke"
           strokeCap="round"
           strokeJoin="round"
           strokeWidth={sw}
         />
+        {/* Draw the moving arrowhead */}
+        <Group transform={headTransform}>
+          <Path
+            path={headPath}
+            color={pathColor}
+            style="stroke"
+            strokeCap="round"
+            strokeJoin="round"
+            strokeWidth={sw}
+          />
+        </Group>
       </Canvas>
     </Animated.View>
   );
