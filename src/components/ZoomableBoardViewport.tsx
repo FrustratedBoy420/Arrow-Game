@@ -8,7 +8,7 @@ import Animated, {
   withTiming
 } from 'react-native-reanimated';
 
-const MIN_SCALE = 1;
+const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 
 type Props = {
@@ -118,7 +118,14 @@ export function ZoomableBoardViewport({
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
       } else {
-        applyClampedTranslation();
+        if (scale.value < 1.0) {
+          translateX.value = withTiming(0);
+          translateY.value = withTiming(0);
+          savedTranslateX.value = 0;
+          savedTranslateY.value = 0;
+        } else {
+          applyClampedTranslation();
+        }
       }
     });
 
@@ -186,7 +193,7 @@ export function ZoomableBoardViewport({
       <GestureDetector gesture={boardGesture}>
         <View style={styles.viewport}>
           <Animated.View style={[styles.stage, stageTransformStyle]}>
-            <View style={{ width: boardWidth, height: boardHeight }}>{children}</View>
+            <View style={{ width: boardWidth, height: boardHeight, overflow: 'visible' }}>{children}</View>
           </Animated.View>
         </View>
       </GestureDetector>
@@ -206,6 +213,7 @@ const styles = StyleSheet.create({
   stage: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    overflow: 'visible'
   }
 });

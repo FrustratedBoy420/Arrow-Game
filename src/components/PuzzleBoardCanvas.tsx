@@ -1,5 +1,5 @@
-import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
-import { useEffect, useMemo, memo } from 'react';
+import { Canvas, Circle, Group, Path, Skia } from '@shopify/react-native-skia';
+import { useEffect, useMemo, memo, useState, useCallback } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -8,32 +8,52 @@ import Animated, {
   useDerivedValue,
   useSharedValue,
   withDelay,
+  withSequence,
+  withSpring,
   withTiming
 } from 'react-native-reanimated';
 
-import { getArrowCells, getArrowHead, getExitDirection } from '../game/engine';
+import { getArrowCells, getArrowHead, getExitDirection, getCollisionDistance } from '../game/engine';
 import type { ArrowNode, BoardState, Direction } from '../game/types';
 import { theme } from '../theme/theme';
+
+type BlockedArrowEntry = { arrow: ArrowNode; blocker: ArrowNode | null };
 
 type Props = {
   board: BoardState;
   exitingArrows: ArrowNode[];
+  /** Arrows currently playing the red slide-and-bounce animation (BLOCKED tap). */
+  blockedArrows?: BlockedArrowEntry[];
+  /** Arrows that briefly flash red (collision target). */
+  flashingArrows?: ArrowNode[];
   width: number;
   onArrowPress: (arrowId: string) => void;
   onExitDone: (arrowId: string) => void;
+  /** Called when a blocked arrow's animation completes. */
+  onBlockedDone?: (arrowId: string) => void;
+  /** Called at the collision moment so the parent can flash the blocker. */
+  onCollisionPoint?: (blocker: ArrowNode | null) => void;
   /** When false, taps are handled by an outer zoom wrapper (Gameplay / Multiplayer). */
   enableTouch?: boolean;
+  /** Coordinate of the last touch/tap for displaying tap feedback. */
+  lastTap?: { x: number; y: number; timestamp: number } | undefined;
 };
 
 const arrowHeadSize = 12;
 
-/** How far past the head the arrow slides off-screen (in grid cells). */
-const EXIT_EXTENSION_CELLS = 6;
 /** Target slide speed — scales duration by path length so all arrows feel snappy but smooth. */
-const EXIT_SPEED_PX_PER_SEC = 400; // Faster exit speed for smoother feel
-const EXIT_DURATION_MIN_MS = 200; // Shorter minimum duration
-const EXIT_DURATION_MAX_MS = 600; // Upper bound for longer arrows
-// Adjusted speed and duration to improve animation smoothness
+const EXIT_SPEED_PX_PER_SEC = 550;
+const EXIT_DURATION_MIN_MS = 700;
+const EXIT_DURATION_MAX_MS = 2500;
+
+const CANVAS_PADDING = 500;
+
+/** How far the blocked arrow slides forward before snapping back (fraction of a cell). */
+const BLOCKED_SLIDE_CELLS = 0.55;
+/** Duration (ms) for the forward slide on a blocked arrow. */
+const BLOCKED_FORWARD_MS = 160;
+/** Duration (ms) for the snap-back on a blocked arrow. */
+const BLOCKED_BACK_MS = 200;
 
 function computeExitDurationMs(totalPathLengthPx: number): number {
   if (totalPathLengthPx <= 0) return EXIT_DURATION_MIN_MS;
@@ -46,15 +66,32 @@ const dirVec: Record<Direction, { x: number; y: number }> = {
   LEFT: { x: -1, y: 0 }, RIGHT: { x: 1, y: 0 }
 };
 
+
 export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
   board,
-  exitingArrows,
+  exitingArrows = [],
+  blockedArrows = [],
+  flashingArrows = [],
   width,
   onArrowPress,
   onExitDone,
-  enableTouch = true
+  onBlockedDone = () => {},
+  onCollisionPoint = () => {},
+  enableTouch = true,
+  lastTap
 }: Props) {
-  const cellSize = width / board.level.gridSize.columns;
+  const [localTaps, setLocalTaps] = useState<{ id: number; x: number; y: number }[]>([]);
+
+  useEffect(() => {
+    if (lastTap) {
+      setLocalTaps((prev) => [...prev, { id: lastTap.timestamp, x: lastTap.x, y: lastTap.y }]);
+    }
+  }, [lastTap]);
+
+  const handleTapIndicatorDone = useCallback((id: number) => {
+    setLocalTaps((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+  const cellSize = (width / board.level.gridSize.columns);
   const height = cellSize * board.level.gridSize.rows;
   const strokeW = Math.max(3, cellSize * 0.13);
 
@@ -82,20 +119,30 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
     return dots;
   }, [board.level]);
 
-  const arrowPaths = useMemo(
-    () => board.arrows.map((arrow) => {
-      return {
+  // Pre-compute paths for all board arrows (memoized by board.arrows + cellSize).
+  const arrowPathsAll = useMemo(
+    () =>
+      board.arrows.map((arrow) => ({
         id: arrow.id,
-        path: makeArrowPath(arrow, cellSize),
-        color: theme.colors.arrowStroke
-      };
-    }),
+        path: makeArrowPath(arrow, cellSize)
+      })),
     [board.arrows, cellSize]
+  );
+
+  // Build lookup sets for quick render-time checks.
+  const blockedArrowIdSet = useMemo(
+    () => new Set(blockedArrows.map((b) => b.arrow.id)),
+    [blockedArrows]
+  );
+
+  const flashingArrowIdSet = useMemo(
+    () => new Set(flashingArrows.map((a) => a.id)),
+    [flashingArrows]
   );
 
   return (
     <View style={[styles.container, { width, height }]}>
-      {/* Static arrows via Skia */}
+      {/* Static arrows via Skia — skip blocked & flashing ones (they're animated in overlays) */}
       <Canvas style={StyleSheet.absoluteFill}>
         {initialDots.map(({ r, c }) => (
           <Circle
@@ -106,27 +153,55 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
             color={theme.colors.borderSoft}
           />
         ))}
-        {arrowPaths.map(({ id, path, color }) => (
-          <Path
-            key={id}
-            path={path}
-            color={color}
-            style="stroke"
-            strokeCap="round"
-            strokeJoin="round"
-            strokeWidth={strokeW}
-          />
-        ))}
+        {arrowPathsAll
+          .filter(({ id }) => !blockedArrowIdSet.has(id) && !flashingArrowIdSet.has(id))
+          .map(({ id, path }) => (
+            <Path
+              key={id}
+              path={path}
+              color={theme.colors.arrowStroke}
+              style="stroke"
+              strokeCap="round"
+              strokeJoin="round"
+              strokeWidth={strokeW}
+            />
+          ))}
       </Canvas>
 
       {/* Exiting arrow overlays with slide animation */}
-      {exitingArrows.map((arrow) => (
+      {exitingArrows.map((arrow, index) => (
         <ExitingArrow
-          key={`exit-${arrow.id}`}
+          key={`exit-${arrow.id}-${index}`}
           arrow={arrow}
           cellSize={cellSize}
           strokeWidth={strokeW}
+          boardWidth={width}
+          boardHeight={height}
           onDone={() => onExitDone(arrow.id)}
+        />
+      ))}
+
+      {/* Blocked arrow overlays — red + slide forward then snap back */}
+      {blockedArrows.map(({ arrow, blocker }, index) => (
+        <BlockedArrowOverlay
+          key={`blocked-${arrow.id}-${index}`}
+          arrow={arrow}
+          blocker={blocker}
+          board={board}
+          cellSize={cellSize}
+          strokeWidth={strokeW}
+          onDone={() => onBlockedDone(arrow.id)}
+          onCollisionPoint={onCollisionPoint}
+        />
+      ))}
+
+      {/* Flashing arrow overlays — blocker briefly flashes red on collision */}
+      {flashingArrows.map((arrow, index) => (
+        <FlashingArrowOverlay
+          key={`flash-${arrow.id}-${index}`}
+          arrow={arrow}
+          cellSize={cellSize}
+          strokeWidth={strokeW}
         />
       ))}
 
@@ -136,21 +211,65 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
           onPress={(event) => {
             const { locationX, locationY } = event.nativeEvent;
             const arrow = findArrowAtPoint(board.arrows, locationX, locationY, cellSize);
-            if (arrow) onArrowPress(arrow.id);
+            if (arrow) {
+              setLocalTaps((prev) => [...prev, { id: Date.now(), x: locationX, y: locationY }]);
+              onArrowPress(arrow.id);
+            }
           }}
         />
       ) : null}
+
+      {localTaps.map((t) => (
+        <TapRipple
+          key={t.id}
+          x={t.x}
+          y={t.y}
+          cellSize={cellSize}
+          onDone={() => handleTapIndicatorDone(t.id)}
+        />
+      ))}
     </View>
   );
 });
 
+// ---------------------------------------------------------------------------
+// ExitingArrow — slides the removed arrow off the grid.
+// ---------------------------------------------------------------------------
 function ExitingArrow({
-  arrow, cellSize, strokeWidth: sw, onDone
+  arrow, cellSize, strokeWidth: sw, boardWidth, boardHeight, onDone
 }: {
-  arrow: ArrowNode; cellSize: number; strokeWidth: number; onDone: () => void;
+  arrow: ArrowNode;
+  cellSize: number;
+  strokeWidth: number;
+  boardWidth: number;
+  boardHeight: number;
+  onDone: () => void;
 }) {
   const animProgress = useSharedValue(0);
-  const opacity = useSharedValue(1);
+
+  const exitDir = getExitDirection(arrow);
+  const v = dirVec[exitDir];
+
+  const extensionLength = useMemo(() => {
+    const cells = arrow.fullPath;
+    if (cells.length === 0) return 0;
+    const first = cells[0]!;
+    const start = centerOf(first, cellSize);
+
+    let distanceToEdge = 0;
+    if (v.x > 0) { // moving RIGHT
+      distanceToEdge = boardWidth + CANVAS_PADDING - start.x;
+    } else if (v.x < 0) { // moving LEFT
+      distanceToEdge = start.x + CANVAS_PADDING;
+    } else if (v.y > 0) { // moving DOWN
+      distanceToEdge = boardHeight + CANVAS_PADDING - start.y;
+    } else if (v.y < 0) { // moving UP
+      distanceToEdge = start.y + CANVAS_PADDING;
+    }
+
+    // Add extra 100 pixels buffer to make sure it's completely past the padded canvas edge
+    return distanceToEdge + 100;
+  }, [arrow, cellSize, boardWidth, boardHeight, v]);
 
   const trackPath = useMemo(() => {
     const path = Skia.Path.Make();
@@ -159,44 +278,38 @@ function ExitingArrow({
 
     const first = cells[0]!;
     const start = centerOf(first, cellSize);
-    path.moveTo(start.x, start.y);
+    path.moveTo(start.x + CANVAS_PADDING, start.y + CANVAS_PADDING);
 
     for (let i = 1; i < cells.length; i++) {
       const pt = centerOf(cells[i]!, cellSize);
-      path.lineTo(pt.x, pt.y);
+      path.lineTo(pt.x + CANVAS_PADDING, pt.y + CANVAS_PADDING);
     }
 
     const head = cells[cells.length - 1]!;
-    const exitDir = getExitDirection(arrow);
-    const v = dirVec[exitDir];
     const lastCenter = centerOf(head, cellSize);
-    
-    const extensionLength = cellSize * EXIT_EXTENSION_CELLS;
+
     const exitEnd = {
-      x: lastCenter.x + v.x * extensionLength,
-      y: lastCenter.y + v.y * extensionLength,
+      x: lastCenter.x + v.x * extensionLength + CANVAS_PADDING,
+      y: lastCenter.y + v.y * extensionLength + CANVAS_PADDING
     };
     path.lineTo(exitEnd.x, exitEnd.y);
 
     return path;
-  }, [arrow, cellSize]);
+  }, [arrow, cellSize, extensionLength, v]);
 
-  const { totalLength, arrowLength, contour } = useMemo(() => {
+  const { totalLength, arrowLength } = useMemo(() => {
     const it = Skia.ContourMeasureIter(trackPath, false, 1);
     const contourVal = it.next();
     const trackLen = contourVal ? contourVal.length() : 0;
-    const arrowLen = Math.max(0, trackLen - cellSize * EXIT_EXTENSION_CELLS);
-    return { totalLength: trackLen, arrowLength: arrowLen, contour: contourVal };
-  }, [trackPath, cellSize]);
+    const arrowLen = Math.max(0, trackLen - extensionLength);
+    return { totalLength: trackLen, arrowLength: arrowLen };
+  }, [trackPath, extensionLength]);
 
   useEffect(() => {
     const duration = computeExitDurationMs(totalLength);
-    const moveEasing = Easing.bezier(0.22, 1, 0.36, 1);
-    const fadeDelay = Math.round(duration * 0.38);
-    const fadeDuration = Math.max(120, duration - fadeDelay);
+    const moveEasing = Easing.linear;
 
     animProgress.value = 0;
-    opacity.value = 1;
 
     animProgress.value = withTiming(
       1,
@@ -204,14 +317,6 @@ function ExitingArrow({
       (finished) => {
         if (finished) runOnJS(onDone)();
       }
-    );
-
-    opacity.value = withDelay(
-      fadeDelay,
-      withTiming(0, {
-        duration: fadeDuration,
-        easing: Easing.out(Easing.quad)
-      })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per mounted exit arrow
   }, [totalLength]);
@@ -226,53 +331,310 @@ function ExitingArrow({
     return (arrowLength + t * (totalLength - arrowLength)) / totalLength;
   });
 
+  // opacity styling removed
 
+  const originalHead = getArrowHead(arrow);
+  const originalHeadCenter = useMemo(() => {
+    const center = centerOf(originalHead, cellSize);
+    return { x: center.x + CANVAS_PADDING, y: center.y + CANVAS_PADDING };
+  }, [originalHead, cellSize]);
 
-  const animStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value
-  }));
+  const headPath = useMemo(() => makeHeadPath(originalHeadCenter, exitDir, cellSize), [originalHeadCenter, exitDir, cellSize]);
+
+  const headTransform = useDerivedValue(() => {
+    const t = animProgress.value;
+    const offset = t * (totalLength - arrowLength);
+    return [{ translateX: v.x * offset }, { translateY: v.y * offset }];
+  });
+
+  const pathColor = arrow.color || theme.colors.arrowStroke;
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, animStyle, { zIndex: 10 }]} pointerEvents="none">
+    <Animated.View
+      style={{
+        position: 'absolute',
+        left: -CANVAS_PADDING,
+        top: -CANVAS_PADDING,
+        width: boardWidth + 2 * CANVAS_PADDING,
+        height: boardHeight + 2 * CANVAS_PADDING,
+        zIndex: 10
+      }}
+      pointerEvents="none"
+    >
       <Canvas style={StyleSheet.absoluteFill}>
-        {/* Draw the moving body of the arrow */}
+        {/* Draw the moving shaft segment */}
         <Path
           path={trackPath}
           start={startVal}
           end={endVal}
-          color={theme.colors.arrowStroke}
+          color={pathColor}
           style="stroke"
           strokeCap="round"
           strokeJoin="round"
           strokeWidth={sw}
         />
         {/* Draw the moving arrowhead */}
-
+        <Group transform={headTransform}>
+          <Path
+            path={headPath}
+            color={pathColor}
+            style="stroke"
+            strokeCap="round"
+            strokeJoin="round"
+            strokeWidth={sw}
+          />
+        </Group>
       </Canvas>
     </Animated.View>
   );
 }
 
+// ---------------------------------------------------------------------------
+// BlockedArrowOverlay — turns arrow red, slides it forward into the blocker,
+// then snaps it back. Fires onCollisionPoint at the forward-most point.
+// ---------------------------------------------------------------------------
+function BlockedArrowOverlay({
+  arrow,
+  blocker,
+  board,
+  cellSize,
+  strokeWidth: sw,
+  onDone,
+  onCollisionPoint
+}: {
+  arrow: ArrowNode;
+  blocker: ArrowNode | null;
+  board: BoardState;
+  cellSize: number;
+  strokeWidth: number;
+  onDone: () => void;
+  onCollisionPoint: (blocker: ArrowNode | null) => void;
+}) {
+  const progress = useSharedValue(0);
+
+  const exitDir = getExitDirection(arrow);
+  const v = dirVec[exitDir];
+  
+  // Calculate cell steps to blocker
+  const cellsDistance = getCollisionDistance(arrow, board);
+  // Slide all the way to touch the blocker (offset 0.1 to avoid overlapping/clipping)
+  const slideDist = cellSize * Math.max(0.2, cellsDistance - 0.1);
+
+  // The track path is the shaft path plus an extension of length slideDist
+  const trackPath = useMemo(() => makeShaftPath(arrow, cellSize, slideDist), [arrow, cellSize, slideDist]);
+
+  const { totalLength, shaftLength } = useMemo(() => {
+    const it = Skia.ContourMeasureIter(trackPath, false, 1);
+    const contourVal = it.next();
+    const trackLen = contourVal ? contourVal.length() : 0;
+    const sLen = Math.max(0, trackLen - slideDist);
+    return { totalLength: trackLen, shaftLength: sLen };
+  }, [trackPath, slideDist]);
+
+  // Adjust timing organically based on distance
+  const forwardDuration = Math.max(140, Math.min(300, cellsDistance * 80));
+
+  useEffect(() => {
+    progress.value = 0;
+
+    progress.value = withTiming(
+      1,
+      { duration: forwardDuration, easing: Easing.bezier(0.25, 1, 0.5, 1) },
+      (fin) => {
+        if (fin) {
+          runOnJS(onCollisionPoint)(blocker);
+          
+          // Snap back with a premium snappy spring recoil bounce
+          progress.value = withSpring(0, {
+            damping: 15,
+            stiffness: 140,
+            mass: 0.6,
+          }, (fin2) => {
+            if (fin2) runOnJS(onDone)();
+          });
+        }
+      }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const startVal = useDerivedValue(() => {
+    const offset = progress.value * slideDist;
+    return totalLength > 0 ? (offset / totalLength) : 0;
+  });
+
+  const endVal = useDerivedValue(() => {
+    const offset = progress.value * slideDist;
+    return totalLength > 0 ? ((shaftLength + offset) / totalLength) : 0;
+  });
+
+  const originalHead = getArrowHead(arrow);
+  const originalHeadCenter = useMemo(() => centerOf(originalHead, cellSize), [originalHead, cellSize]);
+
+  const headPath = useMemo(() => makeHeadPath(originalHeadCenter, exitDir, cellSize), [originalHeadCenter, exitDir, cellSize]);
+
+  const headTransform = useDerivedValue(() => {
+    const offset = progress.value * slideDist;
+    return [{ translateX: v.x * offset }, { translateY: v.y * offset }];
+  });
+
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, { zIndex: 20 }]}
+      pointerEvents="none"
+    >
+      <Canvas style={StyleSheet.absoluteFill}>
+        {/* Draw the moving shaft segment */}
+        <Path
+          path={trackPath}
+          start={startVal}
+          end={endVal}
+          color="#FF3B30"
+          style="stroke"
+          strokeCap="round"
+          strokeJoin="round"
+          strokeWidth={sw}
+        />
+        {/* Draw the moving arrowhead */}
+        <Group transform={headTransform}>
+          <Path
+            path={headPath}
+            color="#FF3B30"
+            style="stroke"
+            strokeCap="round"
+            strokeJoin="round"
+            strokeWidth={sw}
+          />
+        </Group>
+      </Canvas>
+    </Animated.View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FlashingArrowOverlay — briefly shows the blocker in red, then fades away.
+// ---------------------------------------------------------------------------
+function FlashingArrowOverlay({
+  arrow,
+  cellSize,
+  strokeWidth: sw
+}: {
+  arrow: ArrowNode;
+  cellSize: number;
+  strokeWidth: number;
+}) {
+  const flashOpacity = useSharedValue(1);
+  const shake = useSharedValue(0);
+
+  const arrowPath = useMemo(() => makeArrowPath(arrow, cellSize), [arrow, cellSize]);
+
+  useEffect(() => {
+    // Hold bright red briefly, then fade out the red overlay
+    flashOpacity.value = withSequence(
+      withTiming(1, { duration: 50, easing: Easing.out(Easing.quad) }),
+      withDelay(50, withTiming(0, { duration: 350, easing: Easing.bezier(0.25, 1, 0.5, 1) }))
+    );
+
+    // Organic decay shake animation on impact using spring
+    shake.value = 6;
+    shake.value = withSpring(0, {
+      damping: 5,
+      stiffness: 280,
+      mass: 0.6
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: shake.value },
+      { translateY: shake.value * 0.5 } // Shake slightly diagonally for a organic shockwave feel
+    ]
+  }));
+
+  const redOverlayStyle = useAnimatedStyle(() => ({
+    opacity: flashOpacity.value
+  }));
+
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, animStyle, { zIndex: 15 }]}
+      pointerEvents="none"
+    >
+      {/* 1. Base arrow in normal color so it stays visible while flashing/shaking */}
+      <Canvas style={StyleSheet.absoluteFill}>
+        <Path
+          path={arrowPath}
+          color={theme.colors.arrowStroke}
+          style="stroke"
+          strokeCap="round"
+          strokeJoin="round"
+          strokeWidth={sw}
+        />
+      </Canvas>
+
+      {/* 2. Red overlay that wiggles and fades out */}
+      <Animated.View style={[StyleSheet.absoluteFill, redOverlayStyle]} pointerEvents="none">
+        <Canvas style={StyleSheet.absoluteFill}>
+          <Path
+            path={arrowPath}
+            color="#FF3B30"
+            style="stroke"
+            strokeCap="round"
+            strokeJoin="round"
+            strokeWidth={sw}
+          />
+        </Canvas>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 /**
  * Build a Skia path that traces through all fullPath cells and draws an arrowhead at the tip.
  */
-function makeArrowPath(arrow: ArrowNode, cellSize: number) {
+function makeShaftPath(arrow: ArrowNode, cellSize: number, extensionLength = 0) {
   const path = Skia.Path.Make();
   const cells = arrow.fullPath;
-
   if (cells.length === 0) return path;
 
   const first = cells[0]!;
   const start = centerOf(first, cellSize);
   path.moveTo(start.x, start.y);
 
-  // Draw polyline through every cell
   for (let i = 1; i < cells.length; i++) {
     const pt = centerOf(cells[i]!, cellSize);
     path.lineTo(pt.x, pt.y);
   }
 
-  // Draw arrowhead at the tip
+  if (extensionLength > 0) {
+    const head = cells[cells.length - 1]!;
+    const exitDir = getExitDirection(arrow);
+    const v = dirVec[exitDir];
+    const lastCenter = centerOf(head, cellSize);
+    path.lineTo(lastCenter.x + v.x * extensionLength, lastCenter.y + v.y * extensionLength);
+  }
+
+  return path;
+}
+
+function makeHeadPath(headCenter: { x: number; y: number }, exitDir: Direction, cellSize: number) {
+  const path = Skia.Path.Make();
+  const headPoints = getHeadPoints(headCenter, exitDir, cellSize);
+
+  path.moveTo(headPoints.left.x, headPoints.left.y);
+  path.lineTo(headCenter.x, headCenter.y);
+  path.lineTo(headPoints.right.x, headPoints.right.y);
+
+  return path;
+}
+
+function makeArrowPath(arrow: ArrowNode, cellSize: number) {
+  const path = makeShaftPath(arrow, cellSize);
   const head = getArrowHead(arrow);
   const end = centerOf(head, cellSize);
   const exitDir = getExitDirection(arrow);
@@ -286,7 +648,7 @@ function makeArrowPath(arrow: ArrowNode, cellSize: number) {
 }
 
 function centerOf(pos: { x: number; y: number }, cellSize: number) {
-  return { x: pos.x * cellSize + cellSize / 2, y: pos.y * cellSize + cellSize / 2 };
+  return { x: pos.x * cellSize + (cellSize / 2), y: pos.y * cellSize + (cellSize / 2) };
 }
 
 function getHeadPoints(pt: { x: number; y: number }, dir: Direction, cellSize: number) {
@@ -309,5 +671,63 @@ export function findArrowAtPoint(arrows: ArrowNode[], x: number, y: number, cell
 }
 
 const styles = StyleSheet.create({
-  container: { overflow: 'visible' }
+  container: { overflow: 'visible' },
+  ripple: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: '#FFD54F',
+    backgroundColor: 'rgba(255, 213, 79, 0.25)',
+    zIndex: 30
+  }
 });
+
+// ---------------------------------------------------------------------------
+// TapRipple — brief touch indicator feedback circle
+// ---------------------------------------------------------------------------
+function TapRipple({
+  x,
+  y,
+  cellSize,
+  onDone
+}: {
+  x: number;
+  y: number;
+  cellSize: number;
+  onDone: () => void;
+}) {
+  const scale = useSharedValue(0.3);
+  const opacity = useSharedValue(0.9);
+
+  const rippleSize = cellSize * 0.8;
+
+  useEffect(() => {
+    scale.value = withTiming(1.3, { duration: 300, easing: Easing.out(Easing.quad) });
+    opacity.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.quad) }, (fin) => {
+      if (fin) runOnJS(onDone)();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }]
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.ripple,
+        animStyle,
+        {
+          width: rippleSize,
+          height: rippleSize,
+          borderRadius: (rippleSize / 2),
+          left: (x - rippleSize / 2),
+          top: (y - rippleSize / 2),
+        }
+      ]}
+      pointerEvents="none"
+    />
+  );
+}
+

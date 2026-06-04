@@ -17,12 +17,14 @@ import { findArrowAtPoint, PuzzleBoardCanvas } from '../components/PuzzleBoardCa
 import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
 import { SettingsModal } from '../components/SettingsModal';
 import { StarRatingDisplay } from '../components/StarRatingDisplay';
-import { isFrontClear } from '../game/engine';
+import { findBlockingArrow, isFrontClear } from '../game/engine';
 import type { ArrowNode } from '../game/types';
 import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
+
+type BlockedArrowEntry = { arrow: ArrowNode; blocker: ArrowNode | null };
 
 export function GameplayScreen() {
   const navigation = useNavigation<AppNavigation>();
@@ -40,12 +42,15 @@ export function GameplayScreen() {
 
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
+  const [blockedArrows, setBlockedArrows] = useState<BlockedArrowEntry[]>([]);
+  const [flashingArrows, setFlashingArrows] = useState<ArrowNode[]>([]);
+  const [lastTap, setLastTap] = useState<{ x: number; y: number; timestamp: number } | undefined>(undefined);
   const pendingNav = useRef<'Victory' | 'Fail' | null>(null);
   const boardScale = useSharedValue(1);
   const boardOpacity = useSharedValue(1);
 
-  const maxW = width * 0.95;
-  const maxH = height * 0.45;
+  const maxW = width * 0.82;
+  const maxH = height * 0.38;
   const { columns, rows } = board.level.gridSize;
   const sizeFromWidth = maxW / columns;
   const sizeFromHeight = maxH / rows;
@@ -55,7 +60,8 @@ export function GameplayScreen() {
 
   const animatedBoardStyle = useAnimatedStyle(() => ({
     transform: [{ scale: boardScale.value }],
-    opacity: boardOpacity.value
+    opacity: boardOpacity.value,
+    overflow: 'visible'
   }));
 
   useEffect(() => {
@@ -69,32 +75,61 @@ export function GameplayScreen() {
     }
   }, [status, exitingArrows.length, navigation]);
 
+  // Clear animation queues on level change (retry / next level).
+  useEffect(() => {
+    setExitingArrows([]);
+    setBlockedArrows([]);
+    setFlashingArrows([]);
+  }, [currentLevelId]);
+
   useEffect(() => {
     boardOpacity.value = 0;
-    boardScale.value = 0.96;
-    boardOpacity.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) });
-    boardScale.value = withSpring(1, { damping: 14, stiffness: 120 });
+    boardScale.value = 0.94;
+    boardOpacity.value = withTiming(1, { duration: 400, easing: Easing.bezier(0.16, 1, 0.3, 1) });
+    boardScale.value = withSpring(1, { damping: 15, stiffness: 100, mass: 0.8 });
   }, [currentLevelId]);
 
   const handleExitDone = useCallback((arrowId: string) => {
     setExitingArrows((prev) => prev.filter((a) => a.id !== arrowId));
   }, []);
 
-  const handleArrowPress = useCallback((arrowId: string) => {
-    const currentBoard = useGameStore.getState().board;
-    const arrow = currentBoard.arrows.find((a) => a.id === arrowId);
-    const result = tapArrow(arrowId);
+  const handleBlockedDone = useCallback((arrowId: string) => {
+    setBlockedArrows((prev) => prev.filter((b) => b.arrow.id !== arrowId));
+  }, []);
 
-    if (result === 'REMOVED' && arrow) {
-      setExitingArrows((prev) => [...prev, arrow]);
-      void playCorrectFeedback();
-    } else if (result === 'BLOCKED') {
-      void playWrongFeedback(hapticsEnabled);
-    }
-  }, [tapArrow, hapticsEnabled]);
+  /** Called at the collision moment in BlockedArrowOverlay — flash the blocker red. */
+  const handleCollisionPoint = useCallback((blocker: ArrowNode | null) => {
+    if (!blocker) return;
+    setFlashingArrows((prev) => [...prev, blocker]);
+    // Remove after the flash animation completes (~460ms total in FlashingArrowOverlay).
+    setTimeout(() => {
+      setFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
+    }, 520);
+  }, []);
+
+  const handleArrowPress = useCallback(
+    (arrowId: string) => {
+      // Snapshot the board BEFORE the tap so we can find the blocker correctly.
+      const boardBefore = useGameStore.getState().board;
+      const arrow = boardBefore.arrows.find((a) => a.id === arrowId);
+      const result = tapArrow(arrowId);
+
+      if (result === 'REMOVED' && arrow) {
+        setExitingArrows((prev) => [...prev, { ...arrow, color: '#43A047' }]);
+        void playCorrectFeedback();
+      } else if (result === 'BLOCKED' && arrow) {
+        // Find which arrow is physically blocking, then start the red-slide animation.
+        const blocker = findBlockingArrow(arrow, boardBefore) ?? null;
+        setBlockedArrows((prev) => [...prev, { arrow, blocker }]);
+        void playWrongFeedback(hapticsEnabled);
+      }
+    },
+    [tapArrow, hapticsEnabled]
+  );
 
   const handleBoardPress = useCallback(
     (x: number, y: number) => {
+      setLastTap({ x, y, timestamp: Date.now() });
       const currentBoard = useGameStore.getState().board;
       const arrow = findArrowAtPoint(currentBoard.arrows, x, y, cellSize);
       if (arrow) handleArrowPress(arrow.id);
@@ -112,7 +147,7 @@ export function GameplayScreen() {
     const hintArrow = currentBoard.arrows.find((a) => isFrontClear(a, currentBoard));
     const hintedId = useHint();
     if (hintedId && hintArrow) {
-      setExitingArrows((prev) => [...prev, hintArrow]);
+      setExitingArrows((prev) => [...prev, { ...hintArrow, color: '#43A047' }]);
       void playCorrectFeedback();
     } else {
       Alert.alert('No Hint', 'No valid move right now. Try Undo!');
@@ -143,10 +178,15 @@ export function GameplayScreen() {
             <PuzzleBoardCanvas
               board={board}
               exitingArrows={exitingArrows}
+              blockedArrows={blockedArrows}
+              flashingArrows={flashingArrows}
               width={boardWidth}
               enableTouch={false}
               onArrowPress={handleArrowPress}
               onExitDone={handleExitDone}
+              onBlockedDone={handleBlockedDone}
+              onCollisionPoint={handleCollisionPoint}
+              lastTap={lastTap}
             />
           </Animated.View>
         </ZoomableBoardViewport>
@@ -157,13 +197,13 @@ export function GameplayScreen() {
         onRestart={retry}
         hintDisabled={hintUsedThisLevel}
       />
-      <SettingsModal 
-        visible={settingsVisible} 
-        onClose={() => setSettingsVisible(false)} 
+      <SettingsModal
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
         onRestart={() => {
           setSettingsVisible(false);
           retry();
-        }} 
+        }}
       />
     </SafeAreaView>
   );
@@ -171,5 +211,5 @@ export function GameplayScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
-  boardStage: { flex: 1, width: '100%' }
+  boardStage: { flex: 1, width: '100%', overflow: 'visible' }
 });

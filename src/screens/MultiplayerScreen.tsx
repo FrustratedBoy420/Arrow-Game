@@ -17,7 +17,6 @@ import {
   useWindowDimensions,
   View
 } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -32,7 +31,7 @@ import { AmbientBackground } from '../components/AmbientBackground';
 import { LivesIndicator } from '../components/LivesIndicator';
 import { findArrowAtPoint, PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
 import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
-import { createInitialBoard, resolveTap } from '../game/engine';
+import { createInitialBoard, findBlockingArrow, resolveTap } from '../game/engine';
 import type { ArrowNode, BoardState, LevelDefinition } from '../game/types';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
@@ -59,7 +58,7 @@ function getElapsedMs(startedAt: number | null): number | null {
 
 interface ServerPlayer {
   name: string;
-  status: 'playing' | 'won' | 'failed' | 'abandoned';
+  status: 'playing' | 'won' | 'failed' | 'failed_lives' | 'abandoned';
   timeMs: number | null;
   arrowsLeft: number | null;
 }
@@ -91,6 +90,8 @@ export function MultiplayerScreen() {
   const [roomCode, setRoomCode] = useState('');
   const [step, setStep] = useState<MultiplayerStep>('setup');
   const [connecting, setConnecting] = useState(false);
+  const [lobbySecondsLeft, setLobbySecondsLeft] = useState(120);
+  const roomCreatedAtRef = useRef<number | null>(null);
   const [players, setPlayers] = useState<string[]>([]);
   const [readyStates, setReadyStates] = useState<Record<string, boolean>>({});
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -99,6 +100,9 @@ export function MultiplayerScreen() {
   const [level, setLevel] = useState<LevelDefinition | null>(null);
   const [board, setBoard] = useState<BoardState | null>(null);
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
+  const [blockedArrows, setBlockedArrows] = useState<{ arrow: ArrowNode; blocker: ArrowNode | null }[]>([]);
+  const [flashingArrows, setFlashingArrows] = useState<ArrowNode[]>([]);
+  const [lastTap, setLastTap] = useState<{ x: number; y: number; timestamp: number } | undefined>(undefined);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   
@@ -135,6 +139,8 @@ export function MultiplayerScreen() {
   useEffect(() => {
     confirmedClearsRef.current = confirmedClears;
   }, [confirmedClears]);
+
+
 
   const computeScores = useCallback((owners: Record<string, string>) => {
     const nextScores: Record<string, number> = {};
@@ -293,7 +299,12 @@ export function MultiplayerScreen() {
         throw new Error(resData?.data?.message || resData?.error || 'Request failed');
       }
 
-      const { roomCode: newCode, players: roomPlayers, level: newLevel } = resData.data;
+      const { roomCode: newCode, players: roomPlayers, level: newLevel, createdAt } = resData.data;
+      if (createdAt) {
+        roomCreatedAtRef.current = createdAt;
+      } else {
+        roomCreatedAtRef.current = Date.now();
+      }
 
       await AsyncStorage.setItem('multiplayer_name', trimmedName);
       await AsyncStorage.setItem('multiplayer_url', trimmedUrl);
@@ -422,6 +433,72 @@ export function MultiplayerScreen() {
     return resData;
   }, [serverUrl]);
 
+  const handleLobbyTimeout = useCallback(async (reason: 'lobby' | 'session' = 'lobby') => {
+    const code = roomCodeRef.current;
+    if (code) {
+      try {
+        await apiPost('/api/leave-room', {
+          name: playerNameRef.current,
+          roomCode: code.trim().toUpperCase(),
+          terminate: true
+        });
+      } catch (err) {
+        console.warn('Lobby timeout leave-room API call failed:', err);
+      }
+    }
+    if (reason === 'session') {
+      Alert.alert('Session Expired', 'The room code has expired after 1 hour. Please generate a new code.');
+    } else {
+      Alert.alert('Lobby Terminated', 'Lobby has been terminated due to 2-minute inactivity.');
+    }
+    disconnectPusher();
+    gameStartedAtRef.current = null;
+    setStep('setup');
+    setRoomCode('');
+    setPlayers([]);
+    setLevel(null);
+    setBoard(null);
+    setLocalPlayerTimes({});
+    setArrowOwners({});
+    setConfirmedClears({});
+  }, [apiPost]);
+
+  useEffect(() => {
+    if (step !== 'lobby') return;
+
+    setLobbySecondsLeft(120);
+
+    const intervalId = setInterval(() => {
+      setLobbySecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(intervalId);
+          void handleLobbyTimeout('lobby');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [step, players, readyStates, handleLobbyTimeout]);
+
+  // 1-hour room expiration check
+  useEffect(() => {
+    if (!roomCode || !roomCreatedAtRef.current) return;
+
+    const checkExpiration = () => {
+      const elapsed = Date.now() - roomCreatedAtRef.current!;
+      if (elapsed >= 3600000) { // 1 hour in ms
+        void handleLobbyTimeout('session');
+      }
+    };
+
+    checkExpiration();
+    const intervalId = setInterval(checkExpiration, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [roomCode, handleLobbyTimeout]);
+
   const startCountdownTimer = (gameStartsAt: number, countdownSeconds: number) => {
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
@@ -466,9 +543,9 @@ export function MultiplayerScreen() {
           setStep('game');
           
           boardOpacity.value = 0;
-          boardScale.value = 0.95;
-          boardOpacity.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) });
-          boardScale.value = withSpring(1, { damping: 14, stiffness: 120 });
+          boardScale.value = 0.94;
+          boardOpacity.value = withTiming(1, { duration: 400, easing: Easing.bezier(0.16, 1, 0.3, 1) });
+          boardScale.value = withSpring(1, { damping: 15, stiffness: 100, mass: 0.8 });
         }
       } else {
         setCountdown(remainingSeconds);
@@ -571,7 +648,22 @@ export function MultiplayerScreen() {
             return nextConfirmed;
           });
 
-          // 4. Update the board state to filter out any cleared arrows
+          // 4. Reconcile exiting arrows color based on server verified ownership
+          setExitingArrows((currentExiting) => {
+            return currentExiting.map((arrow) => {
+              const verifiedOwner = nextOwners[arrow.id];
+              if (verifiedOwner) {
+                const isMe = verifiedOwner.toLowerCase() === playerNameRef.current.trim().toLowerCase();
+                const expectedColor = isMe ? '#43A047' : '#2196F3';
+                if (arrow.color !== expectedColor) {
+                  return { ...arrow, color: expectedColor };
+                }
+              }
+              return arrow;
+            });
+          });
+
+          // 5. Update the board state to filter out any cleared arrows
           setBoard((currentBoard) => {
             if (!currentBoard) return null;
 
@@ -589,7 +681,7 @@ export function MultiplayerScreen() {
             if (arrowNode && progressName.toLowerCase() !== me) {
               setExitingArrows((prev) => {
                 if (!prev.some((a) => a.id === arrowNode.id)) {
-                  return [...prev, arrowNode];
+                  return [...prev, { ...arrowNode, color: '#2196F3' }]; // Opponent exit color is blue
                 }
                 return prev;
               });
@@ -675,7 +767,7 @@ export function MultiplayerScreen() {
       });
 
       pusher.connection.bind('error', (err: any) => {
-        console.error('Pusher connection error:', err);
+        console.warn('Pusher connection warning/error:', err);
       });
 
       pusher.connection.bind('state_change', (states: any) => {
@@ -710,7 +802,12 @@ export function MultiplayerScreen() {
     setConnecting(true);
     try {
       const res = await apiPost('/api/create-room', { name: playerName.trim() });
-      const { roomCode: newCode, players: roomPlayers, level: newLevel } = res.data;
+      const { roomCode: newCode, players: roomPlayers, level: newLevel, createdAt } = res.data;
+      if (createdAt) {
+        roomCreatedAtRef.current = createdAt;
+      } else {
+        roomCreatedAtRef.current = Date.now();
+      }
       
       await AsyncStorage.setItem('multiplayer_name', playerName.trim());
       await AsyncStorage.setItem('multiplayer_url', serverUrl.trim());
@@ -740,10 +837,9 @@ export function MultiplayerScreen() {
   const handleCopyCode = async () => {
     if (!roomCode) return;
     try {
-      await Clipboard.setStringAsync(roomCode);
-      Alert.alert('Copied', 'Room code copied to clipboard!');
+      await Share.share({ message: roomCode, title: 'Room Code' });
     } catch (err) {
-      console.error('Failed to copy room code:', err);
+      console.error('Failed to share room code:', err);
     }
   };
 
@@ -829,6 +925,18 @@ export function MultiplayerScreen() {
     setExitingArrows((prev) => prev.filter((a) => a.id !== arrowId));
   }, []);
 
+  const handleBlockedDone = useCallback((arrowId: string) => {
+    setBlockedArrows((prev) => prev.filter((b) => b.arrow.id !== arrowId));
+  }, []);
+
+  const handleCollisionPoint = useCallback((blocker: import('../game/types').ArrowNode | null) => {
+    if (!blocker) return;
+    setFlashingArrows((prev) => [...prev, blocker]);
+    setTimeout(() => {
+      setFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
+    }, 520);
+  }, []);
+
   const handleArrowPress = useCallback((arrowId: string) => {
     if (!roomCode) return;
 
@@ -845,7 +953,7 @@ export function MultiplayerScreen() {
       const result = resolveTap(arrowId, currentBoard);
 
       if (result.type === 'REMOVED' && arrow) {
-        setExitingArrows((prev) => [...prev, arrow]);
+        setExitingArrows((prev) => [...prev, { ...arrow, color: '#43A047' }]);
         void playCorrectFeedback();
 
         const nextBoard = result.board;
@@ -887,8 +995,24 @@ export function MultiplayerScreen() {
         }
 
         return nextBoard;
-      } else if (result.type === 'BLOCKED') {
+      } else if (result.type === 'BLOCKED' && arrow) {
+        // Find which arrow is physically blocking, then start the red-slide animation.
+        const blocker = findBlockingArrow(arrow, currentBoard) ?? null;
+        setBlockedArrows((prev) => [...prev, { arrow, blocker }]);
         void playWrongFeedback(hapticsEnabled);
+
+        const nextBoard = result.board;
+        if (nextBoard.livesLeft <= 0) {
+          const myName = playerNameRef.current;
+          const code = roomCode;
+          if (code) {
+            apiPost('/api/player-failed', {
+              name: myName,
+              roomCode: code.trim().toUpperCase()
+            }).catch((err) => console.error('Failed to notify failed:', err));
+          }
+        }
+        return nextBoard;
       }
 
       return currentBoard;
@@ -902,7 +1026,8 @@ export function MultiplayerScreen() {
   // Animated Board styling
   const animatedBoardStyle = useAnimatedStyle(() => ({
     transform: [{ scale: boardScale.value }],
-    opacity: boardOpacity.value
+    opacity: boardOpacity.value,
+    overflow: 'visible'
   }));
 
   // Render Sub-Views
@@ -1020,6 +1145,10 @@ export function MultiplayerScreen() {
 
         <Text style={styles.lobbySub}>Tap code to copy, or Share Link with friends</Text>
 
+        <Text style={styles.lobbyTimer}>
+          ⏳ Lobby expires in {Math.floor(lobbySecondsLeft / 60)}:{(lobbySecondsLeft % 60).toString().padStart(2, '0')} (auto-terminate)
+        </Text>
+
         <View style={styles.playersCard}>
           <Text style={styles.cardHeader}>PLAYERS IN LOBBY</Text>
           
@@ -1080,8 +1209,8 @@ export function MultiplayerScreen() {
   const renderGame = () => {
     if (!board || !level) return null;
 
-    const maxW = width * 0.95;
-    const maxH = height * 0.52;
+    const maxW = width * 0.82;
+    const maxH = height * 0.44;
     const { columns, rows } = board.level.gridSize;
     const sizeFromWidth = maxW / columns;
     const sizeFromHeight = maxH / rows;
@@ -1090,6 +1219,7 @@ export function MultiplayerScreen() {
     const boardHeight = cellSize * rows;
 
     const handleBoardPress = (x: number, y: number) => {
+      setLastTap({ x, y, timestamp: Date.now() });
       const arrow = findArrowAtPoint(board.arrows, x, y, cellSize);
       if (arrow) handleArrowPress(arrow.id);
     };
@@ -1159,6 +1289,9 @@ export function MultiplayerScreen() {
           </Text>
         </View>
 
+        {/* Lives Indicator */}
+        <LivesIndicator livesLeft={board.livesLeft} />
+
         {/* Puzzle Canvas */}
         <View style={styles.boardStage}>
           <ZoomableBoardViewport
@@ -1171,10 +1304,15 @@ export function MultiplayerScreen() {
               <PuzzleBoardCanvas
                 board={board}
                 exitingArrows={exitingArrows}
+                blockedArrows={blockedArrows}
+                flashingArrows={flashingArrows}
                 width={boardWidth}
                 enableTouch={false}
                 onArrowPress={handleArrowPress}
                 onExitDone={handleExitDone}
+                onBlockedDone={handleBlockedDone}
+                onCollisionPoint={handleCollisionPoint}
+                lastTap={lastTap}
               />
             </Animated.View>
           </ZoomableBoardViewport>
@@ -1201,6 +1339,9 @@ export function MultiplayerScreen() {
     const didIAbandon = abandonedPlayer && abandonedPlayer.name.toLowerCase() === playerName.toLowerCase();
 
     const getSharedBoardWinner = (): string => {
+      if (matchWinner) {
+        return matchWinner;
+      }
       if (abandonedPlayer) {
         return matchWinner || 'None'; // Use server winner if someone resigned
       }
@@ -1225,6 +1366,12 @@ export function MultiplayerScreen() {
     let titleText: string;
     let subtitleText: string;
 
+    const myResult = matchResults.find(r => r.name.toLowerCase() === playerName.toLowerCase());
+    const oppResult = matchResults.find(r => r.name.toLowerCase() === otherPlayer.toLowerCase());
+
+    const isMyStatusFailed = myResult && myResult.status === 'failed_lives';
+    const isOppStatusFailed = oppResult && oppResult.status === 'failed_lives';
+
     if (isDraw) {
       titleText = 'DRAW MATCH';
       subtitleText = `Equal performance! Both players cleared ${scores[playerName] || 0} arrows.`;
@@ -1236,10 +1383,18 @@ export function MultiplayerScreen() {
       subtitleText = `${matchWinner} wins by default.`;
     } else if (isMeWinner) {
       titleText = 'YOU WON!';
-      subtitleText = `You removed more arrows (${scores[playerName] || 0} vs ${scores[otherPlayer] || 0})!`;
+      if (isOppStatusFailed) {
+        subtitleText = `${otherPlayer} lost all lives — Victory is yours!`;
+      } else {
+        subtitleText = `You removed more arrows (${scores[playerName] || 0} vs ${scores[otherPlayer] || 0})!`;
+      }
     } else {
       titleText = 'YOU LOST';
-      subtitleText = `${localWinner} removed more arrows (${scores[localWinner] || 0} vs ${scores[playerName] || 0}).`;
+      if (isMyStatusFailed) {
+        subtitleText = `You lost all 3 lives! ${localWinner} wins.`;
+      } else {
+        subtitleText = `${localWinner} removed more arrows (${scores[localWinner] || 0} vs ${scores[playerName] || 0}).`;
+      }
     }
 
     return (
@@ -1294,9 +1449,21 @@ export function MultiplayerScreen() {
                 </View>
 
                 {/* Status badge */}
-                <View style={[styles.statusBadge, { backgroundColor: isWinner && !isDraw ? '#FFF9C4' : '#E8F5E9' }]}>
-                  <Text style={[styles.statusBadgeText, { color: isWinner && !isDraw ? '#F57F17' : '#2E7D32' }]}>
-                    {result.status === 'abandoned' ? 'Resigned' : `${playerScore} arrows`}
+                <View style={[styles.statusBadge, { 
+                  backgroundColor: result.status === 'failed_lives' 
+                    ? '#FFEBEE' 
+                    : (isWinner && !isDraw ? '#FFF9C4' : '#E8F5E9') 
+                }]}>
+                  <Text style={[styles.statusBadgeText, { 
+                    color: result.status === 'failed_lives' 
+                       ? '#C62828' 
+                       : (isWinner && !isDraw ? '#F57F17' : '#2E7D32') 
+                  }]}>
+                    {result.status === 'abandoned' 
+                      ? 'Resigned' 
+                      : result.status === 'failed_lives' 
+                      ? 'Out of Lives' 
+                      : `${playerScore} arrows`}
                   </Text>
                 </View>
               </View>
@@ -1571,6 +1738,19 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     fontWeight: '600'
   },
+  lobbyTimer: {
+    fontSize: 14,
+    color: theme.colors.lifeRed,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 20,
+    backgroundColor: '#FFEBEE',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: '#FFCDD2'
+  },
   playersCard: {
     backgroundColor: '#FFF',
     width: '100%',
@@ -1727,7 +1907,8 @@ const styles = StyleSheet.create({
   boardStage: {
     flex: 1,
     width: '100%',
-    marginVertical: 6
+    marginVertical: 6,
+    overflow: 'visible'
   },
   battleControls: {
     flexDirection: 'row',

@@ -11,6 +11,7 @@ export type ArrowNode = {
   id: string;
   path: GridPosition[];      // waypoints / corner points
   fullPath: GridPosition[];   // every cell the arrow occupies
+  color?: string;             // dynamic overlay/exit color
 };
 
 export type LevelDefinition = {
