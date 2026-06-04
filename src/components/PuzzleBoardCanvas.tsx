@@ -1,5 +1,5 @@
 import { Canvas, Circle, Group, Path, Skia } from '@shopify/react-native-skia';
-import { useEffect, useMemo, memo } from 'react';
+import { useEffect, useMemo, memo, useState, useCallback } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -35,16 +35,20 @@ type Props = {
   onCollisionPoint?: (blocker: ArrowNode | null) => void;
   /** When false, taps are handled by an outer zoom wrapper (Gameplay / Multiplayer). */
   enableTouch?: boolean;
+  /** Coordinate of the last touch/tap for displaying tap feedback. */
+  lastTap?: { x: number; y: number; timestamp: number } | undefined;
 };
 
 const arrowHeadSize = 12;
 
 /** How far past the head the arrow slides off-screen (in grid cells). */
-const EXIT_EXTENSION_CELLS = 3;
+const EXIT_EXTENSION_CELLS = 12;
 /** Target slide speed — scales duration by path length so all arrows feel snappy but smooth. */
-const EXIT_SPEED_PX_PER_SEC = 120;
-const EXIT_DURATION_MIN_MS = 500;
-const EXIT_DURATION_MAX_MS = 1800;
+const EXIT_SPEED_PX_PER_SEC = 100;
+const EXIT_DURATION_MIN_MS = 600;
+const EXIT_DURATION_MAX_MS = 4000;
+
+const CANVAS_PADDING = 500;
 
 /** How far the blocked arrow slides forward before snapping back (fraction of a cell). */
 const BLOCKED_SLIDE_CELLS = 0.55;
@@ -75,8 +79,20 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
   onExitDone,
   onBlockedDone = () => {},
   onCollisionPoint = () => {},
-  enableTouch = true
+  enableTouch = true,
+  lastTap
 }: Props) {
+  const [localTaps, setLocalTaps] = useState<{ id: number; x: number; y: number }[]>([]);
+
+  useEffect(() => {
+    if (lastTap) {
+      setLocalTaps((prev) => [...prev, { id: lastTap.timestamp, x: lastTap.x, y: lastTap.y }]);
+    }
+  }, [lastTap]);
+
+  const handleTapIndicatorDone = useCallback((id: number) => {
+    setLocalTaps((prev) => prev.filter((t) => t.id !== id));
+  }, []);
   const cellSize = width / board.level.gridSize.columns;
   const height = cellSize * board.level.gridSize.rows;
   const strokeW = Math.max(3, cellSize * 0.13);
@@ -161,6 +177,8 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
           arrow={arrow}
           cellSize={cellSize}
           strokeWidth={strokeW}
+          boardWidth={width}
+          boardHeight={height}
           onDone={() => onExitDone(arrow.id)}
         />
       ))}
@@ -195,10 +213,23 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
           onPress={(event) => {
             const { locationX, locationY } = event.nativeEvent;
             const arrow = findArrowAtPoint(board.arrows, locationX, locationY, cellSize);
-            if (arrow) onArrowPress(arrow.id);
+            if (arrow) {
+              setLocalTaps((prev) => [...prev, { id: Date.now(), x: locationX, y: locationY }]);
+              onArrowPress(arrow.id);
+            }
           }}
         />
       ) : null}
+
+      {localTaps.map((t) => (
+        <TapRipple
+          key={t.id}
+          x={t.x}
+          y={t.y}
+          cellSize={cellSize}
+          onDone={() => handleTapIndicatorDone(t.id)}
+        />
+      ))}
     </View>
   );
 });
@@ -207,12 +238,16 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
 // ExitingArrow — slides the removed arrow off the grid.
 // ---------------------------------------------------------------------------
 function ExitingArrow({
-  arrow, cellSize, strokeWidth: sw, onDone
+  arrow, cellSize, strokeWidth: sw, boardWidth, boardHeight, onDone
 }: {
-  arrow: ArrowNode; cellSize: number; strokeWidth: number; onDone: () => void;
+  arrow: ArrowNode;
+  cellSize: number;
+  strokeWidth: number;
+  boardWidth: number;
+  boardHeight: number;
+  onDone: () => void;
 }) {
   const animProgress = useSharedValue(0);
-  const opacity = useSharedValue(1);
 
   const exitDir = getExitDirection(arrow);
   const v = dirVec[exitDir];
@@ -224,11 +259,11 @@ function ExitingArrow({
 
     const first = cells[0]!;
     const start = centerOf(first, cellSize);
-    path.moveTo(start.x, start.y);
+    path.moveTo(start.x + CANVAS_PADDING, start.y + CANVAS_PADDING);
 
     for (let i = 1; i < cells.length; i++) {
       const pt = centerOf(cells[i]!, cellSize);
-      path.lineTo(pt.x, pt.y);
+      path.lineTo(pt.x + CANVAS_PADDING, pt.y + CANVAS_PADDING);
     }
 
     const head = cells[cells.length - 1]!;
@@ -236,8 +271,8 @@ function ExitingArrow({
 
     const extensionLength = cellSize * EXIT_EXTENSION_CELLS;
     const exitEnd = {
-      x: lastCenter.x + v.x * extensionLength,
-      y: lastCenter.y + v.y * extensionLength
+      x: lastCenter.x + v.x * extensionLength + CANVAS_PADDING,
+      y: lastCenter.y + v.y * extensionLength + CANVAS_PADDING
     };
     path.lineTo(exitEnd.x, exitEnd.y);
 
@@ -254,12 +289,9 @@ function ExitingArrow({
 
   useEffect(() => {
     const duration = computeExitDurationMs(totalLength);
-    const moveEasing = Easing.bezier(0.22, 1, 0.36, 1);
-    const fadeDelay = Math.round(duration * 0.38);
-    const fadeDuration = Math.max(120, duration - fadeDelay);
+    const moveEasing = Easing.bezier(0.16, 1, 0.3, 1);
 
     animProgress.value = 0;
-    opacity.value = 1;
 
     animProgress.value = withTiming(
       1,
@@ -267,14 +299,6 @@ function ExitingArrow({
       (finished) => {
         if (finished) runOnJS(onDone)();
       }
-    );
-
-    opacity.value = withDelay(
-      fadeDelay,
-      withTiming(0, {
-        duration: fadeDuration,
-        easing: Easing.out(Easing.quad)
-      })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per mounted exit arrow
   }, [totalLength]);
@@ -289,12 +313,13 @@ function ExitingArrow({
     return (arrowLength + t * (totalLength - arrowLength)) / totalLength;
   });
 
-  const animStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value
-  }));
+  // opacity styling removed
 
   const originalHead = getArrowHead(arrow);
-  const originalHeadCenter = useMemo(() => centerOf(originalHead, cellSize), [originalHead, cellSize]);
+  const originalHeadCenter = useMemo(() => {
+    const center = centerOf(originalHead, cellSize);
+    return { x: center.x + CANVAS_PADDING, y: center.y + CANVAS_PADDING };
+  }, [originalHead, cellSize]);
 
   const headPath = useMemo(() => makeHeadPath(originalHeadCenter, exitDir, cellSize), [originalHeadCenter, exitDir, cellSize]);
 
@@ -307,7 +332,17 @@ function ExitingArrow({
   const pathColor = arrow.color || theme.colors.arrowStroke;
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, animStyle, { zIndex: 10 }]} pointerEvents="none">
+    <Animated.View
+      style={{
+        position: 'absolute',
+        left: -CANVAS_PADDING,
+        top: -CANVAS_PADDING,
+        width: boardWidth + 2 * CANVAS_PADDING,
+        height: boardHeight + 2 * CANVAS_PADDING,
+        zIndex: 10
+      }}
+      pointerEvents="none"
+    >
       <Canvas style={StyleSheet.absoluteFill}>
         {/* Draw the moving shaft segment */}
         <Path
@@ -386,16 +421,16 @@ function BlockedArrowOverlay({
 
     progress.value = withTiming(
       1,
-      { duration: forwardDuration, easing: Easing.out(Easing.quad) },
+      { duration: forwardDuration, easing: Easing.bezier(0.25, 1, 0.5, 1) },
       (fin) => {
         if (fin) {
           runOnJS(onCollisionPoint)(blocker);
           
-          // Snap back with a premium spring recoil bounce
+          // Snap back with a premium snappy spring recoil bounce
           progress.value = withSpring(0, {
-            damping: 14,
-            stiffness: 100,
-            mass: 0.8,
+            damping: 15,
+            stiffness: 140,
+            mass: 0.6,
           }, (fin2) => {
             if (fin2) runOnJS(onDone)();
           });
@@ -478,22 +513,17 @@ function FlashingArrowOverlay({
   useEffect(() => {
     // Hold bright red briefly, then fade out the red overlay
     flashOpacity.value = withSequence(
-      withTiming(1, { duration: 60 }),
-      withDelay(80, withTiming(0, { duration: 320, easing: Easing.out(Easing.quad) }))
+      withTiming(1, { duration: 50, easing: Easing.out(Easing.quad) }),
+      withDelay(50, withTiming(0, { duration: 350, easing: Easing.bezier(0.25, 1, 0.5, 1) }))
     );
 
-    // Dynamic high-frequency decay shake animation on impact
-    shake.value = withSequence(
-      withTiming(-5, { duration: 40, easing: Easing.linear }),
-      withTiming(5, { duration: 40, easing: Easing.linear }),
-      withTiming(-3.5, { duration: 40, easing: Easing.linear }),
-      withTiming(3.5, { duration: 40, easing: Easing.linear }),
-      withTiming(-2, { duration: 40, easing: Easing.linear }),
-      withTiming(2, { duration: 40, easing: Easing.linear }),
-      withTiming(-1, { duration: 40, easing: Easing.linear }),
-      withTiming(1, { duration: 40, easing: Easing.linear }),
-      withTiming(0, { duration: 40, easing: Easing.linear })
-    );
+    // Organic decay shake animation on impact using spring
+    shake.value = 6;
+    shake.value = withSpring(0, {
+      damping: 5,
+      stiffness: 280,
+      mass: 0.6
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -623,5 +653,62 @@ export function findArrowAtPoint(arrows: ArrowNode[], x: number, y: number, cell
 }
 
 const styles = StyleSheet.create({
-  container: { overflow: 'visible' }
+  container: { overflow: 'visible' },
+  ripple: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: '#FFD54F',
+    backgroundColor: 'rgba(255, 213, 79, 0.25)',
+    zIndex: 30
+  }
 });
+
+// ---------------------------------------------------------------------------
+// TapRipple — brief touch indicator feedback circle
+// ---------------------------------------------------------------------------
+function TapRipple({
+  x,
+  y,
+  cellSize,
+  onDone
+}: {
+  x: number;
+  y: number;
+  cellSize: number;
+  onDone: () => void;
+}) {
+  const scale = useSharedValue(0.3);
+  const opacity = useSharedValue(0.9);
+
+  const rippleSize = cellSize * 0.8;
+
+  useEffect(() => {
+    scale.value = withTiming(1.3, { duration: 300, easing: Easing.out(Easing.quad) });
+    opacity.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.quad) }, (fin) => {
+      if (fin) runOnJS(onDone)();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }]
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.ripple,
+        animStyle,
+        {
+          width: rippleSize,
+          height: rippleSize,
+          borderRadius: rippleSize / 2,
+          left: x - rippleSize / 2,
+          top: y - rippleSize / 2,
+        }
+      ]}
+      pointerEvents="none"
+    />
+  );
+}

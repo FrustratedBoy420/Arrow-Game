@@ -100,6 +100,7 @@ export function MultiplayerScreen() {
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
   const [blockedArrows, setBlockedArrows] = useState<{ arrow: ArrowNode; blocker: ArrowNode | null }[]>([]);
   const [flashingArrows, setFlashingArrows] = useState<ArrowNode[]>([]);
+  const [lastTap, setLastTap] = useState<{ x: number; y: number; timestamp: number } | undefined>(undefined);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   
@@ -467,9 +468,9 @@ export function MultiplayerScreen() {
           setStep('game');
           
           boardOpacity.value = 0;
-          boardScale.value = 0.95;
-          boardOpacity.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) });
-          boardScale.value = withSpring(1, { damping: 14, stiffness: 120 });
+          boardScale.value = 0.94;
+          boardOpacity.value = withTiming(1, { duration: 400, easing: Easing.bezier(0.16, 1, 0.3, 1) });
+          boardScale.value = withSpring(1, { damping: 15, stiffness: 100, mass: 0.8 });
         }
       } else {
         setCountdown(remainingSeconds);
@@ -1105,6 +1106,7 @@ export function MultiplayerScreen() {
     const boardHeight = cellSize * rows;
 
     const handleBoardPress = (x: number, y: number) => {
+      setLastTap({ x, y, timestamp: Date.now() });
       const arrow = findArrowAtPoint(board.arrows, x, y, cellSize);
       if (arrow) handleArrowPress(arrow.id);
     };
@@ -1194,6 +1196,7 @@ export function MultiplayerScreen() {
                 onExitDone={handleExitDone}
                 onBlockedDone={handleBlockedDone}
                 onCollisionPoint={handleCollisionPoint}
+                lastTap={lastTap}
               />
             </Animated.View>
           </ZoomableBoardViewport>

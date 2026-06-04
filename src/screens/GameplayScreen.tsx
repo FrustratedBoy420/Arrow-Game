@@ -44,6 +44,7 @@ export function GameplayScreen() {
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
   const [blockedArrows, setBlockedArrows] = useState<BlockedArrowEntry[]>([]);
   const [flashingArrows, setFlashingArrows] = useState<ArrowNode[]>([]);
+  const [lastTap, setLastTap] = useState<{ x: number; y: number; timestamp: number } | undefined>(undefined);
   const pendingNav = useRef<'Victory' | 'Fail' | null>(null);
   const boardScale = useSharedValue(1);
   const boardOpacity = useSharedValue(1);
@@ -82,9 +83,9 @@ export function GameplayScreen() {
 
   useEffect(() => {
     boardOpacity.value = 0;
-    boardScale.value = 0.96;
-    boardOpacity.value = withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) });
-    boardScale.value = withSpring(1, { damping: 14, stiffness: 120 });
+    boardScale.value = 0.94;
+    boardOpacity.value = withTiming(1, { duration: 400, easing: Easing.bezier(0.16, 1, 0.3, 1) });
+    boardScale.value = withSpring(1, { damping: 15, stiffness: 100, mass: 0.8 });
   }, [currentLevelId]);
 
   const handleExitDone = useCallback((arrowId: string) => {
@@ -127,6 +128,7 @@ export function GameplayScreen() {
 
   const handleBoardPress = useCallback(
     (x: number, y: number) => {
+      setLastTap({ x, y, timestamp: Date.now() });
       const currentBoard = useGameStore.getState().board;
       const arrow = findArrowAtPoint(currentBoard.arrows, x, y, cellSize);
       if (arrow) handleArrowPress(arrow.id);
@@ -183,6 +185,7 @@ export function GameplayScreen() {
               onExitDone={handleExitDone}
               onBlockedDone={handleBlockedDone}
               onCollisionPoint={handleCollisionPoint}
+              lastTap={lastTap}
             />
           </Animated.View>
         </ZoomableBoardViewport>
