@@ -40,6 +40,7 @@ type GameStore = {
   versionConfig: {
     latest: string;
     critical: string;
+    termsUrl?: string;
   } | null;
   resetAllProgress: () => void;
   // Level Management System Integration

@@ -1,9 +1,11 @@
-import { Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Modal, Pressable, StyleSheet, Switch, Text, View, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useGameStore } from '../state/gameStore';
 import { CURRENT_APP_VERSION } from '../config/version';
 import { theme } from '../theme/theme';
+import { PrivacyPolicyModal } from '../screens/TermsScreen';
 
 type Props = {
   visible: boolean;
@@ -13,67 +15,110 @@ type Props = {
 
 export function SettingsModal({ visible, onClose, onRestart }: Props) {
   const { soundEnabled, hapticsEnabled, musicEnabled, toggleSound, toggleHaptics, toggleMusic } = useGameStore();
+  const [privacyVisible, setPrivacyVisible] = useState(false);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.modalContent}>
-          <Pressable style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeText}>✕</Text>
-          </Pressable>
-          
-          <Text style={styles.title}>Settings</Text>
-
-          <View style={styles.settingsGroup}>
-            <View style={styles.settingRow}>
-              <View style={styles.labelContainer}>
-                <Ionicons name="volume-medium-outline" size={22} color={theme.colors.textMuted} style={styles.icon} />
-                <Text style={styles.settingLabel}>Sound</Text>
-              </View>
-              <Switch 
-                value={soundEnabled} 
-                onValueChange={toggleSound} 
-                trackColor={{ false: theme.colors.borderSoft, true: theme.colors.arrowStroke }}
-              />
-            </View>
-            <View style={styles.settingRow}>
-              <View style={styles.labelContainer}>
-                <Ionicons name="phone-portrait-outline" size={22} color={theme.colors.textMuted} style={styles.icon} />
-                <Text style={styles.settingLabel}>Vibration</Text>
-              </View>
-              <Switch 
-                value={hapticsEnabled} 
-                onValueChange={toggleHaptics} 
-                trackColor={{ false: theme.colors.borderSoft, true: theme.colors.arrowStroke }}
-              />
-            </View>
-            <View style={styles.settingRow}>
-              <View style={styles.labelContainer}>
-                <Ionicons name="musical-notes-outline" size={22} color={theme.colors.textMuted} style={styles.icon} />
-                <Text style={styles.settingLabel}>Music</Text>
-              </View>
-              <Switch 
-                value={musicEnabled} 
-                onValueChange={toggleMusic} 
-                trackColor={{ false: theme.colors.borderSoft, true: theme.colors.arrowStroke }}
-              />
-            </View>
-          </View>
-
-          {onRestart && (
-            <Pressable style={styles.restartButton} onPress={onRestart}>
-              <Text style={styles.restartText}>Restart</Text>
+    <>
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+        <View style={styles.overlay}>
+          <View style={styles.modalContent}>
+            <Pressable style={styles.closeButton} onPress={onClose}>
+              <Text style={styles.closeText}>✕</Text>
             </Pressable>
-          )}
+            
+            <Text style={styles.title}>Settings</Text>
 
-          {/* App version badge */}
-          <View style={styles.versionBadge}>
-            <Ionicons name="information-circle-outline" size={14} color={theme.colors.textMuted} style={{ marginRight: 5, opacity: 0.6 }} />
-            <Text style={styles.versionText}>v{CURRENT_APP_VERSION}</Text>
+            <View style={styles.settingsGroup}>
+              <View style={styles.settingRow}>
+                <View style={styles.labelContainer}>
+                  <Ionicons name="volume-medium-outline" size={22} color={theme.colors.textMuted} style={styles.icon} />
+                  <Text style={styles.settingLabel}>Sound</Text>
+                </View>
+                <Switch 
+                  value={soundEnabled} 
+                  onValueChange={toggleSound} 
+                  trackColor={{ false: theme.colors.borderSoft, true: theme.colors.arrowStroke }}
+                />
+              </View>
+              <View style={styles.settingRow}>
+                <View style={styles.labelContainer}>
+                  <Ionicons name="phone-portrait-outline" size={22} color={theme.colors.textMuted} style={styles.icon} />
+                  <Text style={styles.settingLabel}>Vibration</Text>
+                </View>
+                <Switch 
+                  value={hapticsEnabled} 
+                  onValueChange={toggleHaptics} 
+                  trackColor={{ false: theme.colors.borderSoft, true: theme.colors.arrowStroke }}
+                />
+              </View>
+              <View style={styles.settingRow}>
+                <View style={styles.labelContainer}>
+                  <Ionicons name="musical-notes-outline" size={22} color={theme.colors.textMuted} style={styles.icon} />
+                  <Text style={styles.settingLabel}>Music</Text>
+                </View>
+                <Switch 
+                  value={musicEnabled} 
+                  onValueChange={toggleMusic} 
+                  trackColor={{ false: theme.colors.borderSoft, true: theme.colors.arrowStroke }}
+                />
+              </View>
+
+              {/* Privacy Policy Link */}
+              <Pressable 
+                style={styles.settingRow} 
+                onPress={() => {
+                  onClose();
+                  setTimeout(() => {
+                    setPrivacyVisible(true);
+                  }, 350);
+                }}
+              >
+                <View style={styles.labelContainer}>
+                  <Ionicons name="shield-checkmark-outline" size={22} color={theme.colors.textMuted} style={styles.icon} />
+                  <Text style={styles.settingLabel}>Privacy Policy</Text>
+                </View>
+                <Ionicons name="chevron-forward-outline" size={18} color={theme.colors.textMuted} />
+              </Pressable>
+
+              {/* Dynamic Terms & Conditions Link */}
+              <Pressable 
+                style={styles.settingRow} 
+                onPress={async () => {
+                  onClose();
+                  const versionConfig = useGameStore.getState().versionConfig;
+                  const url = versionConfig?.termsUrl || 'https://arrow-game-backend.vercel.app/terms-and-conditions';
+                  try {
+                    await Linking.openURL(url);
+                  } catch (err) {
+                    console.warn(`Failed to open terms URL: ${err}`);
+                  }
+                }}
+              >
+                <View style={styles.labelContainer}>
+                  <Ionicons name="document-text-outline" size={22} color={theme.colors.textMuted} style={styles.icon} />
+                  <Text style={styles.settingLabel}>Terms & Conditions</Text>
+                </View>
+                <Ionicons name="open-outline" size={16} color={theme.colors.textMuted} style={{ opacity: 0.7 }} />
+              </Pressable>
+            </View>
+
+            {onRestart && (
+              <Pressable style={styles.restartButton} onPress={onRestart}>
+                <Text style={styles.restartText}>Restart</Text>
+              </Pressable>
+            )}
+
+            {/* App version badge */}
+            <View style={styles.versionBadge}>
+              <Ionicons name="information-circle-outline" size={14} color={theme.colors.textMuted} style={{ marginRight: 5, opacity: 0.6 }} />
+              <Text style={styles.versionText}>v{CURRENT_APP_VERSION}</Text>
+            </View>
           </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+
+      <PrivacyPolicyModal visible={privacyVisible} onClose={() => setPrivacyVisible(false)} />
+    </>
   );
 }
 

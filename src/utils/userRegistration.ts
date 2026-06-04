@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 import Pusher from 'pusher-js';
 import { useGameStore } from '../state/gameStore';
 import { setAllLevelsUnlocked } from '../systems/levelManagementStore';
@@ -22,9 +21,6 @@ export async function getOrCreateSystemId(): Promise<string> {
 export async function registerUserProfile() {
   try {
     const systemId = await getOrCreateSystemId();
-    const storeState = useGameStore.getState();
-    const name = await AsyncStorage.getItem('multiplayer_name') || 'Guest';
-    const highestLevel = storeState.highestUnlockedLevel;
 
     const savedUrl = await AsyncStorage.getItem('multiplayer_url');
     let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
@@ -33,13 +29,9 @@ export async function registerUserProfile() {
       baseUrl = `https://${baseUrl}`;
     }
 
-    // 1. Send profile registration to backend
+    // 1. Send profile registration to backend (ONLY systemId)
     const payload = {
       systemId,
-      name,
-      os: Platform.OS,
-      osVersion: String(Platform.Version),
-      highestUnlockedLevel: highestLevel
     };
 
     console.log('📡 Registering user profile:', payload);

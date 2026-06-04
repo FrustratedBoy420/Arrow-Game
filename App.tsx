@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { audioManager } from './src/utils/audio';
 import { initializeLevelManagement } from './src/systems/levelManagementInit';
@@ -16,6 +17,7 @@ import { LevelSelectScreen } from './src/screens/LevelSelectScreen';
 import { MultiplayerScreen } from './src/screens/MultiplayerScreen';
 import { TutorialScreen } from './src/screens/TutorialScreen';
 import { VictoryScreen } from './src/screens/VictoryScreen';
+import { TermsScreen } from './src/screens/TermsScreen';
 import { theme } from './src/theme/theme';
 
 import { useGameStore } from './src/state/gameStore';
@@ -45,13 +47,23 @@ export default function App() {
   const versionConfig = useGameStore((s) => s.versionConfig);
 
   const [appIsReady, setAppIsReady] = useState(false);
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState<boolean | null>(null);
 
   useEffect(() => {
     const prepare = async () => {
       try {
         await audioManager.init();
         await initializeLevelManagement();
-        await registerUserProfile();
+
+        // Check if terms and privacy policy have been accepted
+        const acceptedValue = await AsyncStorage.getItem('has_accepted_terms_v1');
+        const accepted = acceptedValue === 'true';
+        setHasAcceptedTerms(accepted);
+
+        if (accepted) {
+          // Register user profile only after terms acceptance is verified
+          await registerUserProfile();
+        }
       } catch (e) {
         console.warn(e);
       } finally {
@@ -61,6 +73,17 @@ export default function App() {
     };
     void prepare();
   }, []);
+
+  const handleTermsAccept = async () => {
+    try {
+      await AsyncStorage.setItem('has_accepted_terms_v1', 'true');
+      setHasAcceptedTerms(true);
+      // Register profile immediately after acceptance
+      await registerUserProfile();
+    } catch (e) {
+      console.warn(e);
+    }
+  };
 
   // Determine if a critical forced update is required
   const isForcedUpdateRequired = 
@@ -79,10 +102,19 @@ export default function App() {
     );
   }
 
-
-  if (!appIsReady) {
+  if (!appIsReady || hasAcceptedTerms === null) {
     return null;
   }
+
+  // Display terms consent screen if not accepted yet
+  if (!hasAcceptedTerms) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <TermsScreen onAccept={handleTermsAccept} />
+      </GestureHandlerRootView>
+    );
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer>

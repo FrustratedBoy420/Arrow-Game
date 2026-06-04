@@ -208,7 +208,7 @@ export function HomeScreen() {
 
         <Animated.View style={titleStyle}>
           <Text style={styles.title}>Arrow{'\n'}Escape</Text>
-          <Text style={styles.subtitle}>Tap · Think · Escape</Text>
+          <Text style={styles.subtitle}>Think · Tap · Escape</Text>
         </Animated.View>
 
         <Animated.View style={[btnStyle, { width: '100%', alignItems: 'center' }]}>
