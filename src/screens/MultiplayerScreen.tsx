@@ -58,7 +58,7 @@ function getElapsedMs(startedAt: number | null): number | null {
 
 interface ServerPlayer {
   name: string;
-  status: 'playing' | 'won' | 'failed' | 'abandoned';
+  status: 'playing' | 'won' | 'failed' | 'failed_lives' | 'abandoned';
   timeMs: number | null;
   arrowsLeft: number | null;
 }
@@ -573,7 +573,22 @@ export function MultiplayerScreen() {
             return nextConfirmed;
           });
 
-          // 4. Update the board state to filter out any cleared arrows
+          // 4. Reconcile exiting arrows color based on server verified ownership
+          setExitingArrows((currentExiting) => {
+            return currentExiting.map((arrow) => {
+              const verifiedOwner = nextOwners[arrow.id];
+              if (verifiedOwner) {
+                const isMe = verifiedOwner.toLowerCase() === playerNameRef.current.trim().toLowerCase();
+                const expectedColor = isMe ? '#43A047' : '#2196F3';
+                if (arrow.color !== expectedColor) {
+                  return { ...arrow, color: expectedColor };
+                }
+              }
+              return arrow;
+            });
+          });
+
+          // 5. Update the board state to filter out any cleared arrows
           setBoard((currentBoard) => {
             if (!currentBoard) return null;
 
@@ -905,6 +920,19 @@ export function MultiplayerScreen() {
         const blocker = findBlockingArrow(arrow, currentBoard) ?? null;
         setBlockedArrows((prev) => [...prev, { arrow, blocker }]);
         void playWrongFeedback(hapticsEnabled);
+
+        const nextBoard = result.board;
+        if (nextBoard.livesLeft <= 0) {
+          const myName = playerNameRef.current;
+          const code = roomCode;
+          if (code) {
+            apiPost('/api/player-failed', {
+              name: myName,
+              roomCode: code.trim().toUpperCase()
+            }).catch((err) => console.error('Failed to notify failed:', err));
+          }
+        }
+        return nextBoard;
       }
 
       return currentBoard;
@@ -1177,6 +1205,9 @@ export function MultiplayerScreen() {
           </Text>
         </View>
 
+        {/* Lives Indicator */}
+        <LivesIndicator livesLeft={board.livesLeft} />
+
         {/* Puzzle Canvas */}
         <View style={styles.boardStage}>
           <ZoomableBoardViewport
@@ -1248,6 +1279,12 @@ export function MultiplayerScreen() {
     let titleText: string;
     let subtitleText: string;
 
+    const myResult = matchResults.find(r => r.name.toLowerCase() === playerName.toLowerCase());
+    const oppResult = matchResults.find(r => r.name.toLowerCase() === otherPlayer.toLowerCase());
+
+    const isMyStatusFailed = myResult && myResult.status === 'failed_lives';
+    const isOppStatusFailed = oppResult && oppResult.status === 'failed_lives';
+
     if (isDraw) {
       titleText = 'DRAW MATCH';
       subtitleText = `Equal performance! Both players cleared ${scores[playerName] || 0} arrows.`;
@@ -1259,10 +1296,18 @@ export function MultiplayerScreen() {
       subtitleText = `${matchWinner} wins by default.`;
     } else if (isMeWinner) {
       titleText = 'YOU WON!';
-      subtitleText = `You removed more arrows (${scores[playerName] || 0} vs ${scores[otherPlayer] || 0})!`;
+      if (isOppStatusFailed) {
+        subtitleText = `${otherPlayer} lost all lives — Victory is yours!`;
+      } else {
+        subtitleText = `You removed more arrows (${scores[playerName] || 0} vs ${scores[otherPlayer] || 0})!`;
+      }
     } else {
       titleText = 'YOU LOST';
-      subtitleText = `${localWinner} removed more arrows (${scores[localWinner] || 0} vs ${scores[playerName] || 0}).`;
+      if (isMyStatusFailed) {
+        subtitleText = `You lost all 3 lives! ${localWinner} wins.`;
+      } else {
+        subtitleText = `${localWinner} removed more arrows (${scores[localWinner] || 0} vs ${scores[playerName] || 0}).`;
+      }
     }
 
     return (
@@ -1317,9 +1362,21 @@ export function MultiplayerScreen() {
                 </View>
 
                 {/* Status badge */}
-                <View style={[styles.statusBadge, { backgroundColor: isWinner && !isDraw ? '#FFF9C4' : '#E8F5E9' }]}>
-                  <Text style={[styles.statusBadgeText, { color: isWinner && !isDraw ? '#F57F17' : '#2E7D32' }]}>
-                    {result.status === 'abandoned' ? 'Resigned' : `${playerScore} arrows`}
+                <View style={[styles.statusBadge, { 
+                  backgroundColor: result.status === 'failed_lives' 
+                    ? '#FFEBEE' 
+                    : (isWinner && !isDraw ? '#FFF9C4' : '#E8F5E9') 
+                }]}>
+                  <Text style={[styles.statusBadgeText, { 
+                    color: result.status === 'failed_lives' 
+                       ? '#C62828' 
+                       : (isWinner && !isDraw ? '#F57F17' : '#2E7D32') 
+                  }]}>
+                    {result.status === 'abandoned' 
+                      ? 'Resigned' 
+                      : result.status === 'failed_lives' 
+                      ? 'Out of Lives' 
+                      : `${playerScore} arrows`}
                   </Text>
                 </View>
               </View>
