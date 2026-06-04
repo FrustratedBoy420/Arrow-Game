@@ -2,7 +2,7 @@
   "expo": {
     "name": "Arrow Escape",
     "slug": "arrow-escape",
-    "version": "1.1.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "arrowescape",
     "userInterfaceStyle": "light",
@@ -30,6 +30,12 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0c562cb9-3a12-4ac0-b75f-f385d23a5255"
+      }
+    },
+    "owner": "mridul_jaiswal_420"
   }
 }
