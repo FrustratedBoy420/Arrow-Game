@@ -918,7 +918,8 @@ export function MultiplayerScreen() {
   // Animated Board styling
   const animatedBoardStyle = useAnimatedStyle(() => ({
     transform: [{ scale: boardScale.value }],
-    opacity: boardOpacity.value
+    opacity: boardOpacity.value,
+    overflow: 'visible'
   }));
 
   // Render Sub-Views
@@ -1096,8 +1097,8 @@ export function MultiplayerScreen() {
   const renderGame = () => {
     if (!board || !level) return null;
 
-    const maxW = width * 0.95;
-    const maxH = height * 0.52;
+    const maxW = width * 0.82;
+    const maxH = height * 0.44;
     const { columns, rows } = board.level.gridSize;
     const sizeFromWidth = maxW / columns;
     const sizeFromHeight = maxH / rows;
@@ -1749,7 +1750,8 @@ const styles = StyleSheet.create({
   boardStage: {
     flex: 1,
     width: '100%',
-    marginVertical: 6
+    marginVertical: 6,
+    overflow: 'visible'
   },
   battleControls: {
     flexDirection: 'row',

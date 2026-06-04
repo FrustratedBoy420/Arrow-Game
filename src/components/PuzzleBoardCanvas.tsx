@@ -41,12 +41,10 @@ type Props = {
 
 const arrowHeadSize = 12;
 
-/** How far past the head the arrow slides off-screen (in grid cells). */
-const EXIT_EXTENSION_CELLS = 12;
 /** Target slide speed — scales duration by path length so all arrows feel snappy but smooth. */
-const EXIT_SPEED_PX_PER_SEC = 100;
-const EXIT_DURATION_MIN_MS = 600;
-const EXIT_DURATION_MAX_MS = 4000;
+const EXIT_SPEED_PX_PER_SEC = 550;
+const EXIT_DURATION_MIN_MS = 700;
+const EXIT_DURATION_MAX_MS = 2500;
 
 const CANVAS_PADDING = 500;
 
@@ -93,7 +91,7 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
   const handleTapIndicatorDone = useCallback((id: number) => {
     setLocalTaps((prev) => prev.filter((t) => t.id !== id));
   }, []);
-  const cellSize = width / board.level.gridSize.columns;
+  const cellSize = (width / board.level.gridSize.columns);
   const height = cellSize * board.level.gridSize.rows;
   const strokeW = Math.max(3, cellSize * 0.13);
 
@@ -252,6 +250,27 @@ function ExitingArrow({
   const exitDir = getExitDirection(arrow);
   const v = dirVec[exitDir];
 
+  const extensionLength = useMemo(() => {
+    const cells = arrow.fullPath;
+    if (cells.length === 0) return 0;
+    const first = cells[0]!;
+    const start = centerOf(first, cellSize);
+
+    let distanceToEdge = 0;
+    if (v.x > 0) { // moving RIGHT
+      distanceToEdge = boardWidth + CANVAS_PADDING - start.x;
+    } else if (v.x < 0) { // moving LEFT
+      distanceToEdge = start.x + CANVAS_PADDING;
+    } else if (v.y > 0) { // moving DOWN
+      distanceToEdge = boardHeight + CANVAS_PADDING - start.y;
+    } else if (v.y < 0) { // moving UP
+      distanceToEdge = start.y + CANVAS_PADDING;
+    }
+
+    // Add extra 100 pixels buffer to make sure it's completely past the padded canvas edge
+    return distanceToEdge + 100;
+  }, [arrow, cellSize, boardWidth, boardHeight, v]);
+
   const trackPath = useMemo(() => {
     const path = Skia.Path.Make();
     const cells = arrow.fullPath;
@@ -269,7 +288,6 @@ function ExitingArrow({
     const head = cells[cells.length - 1]!;
     const lastCenter = centerOf(head, cellSize);
 
-    const extensionLength = cellSize * EXIT_EXTENSION_CELLS;
     const exitEnd = {
       x: lastCenter.x + v.x * extensionLength + CANVAS_PADDING,
       y: lastCenter.y + v.y * extensionLength + CANVAS_PADDING
@@ -277,19 +295,19 @@ function ExitingArrow({
     path.lineTo(exitEnd.x, exitEnd.y);
 
     return path;
-  }, [arrow, cellSize]);
+  }, [arrow, cellSize, extensionLength, v]);
 
   const { totalLength, arrowLength } = useMemo(() => {
     const it = Skia.ContourMeasureIter(trackPath, false, 1);
     const contourVal = it.next();
     const trackLen = contourVal ? contourVal.length() : 0;
-    const arrowLen = Math.max(0, trackLen - cellSize * EXIT_EXTENSION_CELLS);
+    const arrowLen = Math.max(0, trackLen - extensionLength);
     return { totalLength: trackLen, arrowLength: arrowLen };
-  }, [trackPath, cellSize]);
+  }, [trackPath, extensionLength]);
 
   useEffect(() => {
     const duration = computeExitDurationMs(totalLength);
-    const moveEasing = Easing.bezier(0.16, 1, 0.3, 1);
+    const moveEasing = Easing.linear;
 
     animProgress.value = 0;
 
@@ -442,12 +460,12 @@ function BlockedArrowOverlay({
 
   const startVal = useDerivedValue(() => {
     const offset = progress.value * slideDist;
-    return totalLength > 0 ? offset / totalLength : 0;
+    return totalLength > 0 ? (offset / totalLength) : 0;
   });
 
   const endVal = useDerivedValue(() => {
     const offset = progress.value * slideDist;
-    return totalLength > 0 ? (shaftLength + offset) / totalLength : 0;
+    return totalLength > 0 ? ((shaftLength + offset) / totalLength) : 0;
   });
 
   const originalHead = getArrowHead(arrow);
@@ -630,7 +648,7 @@ function makeArrowPath(arrow: ArrowNode, cellSize: number) {
 }
 
 function centerOf(pos: { x: number; y: number }, cellSize: number) {
-  return { x: pos.x * cellSize + cellSize / 2, y: pos.y * cellSize + cellSize / 2 };
+  return { x: pos.x * cellSize + (cellSize / 2), y: pos.y * cellSize + (cellSize / 2) };
 }
 
 function getHeadPoints(pt: { x: number; y: number }, dir: Direction, cellSize: number) {
@@ -703,12 +721,13 @@ function TapRipple({
         {
           width: rippleSize,
           height: rippleSize,
-          borderRadius: rippleSize / 2,
-          left: x - rippleSize / 2,
-          top: y - rippleSize / 2,
+          borderRadius: (rippleSize / 2),
+          left: (x - rippleSize / 2),
+          top: (y - rippleSize / 2),
         }
       ]}
       pointerEvents="none"
     />
   );
 }
+

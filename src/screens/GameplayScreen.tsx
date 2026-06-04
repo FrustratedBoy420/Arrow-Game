@@ -49,8 +49,8 @@ export function GameplayScreen() {
   const boardScale = useSharedValue(1);
   const boardOpacity = useSharedValue(1);
 
-  const maxW = width * 0.95;
-  const maxH = height * 0.45;
+  const maxW = width * 0.82;
+  const maxH = height * 0.38;
   const { columns, rows } = board.level.gridSize;
   const sizeFromWidth = maxW / columns;
   const sizeFromHeight = maxH / rows;
@@ -60,7 +60,8 @@ export function GameplayScreen() {
 
   const animatedBoardStyle = useAnimatedStyle(() => ({
     transform: [{ scale: boardScale.value }],
-    opacity: boardOpacity.value
+    opacity: boardOpacity.value,
+    overflow: 'visible'
   }));
 
   useEffect(() => {
@@ -210,5 +211,5 @@ export function GameplayScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
-  boardStage: { flex: 1, width: '100%' }
+  boardStage: { flex: 1, width: '100%', overflow: 'visible' }
 });
