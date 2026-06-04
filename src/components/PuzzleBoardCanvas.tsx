@@ -169,9 +169,9 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
       </Canvas>
 
       {/* Exiting arrow overlays with slide animation */}
-      {exitingArrows.map((arrow, index) => (
+      {exitingArrows.map((arrow) => (
         <ExitingArrow
-          key={`exit-${arrow.id}-${index}`}
+          key={`exit-${arrow.id}`}
           arrow={arrow}
           cellSize={cellSize}
           strokeWidth={strokeW}
@@ -182,9 +182,9 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
       ))}
 
       {/* Blocked arrow overlays — red + slide forward then snap back */}
-      {blockedArrows.map(({ arrow, blocker }, index) => (
+      {blockedArrows.map(({ arrow, blocker }) => (
         <BlockedArrowOverlay
-          key={`blocked-${arrow.id}-${index}`}
+          key={`blocked-${arrow.id}`}
           arrow={arrow}
           blocker={blocker}
           board={board}
@@ -196,9 +196,9 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
       ))}
 
       {/* Flashing arrow overlays — blocker briefly flashes red on collision */}
-      {flashingArrows.map((arrow, index) => (
+      {flashingArrows.map((arrow) => (
         <FlashingArrowOverlay
-          key={`flash-${arrow.id}-${index}`}
+          key={`flash-${arrow.id}`}
           arrow={arrow}
           cellSize={cellSize}
           strokeWidth={strokeW}
