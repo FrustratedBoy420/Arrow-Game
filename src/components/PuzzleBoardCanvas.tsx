@@ -1,4 +1,4 @@
-import { Canvas, Circle, Path, Skia } from '@shopify/react-native-skia';
+import { Canvas, Circle, Group, Path, Skia } from '@shopify/react-native-skia';
 import { useEffect, useMemo, memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
@@ -63,6 +63,7 @@ const dirVec: Record<Direction, { x: number; y: number }> = {
   UP: { x: 0, y: -1 }, DOWN: { x: 0, y: 1 },
   LEFT: { x: -1, y: 0 }, RIGHT: { x: 1, y: 0 }
 };
+
 
 export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
   board,
@@ -340,13 +341,23 @@ function BlockedArrowOverlay({
   // Slide all the way to touch the blocker (offset 0.1 to avoid overlapping/clipping)
   const slideDist = cellSize * Math.max(0.2, cellsDistance - 0.1);
 
-  const arrowPath = useMemo(() => makeArrowPath(arrow, cellSize), [arrow, cellSize]);
+  // The track path is the shaft path plus an extension of length slideDist
+  const trackPath = useMemo(() => makeShaftPath(arrow, cellSize, slideDist), [arrow, cellSize, slideDist]);
+
+  const { totalLength, shaftLength } = useMemo(() => {
+    const it = Skia.ContourMeasureIter(trackPath, false, 1);
+    const contourVal = it.next();
+    const trackLen = contourVal ? contourVal.length() : 0;
+    const sLen = Math.max(0, trackLen - slideDist);
+    return { totalLength: trackLen, shaftLength: sLen };
+  }, [trackPath, slideDist]);
 
   // Adjust timing organically based on distance
   const forwardDuration = Math.max(140, Math.min(300, cellsDistance * 80));
 
   useEffect(() => {
-    // Slide forward, then at the collision point fire the callback, then slide back.
+    progress.value = 0;
+
     progress.value = withTiming(
       1,
       { duration: forwardDuration, easing: Easing.out(Easing.quad) },
@@ -365,30 +376,57 @@ function BlockedArrowOverlay({
         }
       }
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: progress.value * slideDist * v.x },
-      { translateY: progress.value * slideDist * v.y }
-    ]
-  }));
+  const startVal = useDerivedValue(() => {
+    const offset = progress.value * slideDist;
+    return totalLength > 0 ? offset / totalLength : 0;
+  });
+
+  const endVal = useDerivedValue(() => {
+    const offset = progress.value * slideDist;
+    return totalLength > 0 ? (shaftLength + offset) / totalLength : 0;
+  });
+
+  const originalHead = getArrowHead(arrow);
+  const originalHeadCenter = useMemo(() => centerOf(originalHead, cellSize), [originalHead, cellSize]);
+
+  const headPath = useMemo(() => makeHeadPath(originalHeadCenter, exitDir, cellSize), [originalHeadCenter, exitDir, cellSize]);
+
+  const headTransform = useDerivedValue(() => {
+    const offset = progress.value * slideDist;
+    return [{ translateX: v.x * offset }, { translateY: v.y * offset }];
+  });
 
   return (
     <Animated.View
-      style={[StyleSheet.absoluteFill, animStyle, { zIndex: 20 }]}
+      style={[StyleSheet.absoluteFill, { zIndex: 20 }]}
       pointerEvents="none"
     >
       <Canvas style={StyleSheet.absoluteFill}>
+        {/* Draw the moving shaft segment */}
         <Path
-          path={arrowPath}
+          path={trackPath}
+          start={startVal}
+          end={endVal}
           color="#FF3B30"
           style="stroke"
           strokeCap="round"
           strokeJoin="round"
           strokeWidth={sw}
         />
+        {/* Draw the moving arrowhead */}
+        <Group transform={headTransform}>
+          <Path
+            path={headPath}
+            color="#FF3B30"
+            style="stroke"
+            strokeCap="round"
+            strokeJoin="round"
+            strokeWidth={sw}
+          />
+        </Group>
       </Canvas>
     </Animated.View>
   );
@@ -485,10 +523,9 @@ function FlashingArrowOverlay({
 /**
  * Build a Skia path that traces through all fullPath cells and draws an arrowhead at the tip.
  */
-function makeArrowPath(arrow: ArrowNode, cellSize: number) {
+function makeShaftPath(arrow: ArrowNode, cellSize: number, extensionLength = 0) {
   const path = Skia.Path.Make();
   const cells = arrow.fullPath;
-
   if (cells.length === 0) return path;
 
   const first = cells[0]!;
@@ -500,6 +537,30 @@ function makeArrowPath(arrow: ArrowNode, cellSize: number) {
     path.lineTo(pt.x, pt.y);
   }
 
+  if (extensionLength > 0) {
+    const head = cells[cells.length - 1]!;
+    const exitDir = getExitDirection(arrow);
+    const v = dirVec[exitDir];
+    const lastCenter = centerOf(head, cellSize);
+    path.lineTo(lastCenter.x + v.x * extensionLength, lastCenter.y + v.y * extensionLength);
+  }
+
+  return path;
+}
+
+function makeHeadPath(headCenter: { x: number; y: number }, exitDir: Direction, cellSize: number) {
+  const path = Skia.Path.Make();
+  const headPoints = getHeadPoints(headCenter, exitDir, cellSize);
+
+  path.moveTo(headPoints.left.x, headPoints.left.y);
+  path.lineTo(headCenter.x, headCenter.y);
+  path.lineTo(headPoints.right.x, headPoints.right.y);
+
+  return path;
+}
+
+function makeArrowPath(arrow: ArrowNode, cellSize: number) {
+  const path = makeShaftPath(arrow, cellSize);
   const head = getArrowHead(arrow);
   const end = centerOf(head, cellSize);
   const exitDir = getExitDirection(arrow);
