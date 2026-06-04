@@ -40,11 +40,11 @@ type Props = {
 const arrowHeadSize = 12;
 
 /** How far past the head the arrow slides off-screen (in grid cells). */
-const EXIT_EXTENSION_CELLS = 6;
+const EXIT_EXTENSION_CELLS = 3;
 /** Target slide speed — scales duration by path length so all arrows feel snappy but smooth. */
-const EXIT_SPEED_PX_PER_SEC = 400;
-const EXIT_DURATION_MIN_MS = 200;
-const EXIT_DURATION_MAX_MS = 600;
+const EXIT_SPEED_PX_PER_SEC = 120;
+const EXIT_DURATION_MIN_MS = 500;
+const EXIT_DURATION_MAX_MS = 1800;
 
 /** How far the blocked arrow slides forward before snapping back (fraction of a cell). */
 const BLOCKED_SLIDE_CELLS = 0.55;
