@@ -951,83 +951,84 @@ export function MultiplayerScreen() {
   const handleArrowPress = useCallback((arrowId: string) => {
     if (!roomCode) return;
 
-    setBoard((currentBoard) => {
-      if (!currentBoard) return null;
+    const currentBoard = boardRef.current;
+    if (!currentBoard) return;
 
-      // Check if the arrow is already owned by someone else
-      const currentOwners = arrowOwnersRef.current;
-      if (currentOwners[arrowId]) {
-        return currentBoard; // Already cleared, ignore tap
-      }
+    // Check if the arrow is already owned by someone else
+    const currentOwners = arrowOwnersRef.current;
+    if (currentOwners[arrowId]) {
+      return; // Already cleared, ignore tap
+    }
 
-      const arrow = currentBoard.arrows.find((a) => a.id === arrowId);
-      const result = resolveTap(arrowId, currentBoard);
+    const arrow = currentBoard.arrows.find((a) => a.id === arrowId);
+    if (!arrow) return;
 
-      if (result.type === 'REMOVED' && arrow) {
-        setExitingArrows((prev) => [...prev, { ...arrow, color: '#43A047' }]);
-        void playCorrectFeedback();
+    const result = resolveTap(arrowId, currentBoard);
 
-        const nextBoard = result.board;
+    if (result.type === 'REMOVED') {
+      setExitingArrows((prev) => [...prev, { ...arrow, color: '#43A047' }]);
+      void playCorrectFeedback();
 
-        // Claim ownership locally
-        const myName = playerNameRef.current;
-        const nextOwners = {
-          ...currentOwners,
-          [arrowId]: myName
-        };
-        setArrowOwners(nextOwners);
+      const nextBoard = result.board;
 
-        const newScores = computeScores(nextOwners);
-        setScores(newScores);
+      // Claim ownership locally
+      const myName = playerNameRef.current;
+      const nextOwners = {
+        ...currentOwners,
+        [arrowId]: myName
+      };
+      setArrowOwners(nextOwners);
 
-        // Encode arrowsLeft
-        const levelArrows = levelRef.current?.arrows || [];
-        const encodedProgress = encodeArrowsLeft(nextBoard.arrows.length, arrowId, levelArrows);
+      const newScores = computeScores(nextOwners);
+      setScores(newScores);
 
-        apiPost('/api/update-progress', {
+      // Set board state
+      setBoard(nextBoard);
+
+      // Encode arrowsLeft
+      const levelArrows = levelRef.current?.arrows || [];
+      const encodedProgress = encodeArrowsLeft(nextBoard.arrows.length, arrowId, levelArrows);
+
+      apiPost('/api/update-progress', {
+        name: myName,
+        roomCode: roomCode.trim().toUpperCase(),
+        arrowsLeft: encodedProgress,
+        removedArrowId: arrowId,
+        scores: newScores,
+        boardState: {
+          removedArrowId: arrowId,
+          scores: newScores
+        }
+      }).catch(err => console.error('Failed to update progress:', err));
+
+      if (nextBoard.arrows.length === 0) {
+        const timeMs = recordMyCompletionTime();
+        apiPost('/api/player-finished', {
           name: myName,
           roomCode: roomCode.trim().toUpperCase(),
-          arrowsLeft: encodedProgress,
-          removedArrowId: arrowId,
-          scores: newScores,
-          boardState: {
-            removedArrowId: arrowId,
-            scores: newScores
-          }
-        }).catch(err => console.error('Failed to update progress:', err));
-
-        if (nextBoard.arrows.length === 0) {
-          const timeMs = recordMyCompletionTime();
-          apiPost('/api/player-finished', {
-            name: myName,
-            roomCode: roomCode.trim().toUpperCase(),
-            timeMs
-          }).catch(err => console.error('Failed to notify finished:', err));
-        }
-
-        return nextBoard;
-      } else if (result.type === 'BLOCKED' && arrow) {
-        // Find which arrow is physically blocking, then start the red-slide animation.
-        const blocker = findBlockingArrow(arrow, currentBoard) ?? null;
-        setBlockedArrows((prev) => [...prev, { arrow, blocker }]);
-        void playWrongFeedback(hapticsEnabled);
-
-        const nextBoard = result.board;
-        if (nextBoard.livesLeft <= 0) {
-          const myName = playerNameRef.current;
-          const code = roomCode;
-          if (code) {
-            apiPost('/api/player-failed', {
-              name: myName,
-              roomCode: code.trim().toUpperCase()
-            }).catch((err) => console.error('Failed to notify failed:', err));
-          }
-        }
-        return nextBoard;
+          timeMs
+        }).catch(err => console.error('Failed to notify finished:', err));
       }
+    } else if (result.type === 'BLOCKED') {
+      // Find which arrow is physically blocking, then start the red-slide animation.
+      const blocker = findBlockingArrow(arrow, currentBoard) ?? null;
+      setBlockedArrows((prev) => [...prev, { arrow, blocker }]);
+      void playWrongFeedback(hapticsEnabled);
 
-      return currentBoard;
-    });
+      const nextBoard = result.board;
+      setBoard(nextBoard);
+
+      if (nextBoard.livesLeft <= 0) {
+        const myName = playerNameRef.current;
+        const code = roomCode;
+        if (code) {
+          apiPost('/api/player-failed', {
+            name: myName,
+            roomCode: code.trim().toUpperCase()
+          }).catch((err) => console.error('Failed to notify failed:', err));
+        }
+      }
+    }
   }, [roomCode, hapticsEnabled, apiPost, recordMyCompletionTime, computeScores]);
 
   const handleUndo = useCallback(() => {
