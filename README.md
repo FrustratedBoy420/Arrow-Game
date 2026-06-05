@@ -1,4 +1,4 @@
-# Arrow Escape
+# ArrowVerse-Multiplayer
 
 <p align="center">
   <img src="https://img.shields.io/badge/Expo-54-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo 54" />
@@ -19,7 +19,7 @@
 
 ## Game Overview
 
-Arrow Escape is a mobile puzzle game where every move matters. Each level contains arrows placed on a grid. An arrow can be removed only when the space in front of it is clear, so players need to think through the order, use hints wisely, and recover with undo when the board gets tricky.
+ArrowVerse-Multiplayer is a mobile puzzle game where every move matters. Each level contains arrows placed on a grid. An arrow can be removed only when the space in front of it is clear, so players need to think through the order, use hints wisely, and recover with undo when the board gets tricky.
 
 | Feature | Details |
 | --- | --- |
@@ -82,10 +82,10 @@ npm run web
 This project uses Expo public environment variables. Anything prefixed with `EXPO_PUBLIC_` can be included in the client bundle, so do not place secrets there.
 
 ```env
-EXPO_PUBLIC_APP_NAME=Arrow Escape
-EXPO_PUBLIC_APP_SLUG=arrow-escape
+EXPO_PUBLIC_APP_NAME=ArrowVerse-Multiplayer
+EXPO_PUBLIC_APP_SLUG=arrowverse-multiplayer
 EXPO_PUBLIC_APP_VERSION=0.1.0
-EXPO_PUBLIC_APP_SCHEME=arrowescape
+EXPO_PUBLIC_APP_SCHEME=arrowversemultiplayer
 EXPO_PUBLIC_ENABLE_ANALYTICS=false
 EXPO_PUBLIC_ENABLE_HAPTICS=true
 EXPO_PUBLIC_ENABLE_SOUND=true
@@ -192,6 +192,6 @@ The **Multiplayer Arena** provides a real-time head-to-head shared board competi
 
 ## Notes
 
-- Game progress is persisted locally under `arrow-escape-progress`.
+- Game progress is persisted locally under `arrowverse-multiplayer-progress`.
 - Analytics currently logs events in development through `src/analytics/analytics.ts`.
 - The Expo project ID is configured in `app.json` for EAS builds.

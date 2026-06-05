@@ -14,7 +14,7 @@ interface ForcedUpdateScreenProps {
 export function ForcedUpdateScreen({ currentVersion, requiredVersion }: ForcedUpdateScreenProps) {
   const handleUpdatePress = async () => {
     // Open a store link or fallback website
-    const url = 'https://play.google.com/store/apps/details?id=com.arrowescape.mvp';
+    const url = 'https://play.google.com/store/apps/details?id=com.arrowverse.multiplayer';
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
@@ -49,7 +49,7 @@ export function ForcedUpdateScreen({ currentVersion, requiredVersion }: ForcedUp
         >
           <Text style={styles.title}>Update Required</Text>
           <Text style={styles.description}>
-            A critical new update is available. You must install the latest version of Arrow Escape to continue playing.
+            A critical new update is available. You must install the latest version of ArrowVerse-Multiplayer to continue playing.
           </Text>
 
           {/* Versions Comparison Box */}

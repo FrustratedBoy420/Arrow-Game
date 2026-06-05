@@ -42,7 +42,7 @@ export function ExitConfirmModal({ visible, onClose, onConfirm }: ExitConfirmMod
 
           {/* Description */}
           <Text style={styles.description}>
-            Are you sure you want to exit Arrow Escape?
+            Are you sure you want to exit ArrowVerse-Multiplayer?
           </Text>
 
           {/* Action Buttons */}

@@ -477,7 +477,7 @@ export const useGameStore = create<GameStore>()(
       }
     }),
     {
-      name: 'arrow-escape-progress',
+      name: 'arrowverse-multiplayer-progress',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         currentLevelId: state.currentLevelId,

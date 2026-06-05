@@ -34,7 +34,7 @@ export function ensureLevelProgressMap(
 // PERSISTENCE HELPERS
 // ============================================================================
 
-const LEVEL_PROGRESS_STORAGE_KEY = 'arrow-escape-level-progress';
+const LEVEL_PROGRESS_STORAGE_KEY = 'arrowverse-multiplayer-level-progress';
 
 /**
  * Saves the level progress map to AsyncStorage.
@@ -55,7 +55,7 @@ export async function saveLevelProgress(levelMap: Map<number, LevelProgress>): P
 export async function loadLevelProgress(): Promise<Map<number, LevelProgress>> {
   try {
     // Load persisted admin bypass status
-    const unlockStatus = await AsyncStorage.getItem('arrow-escape-all-levels-unlocked');
+    const unlockStatus = await AsyncStorage.getItem('arrowverse-multiplayer-all-levels-unlocked');
     if (unlockStatus === 'true') {
       setAllLevelsUnlockedPure(true);
     } else if (unlockStatus === 'false') {
@@ -157,7 +157,7 @@ export function getLevelStarConfig(levelMap: Map<number, LevelProgress>, levelId
  */
 export function setAllLevelsUnlocked(unlocked: boolean) {
   setAllLevelsUnlockedPure(unlocked);
-  AsyncStorage.setItem('arrow-escape-all-levels-unlocked', unlocked ? 'true' : 'false').catch((error) => {
+  AsyncStorage.setItem('arrowverse-multiplayer-all-levels-unlocked', unlocked ? 'true' : 'false').catch((error) => {
     console.error('Failed to save allLevelsUnlocked status:', error);
   });
 }

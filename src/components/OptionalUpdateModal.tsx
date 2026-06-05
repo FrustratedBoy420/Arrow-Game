@@ -13,7 +13,7 @@ interface OptionalUpdateModalProps {
 
 export function OptionalUpdateModal({ visible, latestVersion, onClose }: OptionalUpdateModalProps) {
   const handleUpdatePress = async () => {
-    const url = 'https://play.google.com/store/apps/details?id=com.arrowescape.mvp';
+    const url = 'https://play.google.com/store/apps/details?id=com.arrowverse.multiplayer';
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
@@ -58,7 +58,7 @@ export function OptionalUpdateModal({ visible, latestVersion, onClose }: Optiona
 
           {/* Description */}
           <Text style={styles.description}>
-            A new version of Arrow Escape is ready. Update now to enjoy the latest levels, features, and performance enhancements!
+            A new version of ArrowVerse-Multiplayer is ready. Update now to enjoy the latest levels, features, and performance enhancements!
           </Text>
 
           {/* Actions Button Row */}

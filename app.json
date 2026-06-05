@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Arrow Escape",
-    "slug": "arrow-escape",
+    "name": "ArrowVerse-Multiplayer",
+    "slug": "arrowverse-multiplayer",
     "version": "0.1.0",
     "orientation": "portrait",
-    "scheme": "arrowescape",
+    "scheme": "arrowversemultiplayer",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
     "assetBundlePatterns": [
@@ -21,14 +21,14 @@
       ]
     ],
     "android": {
-      "package": "com.arrowescape.mvp",
+      "package": "com.arrowverse.multiplayer",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#F6F1E8"
       }
     },
     "ios": {
-      "bundleIdentifier": "com.arrowescape.mvp",
+      "bundleIdentifier": "com.arrowverse.multiplayer",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

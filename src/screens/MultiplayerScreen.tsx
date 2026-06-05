@@ -853,12 +853,12 @@ export function MultiplayerScreen() {
       }
 
       const inviteUrl = `${cleanUrl}/api/join?code=${roomCode}`;
-      const message = `⚔️ Join my Arrow Escape Battle Arena!\n\nUse Room Code: *${roomCode}*\nClick here to join directly: ${inviteUrl}`;
+      const message = `⚔️ Join my ArrowVerse-Multiplayer Battle Arena!\n\nUse Room Code: *${roomCode}*\nClick here to join directly: ${inviteUrl}`;
 
       await Share.share({
         message,
         url: inviteUrl,
-        title: 'Arrow Escape Arena Invitation',
+        title: 'ArrowVerse-Multiplayer Arena Invitation',
       });
     } catch (err: any) {
       console.error('Sharing failed:', err);

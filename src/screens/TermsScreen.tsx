@@ -111,13 +111,13 @@ export function TermsScreen({ onAccept }: TermsScreenProps) {
           <Text style={styles.arrowIcon}>➤</Text>
         </View>
 
-        <Text style={styles.title}>Arrow{'\n'}Escape</Text>
+        <Text style={styles.title}>ArrowVerse{'\n'}Multiplayer</Text>
         <Text style={styles.subtitle}>Think · Tap · Escape</Text>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Terms & Consent</Text>
           <Text style={styles.cardText}>
-            Welcome to Arrow Escape! Before starting your journey, please accept our terms.
+            Welcome to ArrowVerse-Multiplayer! Before starting your journey, please accept our terms.
           </Text>
           <Text style={styles.cardTextHighlight}>
             We do not collect your personal data or track your device. We only use a basic anonymous System ID to save your level progress.
