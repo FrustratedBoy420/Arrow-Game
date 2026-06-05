@@ -14,7 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { getArrowCells, getArrowHead, getExitDirection, getCollisionDistance } from '../game/engine';
-import type { ArrowNode, BoardState, Direction } from '../game/types';
+import type { ArrowNode, BoardState, Direction, LevelDefinition } from '../game/types';
 import { theme } from '../theme/theme';
 
 type BlockedArrowEntry = { arrow: ArrowNode; blocker: ArrowNode | null };
@@ -42,9 +42,9 @@ type Props = {
 const arrowHeadSize = 12;
 
 /** Target slide speed — scales duration by path length so all arrows feel snappy but smooth. */
-const EXIT_SPEED_PX_PER_SEC = 550;
-const EXIT_DURATION_MIN_MS = 700;
-const EXIT_DURATION_MAX_MS = 2500;
+const EXIT_SPEED_PX_PER_SEC = 350;
+const EXIT_DURATION_MIN_MS = 2500;
+const EXIT_DURATION_MAX_MS = 4000;
 
 const CANVAS_PADDING = 500;
 
@@ -177,7 +177,7 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
           strokeWidth={strokeW}
           boardWidth={width}
           boardHeight={height}
-          onDone={() => onExitDone(arrow.id)}
+          onDone={onExitDone}
         />
       ))}
 
@@ -190,7 +190,7 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
           board={board}
           cellSize={cellSize}
           strokeWidth={strokeW}
-          onDone={() => onBlockedDone(arrow.id)}
+          onDone={onBlockedDone}
           onCollisionPoint={onCollisionPoint}
         />
       ))}
@@ -222,10 +222,11 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
       {localTaps.map((t) => (
         <TapRipple
           key={t.id}
+          id={t.id}
           x={t.x}
           y={t.y}
           cellSize={cellSize}
-          onDone={() => handleTapIndicatorDone(t.id)}
+          onDone={handleTapIndicatorDone}
         />
       ))}
     </View>
@@ -235,7 +236,7 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
 // ---------------------------------------------------------------------------
 // ExitingArrow — slides the removed arrow off the grid.
 // ---------------------------------------------------------------------------
-function ExitingArrow({
+const ExitingArrow = memo(function ExitingArrow({
   arrow, cellSize, strokeWidth: sw, boardWidth, boardHeight, onDone
 }: {
   arrow: ArrowNode;
@@ -243,7 +244,7 @@ function ExitingArrow({
   strokeWidth: number;
   boardWidth: number;
   boardHeight: number;
-  onDone: () => void;
+  onDone: (arrowId: string) => void;
 }) {
   const animProgress = useSharedValue(0);
 
@@ -307,7 +308,7 @@ function ExitingArrow({
 
   useEffect(() => {
     const duration = computeExitDurationMs(totalLength);
-    const moveEasing = Easing.linear;
+    const moveEasing = Easing.out(Easing.quad); // Smooth deceleration curve so movement remains visible
 
     animProgress.value = 0;
 
@@ -315,7 +316,7 @@ function ExitingArrow({
       1,
       { duration, easing: moveEasing },
       (finished) => {
-        if (finished) runOnJS(onDone)();
+        if (finished) runOnJS(onDone)(arrow.id);
       }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per mounted exit arrow
@@ -330,8 +331,6 @@ function ExitingArrow({
     const t = animProgress.value;
     return (arrowLength + t * (totalLength - arrowLength)) / totalLength;
   });
-
-  // opacity styling removed
 
   const originalHead = getArrowHead(arrow);
   const originalHeadCenter = useMemo(() => {
@@ -350,7 +349,7 @@ function ExitingArrow({
   const pathColor = arrow.color || theme.colors.arrowStroke;
 
   return (
-    <Animated.View
+    <View
       style={{
         position: 'absolute',
         left: -CANVAS_PADDING,
@@ -385,15 +384,15 @@ function ExitingArrow({
           />
         </Group>
       </Canvas>
-    </Animated.View>
+    </View>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // BlockedArrowOverlay — turns arrow red, slides it forward into the blocker,
 // then snaps it back. Fires onCollisionPoint at the forward-most point.
 // ---------------------------------------------------------------------------
-function BlockedArrowOverlay({
+const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
   arrow,
   blocker,
   board,
@@ -407,7 +406,7 @@ function BlockedArrowOverlay({
   board: BoardState;
   cellSize: number;
   strokeWidth: number;
-  onDone: () => void;
+  onDone: (arrowId: string) => void;
   onCollisionPoint: (blocker: ArrowNode | null) => void;
 }) {
   const progress = useSharedValue(0);
@@ -432,7 +431,7 @@ function BlockedArrowOverlay({
   }, [trackPath, slideDist]);
 
   // Adjust timing organically based on distance
-  const forwardDuration = Math.max(140, Math.min(300, cellsDistance * 80));
+  const forwardDuration = Math.max(100, Math.min(220, cellsDistance * 60));
 
   useEffect(() => {
     progress.value = 0;
@@ -446,11 +445,11 @@ function BlockedArrowOverlay({
           
           // Snap back with a premium snappy spring recoil bounce
           progress.value = withSpring(0, {
-            damping: 15,
-            stiffness: 140,
-            mass: 0.6,
+            damping: 12,
+            stiffness: 180,
+            mass: 0.5,
           }, (fin2) => {
-            if (fin2) runOnJS(onDone)();
+            if (fin2) runOnJS(onDone)(arrow.id);
           });
         }
       }
@@ -479,7 +478,7 @@ function BlockedArrowOverlay({
   });
 
   return (
-    <Animated.View
+    <View
       style={[StyleSheet.absoluteFill, { zIndex: 20 }]}
       pointerEvents="none"
     >
@@ -507,14 +506,14 @@ function BlockedArrowOverlay({
           />
         </Group>
       </Canvas>
-    </Animated.View>
+    </View>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // FlashingArrowOverlay — briefly shows the blocker in red, then fades away.
 // ---------------------------------------------------------------------------
-function FlashingArrowOverlay({
+const FlashingArrowOverlay = memo(function FlashingArrowOverlay({
   arrow,
   cellSize,
   strokeWidth: sw
@@ -532,63 +531,59 @@ function FlashingArrowOverlay({
     // Hold bright red briefly, then fade out the red overlay
     flashOpacity.value = withSequence(
       withTiming(1, { duration: 50, easing: Easing.out(Easing.quad) }),
-      withDelay(50, withTiming(0, { duration: 350, easing: Easing.bezier(0.25, 1, 0.5, 1) }))
+      withDelay(50, withTiming(0, { duration: 300, easing: Easing.bezier(0.25, 1, 0.5, 1) }))
     );
 
     // Organic decay shake animation on impact using spring
     shake.value = 6;
     shake.value = withSpring(0, {
-      damping: 5,
-      stiffness: 280,
-      mass: 0.6
+      damping: 6,
+      stiffness: 300,
+      mass: 0.5
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: shake.value },
-      { translateY: shake.value * 0.5 } // Shake slightly diagonally for a organic shockwave feel
-    ]
-  }));
-
-  const redOverlayStyle = useAnimatedStyle(() => ({
-    opacity: flashOpacity.value
-  }));
+  const shakeTransform = useDerivedValue(() => {
+    const s = shake.value;
+    return [
+      { translateX: s },
+      { translateY: s * 0.5 } // Shake slightly diagonally for a organic shockwave feel
+    ];
+  });
 
   return (
-    <Animated.View
-      style={[StyleSheet.absoluteFill, animStyle, { zIndex: 15 }]}
+    <View
+      style={[StyleSheet.absoluteFill, { zIndex: 15 }]}
       pointerEvents="none"
     >
-      {/* 1. Base arrow in normal color so it stays visible while flashing/shaking */}
       <Canvas style={StyleSheet.absoluteFill}>
-        <Path
-          path={arrowPath}
-          color={theme.colors.arrowStroke}
-          style="stroke"
-          strokeCap="round"
-          strokeJoin="round"
-          strokeWidth={sw}
-        />
-      </Canvas>
-
-      {/* 2. Red overlay that wiggles and fades out */}
-      <Animated.View style={[StyleSheet.absoluteFill, redOverlayStyle]} pointerEvents="none">
-        <Canvas style={StyleSheet.absoluteFill}>
+        {/* Draw everything inside a single Group that wiggles/shakes on the GPU */}
+        <Group transform={shakeTransform}>
+          {/* 1. Base arrow in normal color so it stays visible while flashing/shaking */}
           <Path
             path={arrowPath}
-            color="#FF3B30"
+            color={theme.colors.arrowStroke}
             style="stroke"
             strokeCap="round"
             strokeJoin="round"
             strokeWidth={sw}
           />
-        </Canvas>
-      </Animated.View>
-    </Animated.View>
+          {/* 2. Red overlay that wiggles and fades out */}
+          <Path
+            path={arrowPath}
+            color="#FF3B30"
+            opacity={flashOpacity}
+            style="stroke"
+            strokeCap="round"
+            strokeJoin="round"
+            strokeWidth={sw}
+          />
+        </Group>
+      </Canvas>
+    </View>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -684,16 +679,18 @@ const styles = StyleSheet.create({
 // ---------------------------------------------------------------------------
 // TapRipple — brief touch indicator feedback circle
 // ---------------------------------------------------------------------------
-function TapRipple({
+const TapRipple = memo(function TapRipple({
+  id,
   x,
   y,
   cellSize,
   onDone
 }: {
+  id: number;
   x: number;
   y: number;
   cellSize: number;
-  onDone: () => void;
+  onDone: (id: number) => void;
 }) {
   const scale = useSharedValue(0.3);
   const opacity = useSharedValue(0.9);
@@ -703,7 +700,7 @@ function TapRipple({
   useEffect(() => {
     scale.value = withTiming(1.3, { duration: 300, easing: Easing.out(Easing.quad) });
     opacity.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.quad) }, (fin) => {
-      if (fin) runOnJS(onDone)();
+      if (fin) runOnJS(onDone)(id);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -729,5 +726,4 @@ function TapRipple({
       pointerEvents="none"
     />
   );
-}
-
+});

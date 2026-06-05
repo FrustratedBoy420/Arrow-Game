@@ -174,17 +174,17 @@ export function HomeScreen() {
         </View>
 
         {/* Network / Fetching status badge */}
-        {(isFetchingConfig || !isConnected || !dynamicLevels || dynamicLevels.length === 0) && (
+        {((isFetchingConfig && iconsConfig?.unlockAllLevels) || !isConnected || !dynamicLevels || dynamicLevels.length === 0) && (
           <View style={[
             styles.statusBadge,
-            isFetchingConfig ? styles.statusBadgeFetching : styles.statusBadgeOffline
+            (isFetchingConfig && iconsConfig?.unlockAllLevels) ? styles.statusBadgeFetching : styles.statusBadgeOffline
           ]}>
             <View style={[
               styles.statusDot,
-              isFetchingConfig ? styles.statusDotFetching : styles.statusDotOffline
+              (isFetchingConfig && iconsConfig?.unlockAllLevels) ? styles.statusDotFetching : styles.statusDotOffline
             ]} />
             <Text style={styles.statusText}>
-              {isFetchingConfig ? 'Syncing...' : 'Offline Mode'}
+              {(isFetchingConfig && iconsConfig?.unlockAllLevels) ? 'Syncing...' : 'Offline Mode'}
             </Text>
           </View>
         )}
@@ -207,7 +207,7 @@ export function HomeScreen() {
         </Animated.View>
 
         <Animated.View style={titleStyle}>
-          <Text style={styles.title}>Arrow{'\n'}Escape</Text>
+          <Text style={styles.title}>Arrow{'\n'}Verse</Text>
           <Text style={styles.subtitle}>Think · Tap · Escape</Text>
         </Animated.View>
 

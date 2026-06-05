@@ -173,6 +173,7 @@ export function MultiplayerScreen() {
   const stepRef = useRef(step);
   const roomCodeRef = useRef(roomCode);
   const gameStartedAtRef = useRef<number | null>(null);
+  const localPlayerTimesRef = useRef(localPlayerTimes);
 
   useEffect(() => {
     playerNameRef.current = playerName;
@@ -189,6 +190,10 @@ export function MultiplayerScreen() {
   useEffect(() => {
     levelRef.current = level;
   }, [level]);
+
+  useEffect(() => {
+    localPlayerTimesRef.current = localPlayerTimes;
+  }, [localPlayerTimes]);
 
   useEffect(() => {
     if (step !== 'game' || gameStartedAtRef.current == null) {
@@ -626,20 +631,14 @@ export function MultiplayerScreen() {
           }
         }
 
-        // Reconcile arrowOwners using functional state to prevent rollback race conditions
-        setArrowOwners((currentOwners) => {
-          const serverOwners: Record<string, string> = data.arrowOwners || {};
-          const nextOwners = { ...currentOwners };
+        const isMe = progressName.toLowerCase() === me;
+        const isConflict = !!data.isConflict;
+        const serverOwners: Record<string, string> = data.arrowOwners || {};
 
-          // 1. Merge server verified owners (this resolves conflicts and confirms claims)
-          Object.entries(serverOwners).forEach(([id, owner]) => {
-            nextOwners[id] = owner;
-          });
-
-          // 2. Set scores based on reconciled owners to prevent score jumps/rollbacks due to network latency
-          setScores(computeScores(nextOwners));
-
-          // 3. Mark server verified arrows as confirmed clears
+        if (isMe && !isConflict) {
+          // Our own successful move with no conflict.
+          // Just sync reference arrays quietly with server data.
+          setArrowOwners((currentOwners) => ({ ...currentOwners, ...serverOwners }));
           setConfirmedClears((currentConfirmed) => {
             const nextConfirmed = { ...currentConfirmed };
             Object.keys(serverOwners).forEach((id) => {
@@ -647,67 +646,79 @@ export function MultiplayerScreen() {
             });
             return nextConfirmed;
           });
+          return;
+        }
 
-          // 4. Reconcile exiting arrows color based on server verified ownership
-          setExitingArrows((currentExiting) => {
-            return currentExiting.map((arrow) => {
-              const verifiedOwner = nextOwners[arrow.id];
-              if (verifiedOwner) {
-                const isMe = verifiedOwner.toLowerCase() === playerNameRef.current.trim().toLowerCase();
-                const expectedColor = isMe ? '#43A047' : '#2196F3';
-                if (arrow.color !== expectedColor) {
-                  return { ...arrow, color: expectedColor };
-                }
-              }
-              return arrow;
-            });
-          });
+        // Reconcile when opponent makes a move or if there is a conflict rollback
+        const currentOwners = arrowOwnersRef.current;
+        const nextOwners = { ...currentOwners, ...serverOwners };
+        const nextScores = computeScores(nextOwners);
 
-          // 5. Update the board state to filter out any cleared arrows
-          setBoard((currentBoard) => {
-            if (!currentBoard) return null;
-
-            // An arrow is removed if it is in nextOwners
-            const remainingArrows = currentBoard.arrows.filter((a) => !nextOwners[a.id]);
-            const removedIds = currentBoard.removedIds.slice();
-            Object.keys(nextOwners).forEach((id) => {
-              if (!removedIds.includes(id)) {
-                removedIds.push(id);
-              }
-            });
-
-            // Trigger exited animation if opponent cleared a new arrow in our current active board
-            const arrowNode = currentBoard.arrows.find((a) => a.id === arrowId);
-            if (arrowNode && progressName.toLowerCase() !== me) {
-              setExitingArrows((prev) => {
-                if (!prev.some((a) => a.id === arrowNode.id)) {
-                  return [...prev, { ...arrowNode, color: '#2196F3' }]; // Opponent exit color is blue
-                }
-                return prev;
-              });
-              void playCorrectFeedback();
-            }
-
-            const nextBoard = {
-              ...currentBoard,
-              arrows: remainingArrows,
-              removedIds: removedIds
-            };
-
-            if (nextBoard.arrows.length === 0 && currentBoard.arrows.length > 0) {
-              const timeMs = recordMyCompletionTime();
-              apiPost('/api/player-finished', {
-                name: playerNameRef.current,
-                roomCode: roomCodeRef.current.trim().toUpperCase(),
-                timeMs
-              }).catch((err) => console.error('Failed to notify finished:', err));
-            }
-
-            return nextBoard;
-          });
-
-          return nextOwners;
+        const currentConfirmed = confirmedClearsRef.current;
+        const nextConfirmed = { ...currentConfirmed };
+        Object.keys(serverOwners).forEach((id) => {
+          nextConfirmed[id] = true;
         });
+
+        // Reconcile exiting arrows color
+        setExitingArrows((currentExiting) => {
+          return currentExiting.map((arrow) => {
+            const verifiedOwner = nextOwners[arrow.id];
+            if (verifiedOwner) {
+              const isArrowMe = verifiedOwner.toLowerCase() === me;
+              const expectedColor = isArrowMe ? '#43A047' : '#2196F3';
+              if (arrow.color !== expectedColor) {
+                return { ...arrow, color: expectedColor };
+              }
+            }
+            return arrow;
+          });
+        });
+
+        // Reconcile board state
+        const currentBoard = boardRef.current;
+        if (currentBoard) {
+          const remainingArrows = currentBoard.arrows.filter((a) => !nextOwners[a.id]);
+          const removedIds = currentBoard.removedIds.slice();
+          Object.keys(nextOwners).forEach((id) => {
+            if (!removedIds.includes(id)) {
+              removedIds.push(id);
+            }
+          });
+
+          // Trigger exited animation if opponent cleared a new arrow in our current active board
+          const arrowNode = currentBoard.arrows.find((a) => a.id === arrowId);
+          if (arrowNode && !isMe) {
+            setExitingArrows((prev) => {
+              if (!prev.some((a) => a.id === arrowNode.id)) {
+                return [...prev, { ...arrowNode, color: '#2196F3' }]; // Opponent exit color is blue
+              }
+              return prev;
+            });
+            void playCorrectFeedback();
+          }
+
+          const nextBoard = {
+            ...currentBoard,
+            arrows: remainingArrows,
+            removedIds: removedIds
+          };
+
+          if (nextBoard.arrows.length === 0 && currentBoard.arrows.length > 0) {
+            const timeMs = recordMyCompletionTime();
+            apiPost('/api/player-finished', {
+              name: playerNameRef.current,
+              roomCode: roomCodeRef.current.trim().toUpperCase(),
+              timeMs
+            }).catch((err) => console.error('Failed to notify finished:', err));
+          }
+          setBoard(nextBoard);
+        }
+
+        // Apply state updates at the top level
+        setArrowOwners(nextOwners);
+        setScores(nextScores);
+        setConfirmedClears(nextConfirmed);
 
         if (typeof data.arrowsLeft === 'number') {
           setOpponentArrowsLeft(Math.floor(data.arrowsLeft));
@@ -724,16 +735,16 @@ export function MultiplayerScreen() {
       channel.bind('match_results', (data: any) => {
         console.log('Pusher received: [match_results]', data);
         setMatchWinner(data.winner);
-        setLocalPlayerTimes((localTimes) => {
-          const serverPlayers: ServerPlayer[] = data.players || [];
-          setMatchResults(
-            serverPlayers.map((p) => ({
-              ...p,
-              timeMs: p.timeMs ?? localTimes[p.name] ?? null
-            }))
-          );
-          return localTimes;
-        });
+        
+        const localTimes = localPlayerTimesRef.current;
+        const serverPlayers: ServerPlayer[] = data.players || [];
+        setMatchResults(
+          serverPlayers.map((p) => ({
+            ...p,
+            timeMs: p.timeMs ?? localTimes[p.name] ?? null
+          }))
+        );
+
         setRematchStates({});
         setStep('results');
       });

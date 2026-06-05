@@ -137,13 +137,13 @@ export function LevelSelectScreen() {
       />
 
       {/* Offline / Syncing Banner warning at the bottom */}
-      {(!isConnected || isFetchingConfig || !dynamicLevels || dynamicLevels.length === 0) && (
+      {(!isConnected || (isFetchingConfig && unlockAllLevels) || !dynamicLevels || dynamicLevels.length === 0) && (
         <SafeAreaView style={[
           styles.offlineBanner,
-          isFetchingConfig ? styles.offlineBannerFetching : styles.offlineBannerOffline
+          (isFetchingConfig && unlockAllLevels) ? styles.offlineBannerFetching : styles.offlineBannerOffline
         ]}>
           <Text style={styles.offlineBannerText}>
-            {isFetchingConfig 
+            {(isFetchingConfig && unlockAllLevels)
               ? '🔄 Syncing levels from database...' 
               : unlockAllLevels
                 ? '👑 Offline Mode: Admin access active. All levels unlocked!'
