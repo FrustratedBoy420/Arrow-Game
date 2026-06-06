@@ -240,17 +240,17 @@ export function HomeScreen() {
         </View>
 
         {/* Network / Fetching status badge */}
-        {((isFetchingConfig && iconsConfig?.unlockAllLevels) || !isConnected || !dynamicLevels || dynamicLevels.length === 0) && (
+        {(!isConnected || !dynamicLevels || dynamicLevels.length === 0) && (
           <View style={[
             styles.statusBadge,
-            (isFetchingConfig && iconsConfig?.unlockAllLevels) ? styles.statusBadgeFetching : styles.statusBadgeOffline
+            styles.statusBadgeOffline
           ]}>
             <View style={[
               styles.statusDot,
-              (isFetchingConfig && iconsConfig?.unlockAllLevels) ? styles.statusDotFetching : styles.statusDotOffline
+              styles.statusDotOffline
             ]} />
             <Text style={styles.statusText}>
-              {(isFetchingConfig && iconsConfig?.unlockAllLevels) ? 'Syncing...' : 'Offline Mode'}
+              Offline Mode
             </Text>
           </View>
         )}

@@ -77,15 +77,20 @@ export function ZoomableBoardViewport({
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
+    if (width <= 0 || height <= 0) return;
+
+    const isFirstLayout = viewportW.value === 0 || viewportH.value === 0;
     viewportW.value = width;
     viewportH.value = height;
 
-    const fitScaleX = boardWidth > 0 ? width / boardWidth : 1;
-    const fitScaleY = boardHeight > 0 ? height / boardHeight : 1;
-    const fitScale = Math.min(1.0, fitScaleX, fitScaleY);
+    if (isFirstLayout) {
+      const fitScaleX = boardWidth > 0 ? width / boardWidth : 1;
+      const fitScaleY = boardHeight > 0 ? height / boardHeight : 1;
+      const fitScale = Math.min(1.0, fitScaleX, fitScaleY);
 
-    scale.value = fitScale;
-    savedScale.value = fitScale;
+      scale.value = fitScale;
+      savedScale.value = fitScale;
+    }
   }, [boardWidth, boardHeight, scale, savedScale, viewportH, viewportW]);
 
   const applyClampedTranslation = () => {
