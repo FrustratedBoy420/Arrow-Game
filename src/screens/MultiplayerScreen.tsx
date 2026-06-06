@@ -1345,15 +1345,18 @@ export function MultiplayerScreen() {
           </View>
         </View>
 
-        {/* Real-time Status Message Bar */}
         <View style={[
           styles.turnPromptBar,
           isLeading ? styles.turnPromptBarActive : isTrailing ? styles.turnPromptBarTrailing : styles.turnPromptBarWaiting
         ]}>
-          <Text style={[
-            styles.turnPromptText,
-            isLeading ? styles.turnPromptTextActive : isTrailing ? styles.turnPromptTextTrailing : styles.turnPromptTextWaiting
-          ]}>
+          <Text
+            style={[
+              styles.turnPromptText,
+              isLeading ? styles.turnPromptTextActive : isTrailing ? styles.turnPromptTextTrailing : styles.turnPromptTextWaiting
+            ]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             {statusText}
           </Text>
         </View>
@@ -2224,12 +2227,14 @@ const styles = StyleSheet.create({
   },
   scoreCard: {
     flex: 1,
+    height: 96,
     backgroundColor: '#FFF',
     borderRadius: theme.radius.lg,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 10,
     borderWidth: 2,
     borderColor: theme.colors.borderSoft,
+    justifyContent: 'center',
     ...theme.shadows.sm
   },
   scoreCardActive: {
@@ -2282,7 +2287,7 @@ const styles = StyleSheet.create({
   turnPromptBar: {
     marginHorizontal: 16,
     marginTop: 10,
-    paddingVertical: 8,
+    height: 42,
     paddingHorizontal: 12,
     borderRadius: theme.radius.sm,
     alignItems: 'center',
