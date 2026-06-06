@@ -995,7 +995,10 @@ export function MultiplayerScreen() {
 
   const handleCollisionPoint = useCallback((blocker: import('../game/types').ArrowNode | null) => {
     if (!blocker) return;
-    setFlashingArrows((prev) => [...prev, blocker]);
+    setFlashingArrows((prev) => {
+      if (prev.some((a) => a.id === blocker.id)) return prev;
+      return [...prev, blocker];
+    });
     setTimeout(() => {
       setFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
     }, 520);
@@ -1032,7 +1035,10 @@ export function MultiplayerScreen() {
       const newScores = computeScores(nextOwners);
 
       unstable_batchedUpdates(() => {
-        setExitingArrows((prev) => [...prev, { ...arrow, color: '#43A047' }]);
+        setExitingArrows((prev) => {
+          if (prev.some((a) => a.id === arrow.id)) return prev;
+          return [...prev, { ...arrow, color: '#43A047' }];
+        });
         setArrowOwners(nextOwners);
         setScores(newScores);
         setBoard(nextBoard);
@@ -1065,7 +1071,10 @@ export function MultiplayerScreen() {
     } else if (result.type === 'BLOCKED') {
       // Find which arrow is physically blocking, then start the red-slide animation.
       const blocker = findBlockingArrow(arrow, currentBoard) ?? null;
-      setBlockedArrows((prev) => [...prev, { arrow, blocker }]);
+      setBlockedArrows((prev) => {
+        if (prev.some((b) => b.arrow.id === arrow.id)) return prev;
+        return [...prev, { arrow, blocker }];
+      });
       void playWrongFeedback(hapticsEnabled);
 
       const nextBoard = result.board;

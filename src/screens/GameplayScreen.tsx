@@ -127,7 +127,10 @@ export function GameplayScreen() {
   /** Called at the collision moment in BlockedArrowOverlay — flash the blocker red. */
   const handleCollisionPoint = useCallback((blocker: ArrowNode | null) => {
     if (!blocker) return;
-    setFlashingArrows((prev) => [...prev, blocker]);
+    setFlashingArrows((prev) => {
+      if (prev.some((a) => a.id === blocker.id)) return prev;
+      return [...prev, blocker];
+    });
     // Remove after the flash animation completes (~460ms total in FlashingArrowOverlay).
     setTimeout(() => {
       setFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
@@ -145,12 +148,18 @@ export function GameplayScreen() {
       const result = tapArrow(arrowId);
 
       if (result === 'REMOVED' && arrow) {
-        setExitingArrows((prev) => [...prev, { ...arrow, color: '#43A047' }]);
+        setExitingArrows((prev) => {
+          if (prev.some((a) => a.id === arrow.id)) return prev;
+          return [...prev, { ...arrow, color: '#43A047' }];
+        });
         void playCorrectFeedback();
       } else if (result === 'BLOCKED' && arrow) {
         // Find which arrow is physically blocking, then start the red-slide animation.
         const blocker = findBlockingArrow(arrow, boardBefore) ?? null;
-        setBlockedArrows((prev) => [...prev, { arrow, blocker }]);
+        setBlockedArrows((prev) => {
+          if (prev.some((b) => b.arrow.id === arrow.id)) return prev;
+          return [...prev, { arrow, blocker }];
+        });
         void playWrongFeedback(hapticsEnabled);
       }
     },
@@ -180,7 +189,10 @@ export function GameplayScreen() {
     const hintArrow = currentBoard.arrows.find((a) => isFrontClear(a, currentBoard));
     const hintedId = useHint();
     if (hintedId && hintArrow) {
-      setExitingArrows((prev) => [...prev, { ...hintArrow, color: '#43A047' }]);
+      setExitingArrows((prev) => {
+        if (prev.some((a) => a.id === hintArrow.id)) return prev;
+        return [...prev, { ...hintArrow, color: '#43A047' }];
+      });
       void playCorrectFeedback();
     } else {
       Alert.alert('No Hint', 'No valid move right now. Try Undo!');
