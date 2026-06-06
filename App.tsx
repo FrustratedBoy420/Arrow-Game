@@ -61,8 +61,8 @@ export default function App() {
         setHasAcceptedTerms(accepted);
 
         if (accepted) {
-          // Register user profile only after terms acceptance is verified
-          await registerUserProfile();
+          // Register user profile asynchronously to prevent blocking app startup
+          void registerUserProfile();
         }
       } catch (e) {
         console.warn(e);
@@ -78,8 +78,8 @@ export default function App() {
     try {
       await AsyncStorage.setItem('has_accepted_terms_v1', 'true');
       setHasAcceptedTerms(true);
-      // Register profile immediately after acceptance
-      await registerUserProfile();
+      // Register profile immediately after acceptance (non-blocking)
+      void registerUserProfile();
     } catch (e) {
       console.warn(e);
     }

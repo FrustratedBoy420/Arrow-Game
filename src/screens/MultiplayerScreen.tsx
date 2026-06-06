@@ -471,18 +471,19 @@ export function MultiplayerScreen() {
   useEffect(() => {
     if (step !== 'lobby') return;
 
-    setLobbySecondsLeft(120);
+    const tick = () => {
+      const created = roomCreatedAtRef.current || Date.now();
+      const elapsed = Math.floor((Date.now() - created) / 1000);
+      const remaining = Math.max(0, 120 - elapsed);
+      setLobbySecondsLeft(remaining);
 
-    const intervalId = setInterval(() => {
-      setLobbySecondsLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(intervalId);
-          void handleLobbyTimeout('lobby');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+      if (remaining <= 0) {
+        void handleLobbyTimeout('lobby');
+      }
+    };
+
+    tick();
+    const intervalId = setInterval(tick, 1000);
 
     return () => clearInterval(intervalId);
   }, [step, players, readyStates, handleLobbyTimeout]);

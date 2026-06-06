@@ -65,15 +65,11 @@ export function GameplayScreen() {
   }));
 
   useEffect(() => {
-    if (status === 'won') pendingNav.current = 'Victory';
-    if (status === 'failed') pendingNav.current = 'Fail';
-    if ((status === 'won' || status === 'failed') && exitingArrows.length === 0) {
-      const t = setTimeout(() => {
-        if (pendingNav.current) navigation.replace(pendingNav.current);
-      }, 300);
-      return () => clearTimeout(t);
+    if (status === 'failed') {
+      navigation.replace('Fail');
+      return;
     }
-  }, [status, exitingArrows.length, navigation]);
+  }, [status, navigation]);
 
   // Clear animation queues on level change (retry / next level).
   useEffect(() => {
@@ -90,8 +86,14 @@ export function GameplayScreen() {
   }, [currentLevelId]);
 
   const handleExitDone = useCallback((arrowId: string) => {
-    setExitingArrows((prev) => prev.filter((a) => a.id !== arrowId));
-  }, []);
+    setExitingArrows((prev) => {
+      const next = prev.filter((a) => a.id !== arrowId);
+      if (useGameStore.getState().status === 'won' && next.length === 0) {
+        navigation.replace('Victory');
+      }
+      return next;
+    });
+  }, [navigation]);
 
   const handleBlockedDone = useCallback((arrowId: string) => {
     setBlockedArrows((prev) => prev.filter((b) => b.arrow.id !== arrowId));

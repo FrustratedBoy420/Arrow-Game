@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Switch, Text, View, Linking } from 'react-native';
+import { Modal, Pressable, StyleSheet, Switch, Text, View, Linking, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useGameStore } from '../state/gameStore';
 import { CURRENT_APP_VERSION } from '../config/version';
 import { theme } from '../theme/theme';
 import { PrivacyPolicyModal } from '../screens/TermsScreen';
+import { deleteUserAccount } from '../utils/userRegistration';
 
 type Props = {
   visible: boolean;
@@ -16,6 +17,29 @@ type Props = {
 export function SettingsModal({ visible, onClose, onRestart }: Props) {
   const { soundEnabled, hapticsEnabled, musicEnabled, toggleSound, toggleHaptics, toggleMusic } = useGameStore();
   const [privacyVisible, setPrivacyVisible] = useState(false);
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      '⚠️ Delete Account',
+      'Are you sure you want to delete your account? This will permanently delete your progress and database records. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            const success = await deleteUserAccount();
+            if (success) {
+              Alert.alert('Success', 'Your account and data have been successfully deleted.');
+              onClose();
+            } else {
+              Alert.alert('Error', 'Failed to delete account. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   return (
     <>
@@ -99,6 +123,18 @@ export function SettingsModal({ visible, onClose, onRestart }: Props) {
                   <Text style={styles.settingLabel}>Terms & Conditions</Text>
                 </View>
                 <Ionicons name="open-outline" size={16} color={theme.colors.textMuted} style={{ opacity: 0.7 }} />
+              </Pressable>
+
+              {/* Delete Account */}
+              <Pressable 
+                style={styles.settingRow} 
+                onPress={handleDeleteAccount}
+              >
+                <View style={styles.labelContainer}>
+                  <Ionicons name="trash-outline" size={22} color="#D32F2F" style={styles.icon} />
+                  <Text style={[styles.settingLabel, { color: '#D32F2F' }]}>Delete Account</Text>
+                </View>
+                <Ionicons name="chevron-forward-outline" size={18} color="#D32F2F" />
               </Pressable>
             </View>
 

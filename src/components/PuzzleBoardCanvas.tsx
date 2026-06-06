@@ -42,9 +42,9 @@ type Props = {
 const arrowHeadSize = 12;
 
 /** Target slide speed — scales duration by path length so all arrows feel snappy but smooth. */
-const EXIT_SPEED_PX_PER_SEC = 350;
-const EXIT_DURATION_MIN_MS = 2500;
-const EXIT_DURATION_MAX_MS = 4000;
+const EXIT_SPEED_PX_PER_SEC = 300;
+const EXIT_DURATION_MIN_MS = 1000;
+const EXIT_DURATION_MAX_MS = 2500;
 
 const CANVAS_PADDING = 500;
 
@@ -308,7 +308,7 @@ const ExitingArrow = memo(function ExitingArrow({
 
   useEffect(() => {
     const duration = computeExitDurationMs(totalLength);
-    const moveEasing = Easing.out(Easing.quad); // Smooth deceleration curve so movement remains visible
+    const moveEasing = Easing.linear;
 
     animProgress.value = 0;
 
@@ -332,18 +332,38 @@ const ExitingArrow = memo(function ExitingArrow({
     return (arrowLength + t * (totalLength - arrowLength)) / totalLength;
   });
 
-  const originalHead = getArrowHead(arrow);
-  const originalHeadCenter = useMemo(() => {
-    const center = centerOf(originalHead, cellSize);
-    return { x: center.x + CANVAS_PADDING, y: center.y + CANVAS_PADDING };
-  }, [originalHead, cellSize]);
+  const headPath = useMemo(() => makeGenericHeadPath(cellSize), [cellSize]);
 
-  const headPath = useMemo(() => makeHeadPath(originalHeadCenter, exitDir, cellSize), [originalHeadCenter, exitDir, cellSize]);
+  const initialTransform = useMemo(() => {
+    const cells = arrow.fullPath;
+    if (cells.length === 0) return [{ translateX: 0 }, { translateY: 0 }, { rotate: 0 }];
+    const head = cells[cells.length - 1]!;
+    const center = centerOf(head, cellSize);
+    const angle = getDirectionAngle(exitDir);
+    return [
+      { translateX: center.x + CANVAS_PADDING },
+      { translateY: center.y + CANVAS_PADDING },
+      { rotate: angle }
+    ];
+  }, [arrow, cellSize, exitDir]);
 
   const headTransform = useDerivedValue(() => {
     const t = animProgress.value;
-    const offset = t * (totalLength - arrowLength);
-    return [{ translateX: v.x * offset }, { translateY: v.y * offset }];
+    const distance = arrowLength + t * (totalLength - arrowLength);
+    const it = Skia.ContourMeasureIter(trackPath, false, 1);
+    const contour = it.next();
+    if (contour) {
+      const length = contour.length();
+      const clampedDistance = Math.max(0, Math.min(length, distance));
+      const [pos, tan] = contour.getPosTan(clampedDistance);
+      const angle = Math.atan2(tan.y, tan.x);
+      return [
+        { translateX: pos.x },
+        { translateY: pos.y },
+        { rotate: angle }
+      ];
+    }
+    return initialTransform;
   });
 
   const pathColor = arrow.color || theme.colors.arrowStroke;
@@ -467,14 +487,38 @@ const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
     return totalLength > 0 ? ((shaftLength + offset) / totalLength) : 0;
   });
 
-  const originalHead = getArrowHead(arrow);
-  const originalHeadCenter = useMemo(() => centerOf(originalHead, cellSize), [originalHead, cellSize]);
+  const headPath = useMemo(() => makeGenericHeadPath(cellSize), [cellSize]);
 
-  const headPath = useMemo(() => makeHeadPath(originalHeadCenter, exitDir, cellSize), [originalHeadCenter, exitDir, cellSize]);
+  const initialTransform = useMemo(() => {
+    const cells = arrow.fullPath;
+    if (cells.length === 0) return [{ translateX: 0 }, { translateY: 0 }, { rotate: 0 }];
+    const head = cells[cells.length - 1]!;
+    const center = centerOf(head, cellSize);
+    const angle = getDirectionAngle(exitDir);
+    return [
+      { translateX: center.x },
+      { translateY: center.y },
+      { rotate: angle }
+    ];
+  }, [arrow, cellSize, exitDir]);
 
   const headTransform = useDerivedValue(() => {
     const offset = progress.value * slideDist;
-    return [{ translateX: v.x * offset }, { translateY: v.y * offset }];
+    const distance = shaftLength + offset;
+    const it = Skia.ContourMeasureIter(trackPath, false, 1);
+    const contour = it.next();
+    if (contour) {
+      const length = contour.length();
+      const clampedDistance = Math.max(0, Math.min(length, distance));
+      const [pos, tan] = contour.getPosTan(clampedDistance);
+      const angle = Math.atan2(tan.y, tan.x);
+      return [
+        { translateX: pos.x },
+        { translateY: pos.y },
+        { rotate: angle }
+      ];
+    }
+    return initialTransform;
   });
 
   return (
@@ -626,6 +670,24 @@ function makeHeadPath(headCenter: { x: number; y: number }, exitDir: Direction, 
   path.lineTo(headPoints.right.x, headPoints.right.y);
 
   return path;
+}
+
+function makeGenericHeadPath(cellSize: number) {
+  const path = Skia.Path.Make();
+  const sz = Math.min(arrowHeadSize, cellSize * 0.32);
+  path.moveTo(-sz, -sz);
+  path.lineTo(0, 0);
+  path.lineTo(-sz, sz);
+  return path;
+}
+
+function getDirectionAngle(dir: Direction): number {
+  switch (dir) {
+    case 'RIGHT': return 0;
+    case 'DOWN': return Math.PI / 2;
+    case 'LEFT': return Math.PI;
+    case 'UP': return -Math.PI / 2;
+  }
 }
 
 function makeArrowPath(arrow: ArrowNode, cellSize: number) {

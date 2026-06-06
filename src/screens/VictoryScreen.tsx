@@ -32,6 +32,7 @@ export function VictoryScreen() {
   const levelStartTime = useGameStore((state) => state.levelStartTime);
   const levelProgressMap = useGameStore((state) => state.levelProgressMap);
   const finalStarsCalculated = useGameStore((state) => state.finalStarsCalculated);
+  const coins = useGameStore((state) => state.coins);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
 
@@ -86,12 +87,18 @@ export function VictoryScreen() {
         >
           <Ionicons name="arrow-back" size={26} color={theme.colors.arrowStroke} />
         </Pressable>
-        <View style={styles.starCounter}>
-          <Text style={styles.starEmoji}>⭐</Text>
-          <Text style={styles.starText}>
-            {totalStars}
-            <Text style={styles.starMax}> / {maxPossibleStars}</Text>
-          </Text>
+        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          <View style={styles.starCounter}>
+            <Text style={styles.starEmoji}>⭐</Text>
+            <Text style={styles.starText}>
+              {totalStars}
+              <Text style={styles.starMax}> / {maxPossibleStars}</Text>
+            </Text>
+          </View>
+          <View style={styles.coinCounter}>
+            <Text style={styles.coinEmoji}>🪙</Text>
+            <Text style={styles.coinText}>{coins}</Text>
+          </View>
         </View>
         <Pressable
           style={styles.settingsBtn}
@@ -190,6 +197,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: theme.colors.textMuted
+  },
+  coinCounter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 22,
+    ...theme.shadows.sm
+  },
+  coinEmoji: { fontSize: 18, marginRight: 6 },
+  coinText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: theme.colors.arrowStroke
   },
   settingsBtn: {
     width: 44,

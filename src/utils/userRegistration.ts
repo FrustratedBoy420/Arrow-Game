@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import Pusher from 'pusher-js';
 import { useGameStore } from '../state/gameStore';
 import { setAllLevelsUnlocked } from '../systems/levelManagementStore';
@@ -29,9 +30,14 @@ export async function registerUserProfile() {
       baseUrl = `https://${baseUrl}`;
     }
 
-    // 1. Send profile registration to backend (ONLY systemId)
+    const profileName = await AsyncStorage.getItem('user_profile_name') || 'Guest';
+
+    // 1. Send profile registration to backend (systemId, name, os, osVersion)
     const payload = {
       systemId,
+      name: profileName,
+      os: Platform.OS,
+      osVersion: String(Platform.Version),
     };
 
     console.log('📡 Registering user profile:', payload);
@@ -125,5 +131,51 @@ async function setupUserPusherListener(systemId: string) {
 
   } catch (err) {
     console.error('❌ Failed to setup user Pusher listener:', err);
+  }
+}
+
+export async function deleteUserAccount(): Promise<boolean> {
+  try {
+    const systemId = await AsyncStorage.getItem('game_system_id');
+    if (!systemId) return false;
+
+    const savedUrl = await AsyncStorage.getItem('multiplayer_url');
+    let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
+    baseUrl = baseUrl.replace(/\/$/, '');
+    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+      baseUrl = `https://${baseUrl}`;
+    }
+
+    console.log('📡 Requesting account deletion for:', systemId);
+
+    const response = await fetch(`${baseUrl}/api/delete-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ systemId }),
+    });
+
+    if (response.ok) {
+      console.log('✅ Account successfully deleted from backend.');
+      
+      // Clear local storage associated with the user
+      await AsyncStorage.removeItem('game_system_id');
+      await AsyncStorage.removeItem('user_profile_name');
+      await AsyncStorage.removeItem('arrowverse-multiplayer-level-progress');
+      await AsyncStorage.removeItem('arrowverse-multiplayer-all-levels-unlocked');
+      
+      // Reset the Zustand store progress and coins
+      useGameStore.getState().resetAllProgress();
+      useGameStore.setState({ coins: 0 });
+
+      return true;
+    } else {
+      console.warn('⚠️ Backend failed to delete user account, status:', response.status);
+      return false;
+    }
+  } catch (err) {
+    console.error('❌ Failed to delete account:', err);
+    return false;
   }
 }

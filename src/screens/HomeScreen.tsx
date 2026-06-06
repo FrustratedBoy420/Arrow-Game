@@ -25,6 +25,8 @@ import { ensureLevelProgressMap } from '../systems/levelManagementStore';
 import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
+import { registerUserProfile } from '../utils/userRegistration';
+import { ProfileNameModal } from '../components/ProfileNameModal';
 
 export function HomeScreen() {
   const navigation = useNavigation<AppNavigation>();
@@ -32,6 +34,7 @@ export function HomeScreen() {
   const iconsConfig = useGameStore((s) => s.iconsConfig);
   const fetchGameConfig = useGameStore((s) => s.fetchGameConfig);
   const levelProgressMap = useGameStore((s) => s.levelProgressMap);
+  const coins = useGameStore((s) => s.coins);
 
   const isFetchingConfig = useGameStore((s) => s.isFetchingConfig);
   const dynamicLevels = useGameStore((s) => s.dynamicLevels);
@@ -45,6 +48,7 @@ export function HomeScreen() {
   const [updateModalVisible, setUpdateModalVisible] = useState(false);
   const [hasDismissedUpdate, setHasDismissedUpdate] = useState(false);
   const [exitModalVisible, setExitModalVisible] = useState(false);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
 
   useEffect(() => {
     if (
@@ -107,6 +111,26 @@ export function HomeScreen() {
   }, [loadConfig]);
 
   useEffect(() => {
+    const checkProfileName = async () => {
+      const name = await AsyncStorage.getItem('user_profile_name');
+      if (!name) {
+        setProfileModalVisible(true);
+      }
+    };
+    void checkProfileName();
+  }, []);
+
+  const handleProfileSubmit = async (name: string) => {
+    try {
+      await AsyncStorage.setItem('user_profile_name', name);
+      setProfileModalVisible(false);
+      await registerUserProfile();
+    } catch (err) {
+      console.warn('Failed to save profile name:', err);
+    }
+  };
+
+  useEffect(() => {
     if (isConnected) {
       // On reconnect: only do a lightweight version check (not full config reload)
       // This avoids re-downloading levels on every internet reconnect
@@ -164,13 +188,21 @@ export function HomeScreen() {
 
       {/* ── Top Header ── */}
       <View style={styles.header}>
-        {/* Star counter: earned / max-possible */}
-        <View style={styles.starCounter}>
-          <Text style={styles.starEmoji}>⭐</Text>
-          <Text style={styles.starText}>
-            {totalStars}
-            <Text style={styles.starMax}> / {maxPossibleStars}</Text>
-          </Text>
+        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          {/* Star counter: earned / max-possible */}
+          <View style={styles.starCounter}>
+            <Text style={styles.starEmoji}>⭐</Text>
+            <Text style={styles.starText}>
+              {totalStars}
+              <Text style={styles.starMax}> / {maxPossibleStars}</Text>
+            </Text>
+          </View>
+
+          {/* Coin counter */}
+          <View style={styles.coinCounter}>
+            <Text style={styles.coinEmoji}>🪙</Text>
+            <Text style={styles.coinText}>{coins}</Text>
+          </View>
         </View>
 
         {/* Network / Fetching status badge */}
@@ -289,6 +321,11 @@ export function HomeScreen() {
           BackHandler.exitApp();
         }}
       />
+
+      <ProfileNameModal
+        visible={profileModalVisible}
+        onSubmit={handleProfileSubmit}
+      />
     </SafeAreaView>
   );
 }
@@ -327,6 +364,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: theme.colors.textMuted
+  },
+  coinCounter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 22,
+    ...theme.shadows.sm
+  },
+  coinEmoji: {
+    fontSize: 18,
+    marginRight: 6
+  },
+  coinText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: theme.colors.arrowStroke
   },
 
   settingsBtn: {

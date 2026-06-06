@@ -23,6 +23,7 @@ type GameStore = {
   soundEnabled: boolean;
   hapticsEnabled: boolean;
   musicEnabled: boolean;
+  coins: number;
   lastHintArrowId: string | null;
   hintUsedThisLevel: boolean;
   dynamicLevels: LevelDefinition[] | null;
@@ -82,6 +83,7 @@ export const useGameStore = create<GameStore>()(
       soundEnabled: true,
       hapticsEnabled: true,
       musicEnabled: true,
+      coins: 0,
       lastHintArrowId: null,
       hintUsedThisLevel: false,
       dynamicLevels: null,
@@ -108,7 +110,8 @@ export const useGameStore = create<GameStore>()(
         set({
           highestUnlockedLevel: 1,
           levelProgressMap: freshMap,
-          currentLevelId: 1
+          currentLevelId: 1,
+          coins: 0
         });
         require('../systems/levelManagementStore').saveLevelProgress(freshMap);
       },
@@ -447,7 +450,10 @@ export const useGameStore = create<GameStore>()(
           finalStarsCalculated
         );
 
-        set({ starsEarnedThisLevel: finalStarsCalculated });
+        set((state) => ({ 
+          starsEarnedThisLevel: finalStarsCalculated,
+          coins: state.coins + 25 
+        }));
 
         // Persist updated progress (includes newly unlocked levels from checkLevelUnlocks)
         await saveLevelProgress(levelProgressMap);
@@ -486,6 +492,7 @@ export const useGameStore = create<GameStore>()(
         soundEnabled: state.soundEnabled,
         hapticsEnabled: state.hapticsEnabled,
         musicEnabled: state.musicEnabled,
+        coins: state.coins,
         // Persist the loaded batch so levels survive a background-kill restart
         dynamicLevels: state.dynamicLevels,
         musicUrls: state.musicUrls,
