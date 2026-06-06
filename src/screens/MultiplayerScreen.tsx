@@ -86,7 +86,8 @@ export function MultiplayerScreen() {
   // Connection & Room state
   const [playerName, setPlayerName] = useState('');
   const [serverUrl, setServerUrl] = useState('https://arrow-game-be.vercel.app/');
-  const [pusherKey, setPusherKey] = useState('1d9ae595090f679858b4');
+  const [pusherKey, setPusherKey] = useState('f9b17011ec538bf95e08');
+  const [pusherCluster, setPusherCluster] = useState('ap2');
   const [roomCode, setRoomCode] = useState('');
   const [step, setStep] = useState<MultiplayerStep>('setup');
   const [connecting, setConnecting] = useState(false);
@@ -228,7 +229,8 @@ export function MultiplayerScreen() {
     nameVal: string,
     codeVal: string,
     urlVal: string,
-    keyVal: string
+    keyVal: string,
+    clusterVal?: string
   ) => {
     const trimmedName = nameVal.trim();
     const formattedCode = codeVal.trim().toUpperCase();
@@ -315,6 +317,9 @@ export function MultiplayerScreen() {
       await AsyncStorage.setItem('user_profile_name', trimmedName);
       await AsyncStorage.setItem('multiplayer_url', trimmedUrl);
       await AsyncStorage.setItem('multiplayer_pusher_key', trimmedKey);
+      if (clusterVal) {
+        await AsyncStorage.setItem('multiplayer_pusher_cluster', clusterVal.trim());
+      }
 
       // Update registration profile in DB with new name
       void registerUserProfile();
@@ -328,7 +333,7 @@ export function MultiplayerScreen() {
       const other = roomPlayers.find((p: string) => p.toLowerCase() !== trimmedName.toLowerCase());
       if (other) setOpponentName(other);
 
-      connectAndSubscribePusher(newCode, trimmedKey);
+      connectAndSubscribePusher(newCode, trimmedKey, clusterVal || pusherCluster);
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to join room.');
     } finally {
@@ -344,6 +349,7 @@ export function MultiplayerScreen() {
         const savedName = profileName || (await AsyncStorage.getItem('multiplayer_name'));
         let savedUrl = await AsyncStorage.getItem('multiplayer_url');
         let savedPusherKey = await AsyncStorage.getItem('multiplayer_pusher_key');
+        let savedPusherCluster = await AsyncStorage.getItem('multiplayer_pusher_cluster');
         
         // If the URL is not set, contains a local host address, or contains the old production URL, point it to the new production URL
         if (!savedUrl || savedUrl.includes('localhost') || savedUrl.includes('127.0.0.1') || savedUrl.includes('arrow-game-backend.vercel.app')) {
@@ -351,13 +357,20 @@ export function MultiplayerScreen() {
           await AsyncStorage.setItem('multiplayer_url', savedUrl);
         }
 
-        if (!savedPusherKey) {
-          savedPusherKey = '1d9ae595090f679858b4';
+        if (!savedPusherKey || savedPusherKey === '1d9ae595090f679858b4') {
+          savedPusherKey = 'f9b17011ec538bf95e08';
+          await AsyncStorage.setItem('multiplayer_pusher_key', savedPusherKey);
+        }
+
+        if (!savedPusherCluster) {
+          savedPusherCluster = 'ap2';
+          await AsyncStorage.setItem('multiplayer_pusher_cluster', savedPusherCluster);
         }
 
         if (savedName) setPlayerName(savedName);
         if (savedUrl) setServerUrl(savedUrl);
         if (savedPusherKey) setPusherKey(savedPusherKey);
+        if (savedPusherCluster) setPusherCluster(savedPusherCluster);
 
         // If there's an incoming roomCode from deep linking, auto-join if we have player name
         if (linkRoomCode) {
@@ -367,10 +380,11 @@ export function MultiplayerScreen() {
           const nameToUse = savedName || playerNameRef.current;
           const urlToUse = savedUrl;
           const keyToUse = savedPusherKey;
+          const clusterToUse = savedPusherCluster;
 
           if (nameToUse && nameToUse.trim()) {
             console.log(`[Deep Link] Auto-joining room ${code} as ${nameToUse}`);
-            void joinRoomWithDetails(nameToUse, code, urlToUse, keyToUse);
+            void joinRoomWithDetails(nameToUse, code, urlToUse, keyToUse, clusterToUse);
           } else {
             Alert.alert(
               'Battle Invitation',
@@ -561,14 +575,14 @@ export function MultiplayerScreen() {
     }, 100);
   };
 
-  const connectAndSubscribePusher = (code: string, keyToUse: string) => {
+  const connectAndSubscribePusher = (code: string, keyToUse: string, clusterToUse?: string) => {
     disconnectPusher();
 
     try {
-      console.log('Connecting to Pusher with key:', keyToUse);
+      console.log('Connecting to Pusher with key:', keyToUse, 'cluster:', clusterToUse || pusherCluster);
       const PusherConstructor: any = (Pusher as any).Pusher || Pusher;
-      const pusher = new PusherConstructor(keyToUse || '1d9ae595090f679858b4', {
-        cluster: 'ap2',
+      const pusher = new PusherConstructor(keyToUse || 'f9b17011ec538bf95e08', {
+        cluster: clusterToUse || pusherCluster || 'ap2',
         forceTLS: true,
       });
 
@@ -827,6 +841,7 @@ export function MultiplayerScreen() {
       await AsyncStorage.setItem('user_profile_name', playerName.trim());
       await AsyncStorage.setItem('multiplayer_url', serverUrl.trim());
       await AsyncStorage.setItem('multiplayer_pusher_key', pusherKey.trim());
+      await AsyncStorage.setItem('multiplayer_pusher_cluster', pusherCluster.trim());
 
       // Update registration profile in DB with new name
       void registerUserProfile();
@@ -837,7 +852,7 @@ export function MultiplayerScreen() {
       setReadyStates({});
       setStep('lobby');
       
-      connectAndSubscribePusher(newCode, pusherKey.trim());
+      connectAndSubscribePusher(newCode, pusherKey.trim(), pusherCluster);
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to create room.');
     } finally {
@@ -846,7 +861,7 @@ export function MultiplayerScreen() {
   };
 
   const handleJoinRoom = () => {
-    void joinRoomWithDetails(playerName, roomCode, serverUrl, pusherKey);
+    void joinRoomWithDetails(playerName, roomCode, serverUrl, pusherKey, pusherCluster);
   };
 
   const handleCopyCode = async () => {

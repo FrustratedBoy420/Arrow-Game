@@ -90,13 +90,23 @@ async function setupUserPusherListener(systemId: string) {
   if (pusherInstance) return; // Already setup
 
   try {
-    const savedPusherKey = await AsyncStorage.getItem('multiplayer_pusher_key');
-    const keyToUse = savedPusherKey?.trim() || '1d9ae595090f679858b4';
+    let savedPusherKey = await AsyncStorage.getItem('multiplayer_pusher_key');
+    if (!savedPusherKey || savedPusherKey.trim() === '1d9ae595090f679858b4') {
+      savedPusherKey = 'f9b17011ec538bf95e08';
+      await AsyncStorage.setItem('multiplayer_pusher_key', savedPusherKey);
+    }
+    const keyToUse = savedPusherKey.trim();
 
-    console.log(`📡 Connecting user Pusher for channel: user-${systemId}`);
+    let savedPusherCluster = await AsyncStorage.getItem('multiplayer_pusher_cluster');
+    if (!savedPusherCluster) {
+      savedPusherCluster = 'ap2';
+    }
+    const clusterToUse = savedPusherCluster.trim();
+
+    console.log(`📡 Connecting user Pusher for channel: user-${systemId} with key: ${keyToUse} and cluster: ${clusterToUse}`);
     const PusherConstructor: any = (Pusher as any).Pusher || Pusher;
     const pusher = new PusherConstructor(keyToUse, {
-      cluster: 'ap2',
+      cluster: clusterToUse,
       forceTLS: true,
     });
 

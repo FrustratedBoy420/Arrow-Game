@@ -304,7 +304,14 @@ export const useGameStore = create<GameStore>()(
           const resData = await response.json();
 
           if (resData) {
-            const { levels: serverLevels, music, icons, version } = resData;
+            const { levels: serverLevels, music, icons, version, pusherKey, pusherCluster } = resData;
+
+            if (pusherKey) {
+              await AsyncStorage.setItem('multiplayer_pusher_key', pusherKey.trim());
+            }
+            if (pusherCluster) {
+              await AsyncStorage.setItem('multiplayer_pusher_cluster', pusherCluster.trim());
+            }
 
             // Only load levels from DB if not already cached locally
             const existingLevels = get().dynamicLevels;
