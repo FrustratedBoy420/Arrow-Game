@@ -534,6 +534,7 @@ export function MultiplayerScreen() {
         const currentLevel = levelRef.current;
         if (currentLevel) {
           gameStartedAtRef.current = Date.now();
+          roomCreatedAtRef.current = Date.now();
           
           unstable_batchedUpdates(() => {
             setLocalPlayerTimes({});
@@ -771,6 +772,7 @@ export function MultiplayerScreen() {
 
       channel.bind('rematch_start', (data: any) => {
         console.log('Pusher received: [rematch_start]', data);
+        roomCreatedAtRef.current = Date.now();
         
         const code = roomCodeRef.current;
         if (code) {
