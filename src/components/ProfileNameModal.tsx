@@ -21,7 +21,7 @@ export function ProfileNameModal({ visible, onSubmit }: Props) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => {}}>
       <View style={styles.overlay}>
         <View style={styles.modalContent}>
           <Text style={styles.title}>Welcome to ArrowVerse!</Text>

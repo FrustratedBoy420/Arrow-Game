@@ -42,9 +42,9 @@ type Props = {
 const arrowHeadSize = 12;
 
 /** Target slide speed — scales duration by path length so all arrows feel snappy but smooth. */
-const EXIT_SPEED_PX_PER_SEC = 300;
-const EXIT_DURATION_MIN_MS = 1000;
-const EXIT_DURATION_MAX_MS = 2500;
+const EXIT_SPEED_PX_PER_SEC = 750;
+const EXIT_DURATION_MIN_MS = 450;
+const EXIT_DURATION_MAX_MS = 1500;
 
 const CANVAS_PADDING = 500;
 

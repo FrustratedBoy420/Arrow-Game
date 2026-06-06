@@ -67,6 +67,12 @@ type GameStore = {
   fetchAllLevelsForAdmin: () => Promise<void>;
   recordLevelCompletion: (timeTaken: number, heartsLost: number) => Promise<void>;
   setFinalStarsCalculated: (stars: number) => void;
+  resetAppFlow?: () => void;
+  isPaused: boolean;
+  pausedAt: number | null;
+  accumulatedPausedTime: number;
+  pauseGame: () => void;
+  resumeGame: () => void;
 };
 
 // Use LOADING_LEVEL stub — real levels come from the DB on first fetch
@@ -104,6 +110,31 @@ export const useGameStore = create<GameStore>()(
       gameStartTime: null,
       finalStarsCalculated: 3,
       isFetchingConfig: false,
+      isPaused: false,
+      pausedAt: null,
+      accumulatedPausedTime: 0,
+
+      pauseGame: () => {
+        const { status, isPaused, gameStartTime } = get();
+        if (status === 'playing' && !isPaused && gameStartTime !== null) {
+          set({
+            isPaused: true,
+            pausedAt: Date.now()
+          });
+        }
+      },
+
+      resumeGame: () => {
+        const { isPaused, pausedAt, accumulatedPausedTime } = get();
+        if (isPaused && pausedAt !== null) {
+          const pausedDuration = Date.now() - pausedAt;
+          set({
+            isPaused: false,
+            accumulatedPausedTime: accumulatedPausedTime + pausedDuration,
+            pausedAt: null
+          });
+        }
+      },
 
       resetAllProgress: () => {
         const freshMap = require('../systems/levelManagement').initializeLevelMap();
@@ -111,7 +142,10 @@ export const useGameStore = create<GameStore>()(
           highestUnlockedLevel: 1,
           levelProgressMap: freshMap,
           currentLevelId: 1,
-          coins: 0
+          coins: 0,
+          isPaused: false,
+          pausedAt: null,
+          accumulatedPausedTime: 0
         });
         require('../systems/levelManagementStore').saveLevelProgress(freshMap);
       },
@@ -141,7 +175,10 @@ export const useGameStore = create<GameStore>()(
           hintUsedThisLevel: false,
           levelStartTime: Date.now(),
           gameStartTime: null,
-          finalStarsCalculated: 3
+          finalStarsCalculated: 3,
+          isPaused: false,
+          pausedAt: null,
+          accumulatedPausedTime: 0
         });
       },
 

@@ -1,6 +1,6 @@
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, SafeAreaView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Alert, SafeAreaView, StyleSheet, useWindowDimensions, View, BackHandler } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -17,6 +17,7 @@ import { findArrowAtPoint, PuzzleBoardCanvas } from '../components/PuzzleBoardCa
 import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
 import { SettingsModal } from '../components/SettingsModal';
 import { StarRatingDisplay } from '../components/StarRatingDisplay';
+import { ExitConfirmModal } from '../components/ExitConfirmModal';
 import { findBlockingArrow, isFrontClear } from '../game/engine';
 import type { ArrowNode } from '../game/types';
 import { useGameStore } from '../state/gameStore';
@@ -41,6 +42,7 @@ export function GameplayScreen() {
   const hintUsedThisLevel = useGameStore((s) => s.hintUsedThisLevel);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [backModalVisible, setBackModalVisible] = useState(false);
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
   const [blockedArrows, setBlockedArrows] = useState<BlockedArrowEntry[]>([]);
   const [flashingArrows, setFlashingArrows] = useState<ArrowNode[]>([]);
@@ -70,6 +72,23 @@ export function GameplayScreen() {
       return;
     }
   }, [status, navigation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        useGameStore.getState().pauseGame();
+        setBackModalVisible(true);
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        onBackPress
+      );
+
+      return () => subscription.remove();
+    }, [])
+  );
 
   // Clear animation queues on level change (retry / next level).
   useEffect(() => {
@@ -111,6 +130,9 @@ export function GameplayScreen() {
 
   const handleArrowPress = useCallback(
     (arrowId: string) => {
+      const { isPaused } = useGameStore.getState();
+      if (isPaused) return;
+
       // Snapshot the board BEFORE the tap so we can find the blocker correctly.
       const boardBefore = useGameStore.getState().board;
       const arrow = boardBefore.arrows.find((a) => a.id === arrowId);
@@ -131,6 +153,9 @@ export function GameplayScreen() {
 
   const handleBoardPress = useCallback(
     (x: number, y: number) => {
+      const { isPaused } = useGameStore.getState();
+      if (isPaused) return;
+
       setLastTap({ x, y, timestamp: Date.now() });
       const currentBoard = useGameStore.getState().board;
       const arrow = findArrowAtPoint(currentBoard.arrows, x, y, cellSize);
@@ -164,8 +189,14 @@ export function GameplayScreen() {
         difficulty={board.level.difficulty}
         arrowsLeft={board.arrows.length}
         totalArrows={board.level.arrows.length}
-        onBack={() => navigation.replace('Home')}
-        onSettings={() => setSettingsVisible(true)}
+        onBack={() => {
+          useGameStore.getState().pauseGame();
+          setBackModalVisible(true);
+        }}
+        onSettings={() => {
+          useGameStore.getState().pauseGame();
+          setSettingsVisible(true);
+        }}
       />
       <LivesIndicator livesLeft={board.livesLeft} />
       <StarRatingDisplay levelBaselineSeconds={board.level.arrows.length} />
@@ -201,11 +232,28 @@ export function GameplayScreen() {
       />
       <SettingsModal
         visible={settingsVisible}
-        onClose={() => setSettingsVisible(false)}
+        onClose={() => {
+          setSettingsVisible(false);
+          useGameStore.getState().resumeGame();
+        }}
         onRestart={() => {
           setSettingsVisible(false);
           retry();
         }}
+      />
+      <ExitConfirmModal
+        visible={backModalVisible}
+        onClose={() => {
+          setBackModalVisible(false);
+          useGameStore.getState().resumeGame();
+        }}
+        onConfirm={() => {
+          setBackModalVisible(false);
+          useGameStore.getState().resumeGame();
+          navigation.replace('Home');
+        }}
+        title="Exit Level"
+        description="Are you sure you want to exit? Your progress in this level will be lost."
       />
     </SafeAreaView>
   );

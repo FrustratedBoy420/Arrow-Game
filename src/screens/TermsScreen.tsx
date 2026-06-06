@@ -81,9 +81,10 @@ export function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyModalProps
 
 type TermsScreenProps = {
   onAccept: () => void;
+  onReject: () => void;
 };
 
-export function TermsScreen({ onAccept }: TermsScreenProps) {
+export function TermsScreen({ onAccept, onReject }: TermsScreenProps) {
   const [modalVisible, setModalVisible] = useState(false);
 
   const openDetailedTerms = async () => {
@@ -140,6 +141,10 @@ export function TermsScreen({ onAccept }: TermsScreenProps) {
 
         <Pressable style={styles.acceptBtn} onPress={onAccept}>
           <Text style={styles.acceptBtnText}>Accept & Play</Text>
+        </Pressable>
+
+        <Pressable style={styles.declineBtn} onPress={onReject}>
+          <Text style={styles.declineBtnText}>Decline & Exit</Text>
         </Pressable>
       </View>
 
@@ -239,6 +244,22 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: '800',
+  },
+  declineBtn: {
+    marginTop: 12,
+    width: 250,
+    paddingVertical: 14,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#D32F2F',
+    backgroundColor: 'transparent',
+  },
+  declineBtnText: {
+    color: '#D32F2F',
+    fontSize: 16,
+    fontWeight: '700',
   },
   // Modal styles
   modalOverlay: {

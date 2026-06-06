@@ -9,9 +9,17 @@ interface ExitConfirmModalProps {
   visible: boolean;
   onClose: () => void;
   onConfirm: () => void;
+  title?: string;
+  description?: string;
 }
 
-export function ExitConfirmModal({ visible, onClose, onConfirm }: ExitConfirmModalProps) {
+export function ExitConfirmModal({ 
+  visible, 
+  onClose, 
+  onConfirm, 
+  title = "Exit Game", 
+  description = "Are you sure you want to exit ArrowVerse-Multiplayer?" 
+}: ExitConfirmModalProps) {
   return (
     <Modal
       transparent
@@ -38,11 +46,11 @@ export function ExitConfirmModal({ visible, onClose, onConfirm }: ExitConfirmMod
           </View>
 
           {/* Title */}
-          <Text style={styles.title}>Exit Game</Text>
+          <Text style={styles.title}>{title}</Text>
 
           {/* Description */}
           <Text style={styles.description}>
-            Are you sure you want to exit ArrowVerse-Multiplayer?
+            {description}
           </Text>
 
           {/* Action Buttons */}

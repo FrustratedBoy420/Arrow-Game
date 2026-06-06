@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useEffect, useState } from 'react';
+import { BackHandler } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { audioManager } from './src/utils/audio';
@@ -74,6 +75,14 @@ export default function App() {
     void prepare();
   }, []);
 
+  useEffect(() => {
+    useGameStore.setState({
+      resetAppFlow: () => {
+        setHasAcceptedTerms(false);
+      }
+    });
+  }, []);
+
   const handleTermsAccept = async () => {
     try {
       await AsyncStorage.setItem('has_accepted_terms_v1', 'true');
@@ -83,6 +92,10 @@ export default function App() {
     } catch (e) {
       console.warn(e);
     }
+  };
+
+  const handleTermsReject = () => {
+    BackHandler.exitApp();
   };
 
   // Determine if a critical forced update is required
@@ -110,7 +123,7 @@ export default function App() {
   if (!hasAcceptedTerms) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <TermsScreen onAccept={handleTermsAccept} />
+        <TermsScreen onAccept={handleTermsAccept} onReject={handleTermsReject} />
       </GestureHandlerRootView>
     );
   }

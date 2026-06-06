@@ -67,7 +67,14 @@ export function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayPro
     }
 
     const interval = setInterval(() => {
-      const elapsed = Math.round((Date.now() - gameStartTime) / 1000);
+      const { isPaused, pausedAt, accumulatedPausedTime } = useGameStore.getState();
+      let elapsedMs = 0;
+      if (isPaused && pausedAt !== null) {
+        elapsedMs = pausedAt - gameStartTime - accumulatedPausedTime;
+      } else {
+        elapsedMs = Date.now() - gameStartTime - accumulatedPausedTime;
+      }
+      const elapsed = Math.round(Math.max(0, elapsedMs) / 1000);
       setTimeTaken(elapsed);
     }, 100);
 

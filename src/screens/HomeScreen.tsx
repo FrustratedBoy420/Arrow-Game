@@ -49,6 +49,8 @@ export function HomeScreen() {
   const [hasDismissedUpdate, setHasDismissedUpdate] = useState(false);
   const [exitModalVisible, setExitModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [isNameLoaded, setIsNameLoaded] = useState(false);
+  const [hasName, setHasName] = useState(false);
 
   useEffect(() => {
     if (
@@ -115,7 +117,11 @@ export function HomeScreen() {
       const name = await AsyncStorage.getItem('user_profile_name');
       if (!name) {
         setProfileModalVisible(true);
+        setHasName(false);
+      } else {
+        setHasName(true);
       }
+      setIsNameLoaded(true);
     };
     void checkProfileName();
   }, []);
@@ -124,6 +130,7 @@ export function HomeScreen() {
     try {
       await AsyncStorage.setItem('user_profile_name', name);
       setProfileModalVisible(false);
+      setHasName(true);
       await registerUserProfile();
     } catch (err) {
       console.warn('Failed to save profile name:', err);
@@ -181,6 +188,22 @@ export function HomeScreen() {
   const multiAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: multiScale.value }]
   }));
+
+  if (!isNameLoaded) {
+    return null;
+  }
+
+  if (!hasName) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <AmbientBackground />
+        <ProfileNameModal
+          visible={profileModalVisible}
+          onSubmit={handleProfileSubmit}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen}>

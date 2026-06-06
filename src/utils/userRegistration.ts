@@ -162,12 +162,19 @@ export async function deleteUserAccount(): Promise<boolean> {
       // Clear local storage associated with the user
       await AsyncStorage.removeItem('game_system_id');
       await AsyncStorage.removeItem('user_profile_name');
+      await AsyncStorage.removeItem('has_accepted_terms_v1');
       await AsyncStorage.removeItem('arrowverse-multiplayer-level-progress');
       await AsyncStorage.removeItem('arrowverse-multiplayer-all-levels-unlocked');
       
       // Reset the Zustand store progress and coins
       useGameStore.getState().resetAllProgress();
       useGameStore.setState({ coins: 0 });
+
+      // Trigger redirection to terms and startup flow
+      const resetApp = useGameStore.getState().resetAppFlow;
+      if (resetApp) {
+        resetApp();
+      }
 
       return true;
     } else {
