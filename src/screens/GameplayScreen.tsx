@@ -108,7 +108,9 @@ export function GameplayScreen() {
     setExitingArrows((prev) => {
       const next = prev.filter((a) => a.id !== arrowId);
       if (useGameStore.getState().status === 'won' && next.length === 0) {
-        navigation.replace('Victory');
+        setTimeout(() => {
+          navigation.replace('Victory');
+        }, 0);
       }
       return next;
     });

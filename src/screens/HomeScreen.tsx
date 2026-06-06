@@ -51,6 +51,7 @@ export function HomeScreen() {
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [isNameLoaded, setIsNameLoaded] = useState(false);
   const [hasName, setHasName] = useState(false);
+  const [profileName, setProfileName] = useState('');
 
   useEffect(() => {
     if (
@@ -120,6 +121,7 @@ export function HomeScreen() {
         setHasName(false);
       } else {
         setHasName(true);
+        setProfileName(name);
       }
       setIsNameLoaded(true);
     };
@@ -131,6 +133,7 @@ export function HomeScreen() {
       await AsyncStorage.setItem('user_profile_name', name);
       setProfileModalVisible(false);
       setHasName(true);
+      setProfileName(name);
       await registerUserProfile();
     } catch (err) {
       console.warn('Failed to save profile name:', err);
@@ -211,7 +214,15 @@ export function HomeScreen() {
 
       {/* ── Top Header ── */}
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          {/* Profile Badge */}
+          <View style={styles.profileBadge}>
+            <Text style={styles.profileEmoji}>👤</Text>
+            <Text style={styles.profileNameText} numberOfLines={1} ellipsizeMode="tail">
+              {profileName}
+            </Text>
+          </View>
+
           {/* Star counter: earned / max-possible */}
           <View style={styles.starCounter}>
             <Text style={styles.starEmoji}>⭐</Text>
@@ -360,16 +371,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingTop: 44,
     height: 100
   },
 
+  profileBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 22,
+    ...theme.shadows.sm
+  },
+  profileEmoji: {
+    fontSize: 18,
+    marginRight: 6
+  },
+  profileNameText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.arrowStroke,
+    maxWidth: 70
+  },
   starCounter: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 22,
     ...theme.shadows.sm
@@ -392,7 +422,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 22,
     ...theme.shadows.sm

@@ -312,6 +312,7 @@ export function MultiplayerScreen() {
       }
 
       await AsyncStorage.setItem('multiplayer_name', trimmedName);
+      await AsyncStorage.setItem('user_profile_name', trimmedName);
       await AsyncStorage.setItem('multiplayer_url', trimmedUrl);
       await AsyncStorage.setItem('multiplayer_pusher_key', trimmedKey);
 
@@ -339,7 +340,8 @@ export function MultiplayerScreen() {
   useEffect(() => {
     async function loadSavedData() {
       try {
-        const savedName = await AsyncStorage.getItem('multiplayer_name');
+        const profileName = await AsyncStorage.getItem('user_profile_name');
+        const savedName = profileName || (await AsyncStorage.getItem('multiplayer_name'));
         let savedUrl = await AsyncStorage.getItem('multiplayer_url');
         let savedPusherKey = await AsyncStorage.getItem('multiplayer_pusher_key');
         
@@ -822,6 +824,7 @@ export function MultiplayerScreen() {
       }
       
       await AsyncStorage.setItem('multiplayer_name', playerName.trim());
+      await AsyncStorage.setItem('user_profile_name', playerName.trim());
       await AsyncStorage.setItem('multiplayer_url', serverUrl.trim());
       await AsyncStorage.setItem('multiplayer_pusher_key', pusherKey.trim());
 

@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
@@ -35,6 +36,7 @@ export function VictoryScreen() {
   const coins = useGameStore((state) => state.coins);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [profileName, setProfileName] = useState('Player');
 
   const progressMap = ensureLevelProgressMap(levelProgressMap);
   const totalStars = getTotalStarsEarned(progressMap);
@@ -46,6 +48,12 @@ export function VictoryScreen() {
 
   useEffect(() => {
     audioManager.playSound('victory');
+
+    const loadName = async () => {
+      const name = await AsyncStorage.getItem('user_profile_name');
+      if (name) setProfileName(name);
+    };
+    void loadName();
 
     const startTime = gameStartTime ?? levelStartTime;
     const timeTaken = Math.round((Date.now() - startTime) / 1000);
@@ -79,15 +87,24 @@ export function VictoryScreen() {
 
       {/* ── Top Header ── */}
       <View style={styles.header}>
-        <Pressable
-          style={styles.backBtn}
-          onPress={() => navigation.navigate('Home')}
-          accessibilityRole="button"
-          accessibilityLabel="Back to Home"
-        >
-          <Ionicons name="arrow-back" size={26} color={theme.colors.arrowStroke} />
-        </Pressable>
-        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+        <View style={styles.headerLeft}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => navigation.navigate('Home')}
+            accessibilityRole="button"
+            accessibilityLabel="Back to Home"
+          >
+            <Ionicons name="arrow-back" size={26} color={theme.colors.arrowStroke} />
+          </Pressable>
+        </View>
+
+        <View style={styles.headerCenter}>
+          <View style={styles.profileBadge}>
+            <Text style={styles.profileEmoji}>👤</Text>
+            <Text style={styles.profileNameText} numberOfLines={1} ellipsizeMode="tail">
+              {profileName}
+            </Text>
+          </View>
           <View style={styles.starCounter}>
             <Text style={styles.starEmoji}>⭐</Text>
             <Text style={styles.starText}>
@@ -100,14 +117,17 @@ export function VictoryScreen() {
             <Text style={styles.coinText}>{coins}</Text>
           </View>
         </View>
-        <Pressable
-          style={styles.settingsBtn}
-          onPress={() => setSettingsVisible(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-        >
-          <GearIcon size={28} color={theme.colors.arrowStroke} />
-        </Pressable>
+
+        <View style={styles.headerRight}>
+          <Pressable
+            style={styles.settingsBtn}
+            onPress={() => setSettingsVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+          >
+            <GearIcon size={28} color={theme.colors.arrowStroke} />
+          </Pressable>
+        </View>
       </View>
 
       {/* ── Content ── */}
@@ -172,17 +192,48 @@ const styles = StyleSheet.create({
 
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     paddingTop: 44,
     height: 100
+  },
+  headerLeft: {
+    width: 44,
+    alignItems: 'flex-start',
+  },
+  headerRight: {
+    width: 44,
+    alignItems: 'flex-end',
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  profileBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 22,
+    ...theme.shadows.sm
+  },
+  profileEmoji: { fontSize: 18, marginRight: 6 },
+  profileNameText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.arrowStroke,
+    maxWidth: 70
   },
   starCounter: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 22,
     ...theme.shadows.sm
@@ -202,7 +253,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 22,
     ...theme.shadows.sm
