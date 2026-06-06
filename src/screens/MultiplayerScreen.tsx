@@ -183,6 +183,8 @@ export function MultiplayerScreen() {
   const roomCodeRef = useRef(roomCode);
   const gameStartedAtRef = useRef<number | null>(null);
   const localPlayerTimesRef = useRef(localPlayerTimes);
+  const progressQueueRef = useRef<{ body: any; resolve: any; reject: any }[]>([]);
+  const isProcessingQueueRef = useRef(false);
 
   useEffect(() => {
     playerNameRef.current = playerName;
@@ -444,6 +446,38 @@ export function MultiplayerScreen() {
     }
     return resData;
   }, [serverUrl]);
+
+  const sendProgressUpdate = useCallback((body: any): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      progressQueueRef.current.push({ body, resolve, reject });
+      
+      const processQueue = async () => {
+        if (isProcessingQueueRef.current || progressQueueRef.current.length === 0) {
+          return;
+        }
+        isProcessingQueueRef.current = true;
+        
+        while (progressQueueRef.current.length > 0) {
+          const item = progressQueueRef.current[0];
+          if (!item) {
+            progressQueueRef.current.shift();
+            continue;
+          }
+          try {
+            const res = await apiPost('/api/update-progress', item.body);
+            item.resolve(res);
+          } catch (err) {
+            console.warn('Queue progress update failed:', err);
+            item.reject(err);
+          }
+          progressQueueRef.current.shift();
+        }
+        isProcessingQueueRef.current = false;
+      };
+      
+      void processQueue();
+    });
+  }, [apiPost]);
 
   const handleLobbyTimeout = useCallback(async (reason: 'lobby' | 'session' = 'lobby') => {
     const code = roomCodeRef.current;
@@ -1008,7 +1042,7 @@ export function MultiplayerScreen() {
       const levelArrows = levelRef.current?.arrows || [];
       const encodedProgress = encodeArrowsLeft(nextBoard.arrows.length, arrowId, levelArrows);
 
-      apiPost('/api/update-progress', {
+      sendProgressUpdate({
         name: myName,
         roomCode: roomCode.trim().toUpperCase(),
         arrowsLeft: encodedProgress,
@@ -1048,7 +1082,7 @@ export function MultiplayerScreen() {
         }
       }
     }
-  }, [roomCode, hapticsEnabled, apiPost, recordMyCompletionTime, computeScores]);
+  }, [roomCode, hapticsEnabled, apiPost, recordMyCompletionTime, computeScores, sendProgressUpdate]);
 
   const handleUndo = useCallback(() => {
     // No undo in Shared Board Mode

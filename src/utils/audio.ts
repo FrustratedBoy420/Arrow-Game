@@ -278,10 +278,8 @@ class AudioManager {
         return;
       }
 
-      // Restart sound cleanly
-      await sound.stopAsync();
-      await sound.setPositionAsync(0);
-      await sound.playAsync();
+      // Restart sound cleanly using replayAsync to minimize bridge overhead
+      await sound.replayAsync();
 
       console.log(`Played sound: ${name}`);
     } catch (e: any) {
