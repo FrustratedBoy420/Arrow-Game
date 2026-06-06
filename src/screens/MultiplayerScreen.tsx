@@ -40,6 +40,14 @@ import { registerUserProfile } from '../utils/userRegistration';
 
 type MultiplayerStep = 'setup' | 'lobby' | 'game' | 'results';
 
+function getCaseInsensitiveVal<T>(record: Record<string, T>, key: string): T | undefined {
+  if (!record || !key) return undefined;
+  const foundKey = Object.keys(record).find(
+    (k) => k.toLowerCase() === key.toLowerCase()
+  );
+  return foundKey ? record[foundKey] : undefined;
+}
+
 function formatCompletionTime(timeMs: number | null | undefined): string {
   if (timeMs == null || timeMs < 0) return '-';
   const totalSec = Math.round(timeMs / 1000);
@@ -584,6 +592,7 @@ export function MultiplayerScreen() {
       const pusher = new PusherConstructor(keyToUse || 'f9b17011ec538bf95e08', {
         cluster: clusterToUse || pusherCluster || 'ap2',
         forceTLS: true,
+        enabledTransports: ['ws', 'wss']
       });
 
       pusherRef.current = pusher;
@@ -1140,9 +1149,9 @@ export function MultiplayerScreen() {
   };
 
   const renderLobby = () => {
-    const isReady = readyStates[playerName] || false;
+    const isReady = getCaseInsensitiveVal(readyStates, playerName) || false;
     const otherPlayer = players.find(p => p.toLowerCase() !== playerName.toLowerCase());
-    const otherReady = otherPlayer ? readyStates[otherPlayer] || false : false;
+    const otherReady = otherPlayer ? getCaseInsensitiveVal(readyStates, otherPlayer) || false : false;
 
     return (
       <View style={styles.lobbyContainer}>
@@ -1260,8 +1269,8 @@ export function MultiplayerScreen() {
     };
 
     const remainingCount = board.arrows.length;
-    const myScore = scores[playerName] || 0;
-    const oppScore = scores[opponentName] || 0;
+    const myScore = getCaseInsensitiveVal(scores, playerName) || 0;
+    const oppScore = getCaseInsensitiveVal(scores, opponentName) || 0;
     const isLeading = myScore > oppScore;
     const isTrailing = myScore < oppScore;
 
@@ -1365,8 +1374,8 @@ export function MultiplayerScreen() {
 
   const renderResults = () => {
     const otherPlayer = players.find(p => p.toLowerCase() !== playerName.toLowerCase()) || 'Opponent';
-    const isRematchRequested = rematchStates[playerName] || false;
-    const isOtherRematchRequested = rematchStates[otherPlayer] || false;
+    const isRematchRequested = getCaseInsensitiveVal(rematchStates, playerName) || false;
+    const isOtherRematchRequested = getCaseInsensitiveVal(rematchStates, otherPlayer) || false;
 
     // Detect resign / abandon scenarios
     const abandonedPlayer = matchResults.find(r => r.status === 'abandoned');
@@ -1384,8 +1393,8 @@ export function MultiplayerScreen() {
       if (playersList.length < 2) return matchWinner || playerName || 'None';
       const p1Name = playersList[0] || '';
       const p2Name = playersList[1] || '';
-      const p1Score = scores[p1Name] || 0;
-      const p2Score = scores[p2Name] || 0;
+      const p1Score = getCaseInsensitiveVal(scores, p1Name) || 0;
+      const p2Score = getCaseInsensitiveVal(scores, p2Name) || 0;
       if (p1Score > p2Score) return p1Name;
       if (p2Score > p1Score) return p2Name;
       return 'None'; // Draw
@@ -1409,7 +1418,7 @@ export function MultiplayerScreen() {
 
     if (isDraw) {
       titleText = 'DRAW MATCH';
-      subtitleText = `Equal performance! Both players cleared ${scores[playerName] || 0} arrows.`;
+      subtitleText = `Equal performance! Both players cleared ${getCaseInsensitiveVal(scores, playerName) || 0} arrows.`;
     } else if (isOpponentAbandoned) {
       titleText = 'YOU WON!';
       subtitleText = `${abandonedPlayer!.name} resigned — Victory is yours!`;
@@ -1421,14 +1430,14 @@ export function MultiplayerScreen() {
       if (isOppStatusFailed) {
         subtitleText = `${otherPlayer} lost all lives — Victory is yours!`;
       } else {
-        subtitleText = `You removed more arrows (${scores[playerName] || 0} vs ${scores[otherPlayer] || 0})!`;
+        subtitleText = `You removed more arrows (${getCaseInsensitiveVal(scores, playerName) || 0} vs ${getCaseInsensitiveVal(scores, otherPlayer) || 0})!`;
       }
     } else {
       titleText = 'YOU LOST';
       if (isMyStatusFailed) {
         subtitleText = `You lost all 3 lives! ${localWinner} wins.`;
       } else {
-        subtitleText = `${localWinner} removed more arrows (${scores[localWinner] || 0} vs ${scores[playerName] || 0}).`;
+        subtitleText = `${localWinner} removed more arrows (${getCaseInsensitiveVal(scores, localWinner) || 0} vs ${getCaseInsensitiveVal(scores, playerName) || 0}).`;
       }
     }
 
@@ -1456,7 +1465,7 @@ export function MultiplayerScreen() {
           {matchResults.map((result) => {
             const isMe = result.name.toLowerCase() === playerName.toLowerCase();
             const isWinner = result.name.toLowerCase() === localWinner.toLowerCase();
-            const playerScore = scores[result.name] || 0;
+            const playerScore = getCaseInsensitiveVal(scores, result.name) || 0;
 
             return (
               <View

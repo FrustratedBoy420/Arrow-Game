@@ -108,6 +108,7 @@ async function setupUserPusherListener(systemId: string) {
     const pusher = new PusherConstructor(keyToUse, {
       cluster: clusterToUse,
       forceTLS: true,
+      enabledTransports: ['ws', 'wss']
     });
 
     pusherInstance = pusher;
