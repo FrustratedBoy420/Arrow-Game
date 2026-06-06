@@ -51,12 +51,16 @@ export function GameplayScreen() {
   const boardScale = useSharedValue(1);
   const boardOpacity = useSharedValue(1);
 
-  const maxW = width * 0.82;
-  const maxH = height * 0.38;
+  const maxW = width * 0.92;
+  const maxH = height * 0.52;
   const { columns, rows } = board.level.gridSize;
-  const sizeFromWidth = maxW / columns;
-  const sizeFromHeight = maxH / rows;
-  const cellSize = Math.min(sizeFromWidth, sizeFromHeight, 50);
+  // Cap the reference layout divisor to 10 so larger levels do not look too dense/compact on start.
+  // The board will overflow the screen container comfortably and can be panned or zoomed out by the user.
+  const referenceCols = Math.min(columns, 10);
+  const referenceRows = Math.min(rows, 10);
+  const sizeFromWidth = maxW / referenceCols;
+  const sizeFromHeight = maxH / referenceRows;
+  const cellSize = Math.min(sizeFromWidth, sizeFromHeight, 52);
   const boardWidth = cellSize * columns;
   const boardHeight = cellSize * rows;
 

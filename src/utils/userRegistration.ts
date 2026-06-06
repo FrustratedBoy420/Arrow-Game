@@ -23,8 +23,12 @@ export async function registerUserProfile() {
   try {
     const systemId = await getOrCreateSystemId();
 
-    const savedUrl = await AsyncStorage.getItem('multiplayer_url');
-    let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
+    let savedUrl = await AsyncStorage.getItem('multiplayer_url');
+    if (savedUrl && savedUrl.includes('arrow-game-backend.vercel.app')) {
+      savedUrl = 'https://arrow-game-be.vercel.app';
+      await AsyncStorage.setItem('multiplayer_url', savedUrl);
+    }
+    let baseUrl = savedUrl?.trim() || 'https://arrow-game-be.vercel.app';
     baseUrl = baseUrl.replace(/\/$/, '');
     if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
       baseUrl = `https://${baseUrl}`;
@@ -139,8 +143,12 @@ export async function deleteUserAccount(): Promise<boolean> {
     const systemId = await AsyncStorage.getItem('game_system_id');
     if (!systemId) return false;
 
-    const savedUrl = await AsyncStorage.getItem('multiplayer_url');
-    let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
+    let savedUrl = await AsyncStorage.getItem('multiplayer_url');
+    if (savedUrl && savedUrl.includes('arrow-game-backend.vercel.app')) {
+      savedUrl = 'https://arrow-game-be.vercel.app';
+      await AsyncStorage.setItem('multiplayer_url', savedUrl);
+    }
+    let baseUrl = savedUrl?.trim() || 'https://arrow-game-be.vercel.app';
     baseUrl = baseUrl.replace(/\/$/, '');
     if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
       baseUrl = `https://${baseUrl}`;

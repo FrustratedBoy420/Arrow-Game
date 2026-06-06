@@ -142,68 +142,83 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
 
   return (
     <View style={[styles.container, { width, height }]}>
-      {/* Static arrows via Skia — skip blocked & flashing ones (they're animated in overlays) */}
-      <Canvas style={StyleSheet.absoluteFill}>
-        {initialDots.map(({ r, c }) => (
-          <Circle
-            key={`dot-${r}-${c}`}
-            cx={c * cellSize + cellSize / 2}
-            cy={r * cellSize + cellSize / 2}
-            r={Math.max(2, cellSize * 0.05)}
-            color={theme.colors.borderSoft}
-          />
-        ))}
-        {arrowPathsAll
-          .filter(({ id }) => !blockedArrowIdSet.has(id) && !flashingArrowIdSet.has(id))
-          .map(({ id, path }) => (
-            <Path
-              key={id}
-              path={path}
-              color={theme.colors.arrowStroke}
-              style="stroke"
-              strokeCap="round"
-              strokeJoin="round"
+      {/* A single unified canvas that covers the board + padding to avoid mounting delays & GL blinks */}
+      <View
+        style={{
+          position: 'absolute',
+          left: -CANVAS_PADDING,
+          top: -CANVAS_PADDING,
+          width: width + 2 * CANVAS_PADDING,
+          height: height + 2 * CANVAS_PADDING,
+        }}
+        pointerEvents="none"
+      >
+        <Canvas style={StyleSheet.absoluteFill}>
+          {/* Shift all standard board elements by CANVAS_PADDING to align them with the visible board container */}
+          <Group transform={[{ translateX: CANVAS_PADDING }, { translateY: CANVAS_PADDING }]}>
+            {initialDots.map(({ r, c }) => (
+              <Circle
+                key={`dot-${r}-${c}`}
+                cx={c * cellSize + cellSize / 2}
+                cy={r * cellSize + cellSize / 2}
+                r={Math.max(2, cellSize * 0.05)}
+                color={theme.colors.borderSoft}
+              />
+            ))}
+            
+            {arrowPathsAll
+              .filter(({ id }) => !blockedArrowIdSet.has(id) && !flashingArrowIdSet.has(id))
+              .map(({ id, path }) => (
+                <Path
+                  key={id}
+                  path={path}
+                  color={theme.colors.arrowStroke}
+                  style="stroke"
+                  strokeCap="round"
+                  strokeJoin="round"
+                  strokeWidth={strokeW}
+                />
+              ))}
+
+            {/* Blocked arrow overlays — red + slide forward then snap back */}
+            {blockedArrows.map(({ arrow, blocker }) => (
+              <BlockedArrowOverlay
+                key={`blocked-${arrow.id}`}
+                arrow={arrow}
+                blocker={blocker}
+                board={board}
+                cellSize={cellSize}
+                strokeWidth={strokeW}
+                onDone={onBlockedDone}
+                onCollisionPoint={onCollisionPoint}
+              />
+            ))}
+
+            {/* Flashing arrow overlays — blocker briefly flashes red on collision */}
+            {flashingArrows.map((arrow) => (
+              <FlashingArrowOverlay
+                key={`flash-${arrow.id}`}
+                arrow={arrow}
+                cellSize={cellSize}
+                strokeWidth={strokeW}
+              />
+            ))}
+          </Group>
+
+          {/* Exiting arrow overlays with slide animation — drawn with CANVAS_PADDING baked in */}
+          {exitingArrows.map((arrow) => (
+            <ExitingArrow
+              key={`exit-${arrow.id}`}
+              arrow={arrow}
+              cellSize={cellSize}
               strokeWidth={strokeW}
+              boardWidth={width}
+              boardHeight={height}
+              onDone={onExitDone}
             />
           ))}
-      </Canvas>
-
-      {/* Exiting arrow overlays with slide animation */}
-      {exitingArrows.map((arrow) => (
-        <ExitingArrow
-          key={`exit-${arrow.id}`}
-          arrow={arrow}
-          cellSize={cellSize}
-          strokeWidth={strokeW}
-          boardWidth={width}
-          boardHeight={height}
-          onDone={onExitDone}
-        />
-      ))}
-
-      {/* Blocked arrow overlays — red + slide forward then snap back */}
-      {blockedArrows.map(({ arrow, blocker }) => (
-        <BlockedArrowOverlay
-          key={`blocked-${arrow.id}`}
-          arrow={arrow}
-          blocker={blocker}
-          board={board}
-          cellSize={cellSize}
-          strokeWidth={strokeW}
-          onDone={onBlockedDone}
-          onCollisionPoint={onCollisionPoint}
-        />
-      ))}
-
-      {/* Flashing arrow overlays — blocker briefly flashes red on collision */}
-      {flashingArrows.map((arrow) => (
-        <FlashingArrowOverlay
-          key={`flash-${arrow.id}`}
-          arrow={arrow}
-          cellSize={cellSize}
-          strokeWidth={strokeW}
-        />
-      ))}
+        </Canvas>
+      </View>
 
       {enableTouch ? (
         <Pressable
@@ -307,7 +322,12 @@ const ExitingArrow = memo(function ExitingArrow({
   }, [trackPath, extensionLength]);
 
   useEffect(() => {
-    const duration = computeExitDurationMs(totalLength);
+    // Exit speed scales with the cell size (e.g. 13.5 cells per second)
+    // so that smaller cells on large levels cross the screen at the same visual rate as large levels.
+    const cellsPerSec = 13.5;
+    const speedPxPerSec = cellsPerSec * cellSize;
+    const ms = Math.round((totalLength / speedPxPerSec) * 1000);
+    const duration = Math.min(EXIT_DURATION_MAX_MS, Math.max(EXIT_DURATION_MIN_MS, ms));
     const moveEasing = Easing.linear;
 
     animProgress.value = 0;
@@ -320,7 +340,7 @@ const ExitingArrow = memo(function ExitingArrow({
       }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per mounted exit arrow
-  }, [totalLength]);
+  }, [totalLength, cellSize]);
 
   const startVal = useDerivedValue(() => {
     const t = animProgress.value;
@@ -369,42 +389,30 @@ const ExitingArrow = memo(function ExitingArrow({
   const pathColor = arrow.color || theme.colors.arrowStroke;
 
   return (
-    <View
-      style={{
-        position: 'absolute',
-        left: -CANVAS_PADDING,
-        top: -CANVAS_PADDING,
-        width: boardWidth + 2 * CANVAS_PADDING,
-        height: boardHeight + 2 * CANVAS_PADDING,
-        zIndex: 10
-      }}
-      pointerEvents="none"
-    >
-      <Canvas style={StyleSheet.absoluteFill}>
-        {/* Draw the moving shaft segment */}
+    <>
+      {/* Draw the moving shaft segment */}
+      <Path
+        path={trackPath}
+        start={startVal}
+        end={endVal}
+        color={pathColor}
+        style="stroke"
+        strokeCap="round"
+        strokeJoin="round"
+        strokeWidth={sw}
+      />
+      {/* Draw the moving arrowhead */}
+      <Group transform={headTransform}>
         <Path
-          path={trackPath}
-          start={startVal}
-          end={endVal}
+          path={headPath}
           color={pathColor}
           style="stroke"
           strokeCap="round"
           strokeJoin="round"
           strokeWidth={sw}
         />
-        {/* Draw the moving arrowhead */}
-        <Group transform={headTransform}>
-          <Path
-            path={headPath}
-            color={pathColor}
-            style="stroke"
-            strokeCap="round"
-            strokeJoin="round"
-            strokeWidth={sw}
-          />
-        </Group>
-      </Canvas>
-    </View>
+      </Group>
+    </>
   );
 });
 
@@ -522,35 +530,30 @@ const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
   });
 
   return (
-    <View
-      style={[StyleSheet.absoluteFill, { zIndex: 20 }]}
-      pointerEvents="none"
-    >
-      <Canvas style={StyleSheet.absoluteFill}>
-        {/* Draw the moving shaft segment */}
+    <>
+      {/* Draw the moving shaft segment */}
+      <Path
+        path={trackPath}
+        start={startVal}
+        end={endVal}
+        color="#FF3B30"
+        style="stroke"
+        strokeCap="round"
+        strokeJoin="round"
+        strokeWidth={sw}
+      />
+      {/* Draw the moving arrowhead */}
+      <Group transform={headTransform}>
         <Path
-          path={trackPath}
-          start={startVal}
-          end={endVal}
+          path={headPath}
           color="#FF3B30"
           style="stroke"
           strokeCap="round"
           strokeJoin="round"
           strokeWidth={sw}
         />
-        {/* Draw the moving arrowhead */}
-        <Group transform={headTransform}>
-          <Path
-            path={headPath}
-            color="#FF3B30"
-            style="stroke"
-            strokeCap="round"
-            strokeJoin="round"
-            strokeWidth={sw}
-          />
-        </Group>
-      </Canvas>
-    </View>
+      </Group>
+    </>
   );
 });
 
@@ -597,35 +600,27 @@ const FlashingArrowOverlay = memo(function FlashingArrowOverlay({
   });
 
   return (
-    <View
-      style={[StyleSheet.absoluteFill, { zIndex: 15 }]}
-      pointerEvents="none"
-    >
-      <Canvas style={StyleSheet.absoluteFill}>
-        {/* Draw everything inside a single Group that wiggles/shakes on the GPU */}
-        <Group transform={shakeTransform}>
-          {/* 1. Base arrow in normal color so it stays visible while flashing/shaking */}
-          <Path
-            path={arrowPath}
-            color={theme.colors.arrowStroke}
-            style="stroke"
-            strokeCap="round"
-            strokeJoin="round"
-            strokeWidth={sw}
-          />
-          {/* 2. Red overlay that wiggles and fades out */}
-          <Path
-            path={arrowPath}
-            color="#FF3B30"
-            opacity={flashOpacity}
-            style="stroke"
-            strokeCap="round"
-            strokeJoin="round"
-            strokeWidth={sw}
-          />
-        </Group>
-      </Canvas>
-    </View>
+    <Group transform={shakeTransform}>
+      {/* 1. Base arrow in normal color so it stays visible while flashing/shaking */}
+      <Path
+        path={arrowPath}
+        color={theme.colors.arrowStroke}
+        style="stroke"
+        strokeCap="round"
+        strokeJoin="round"
+        strokeWidth={sw}
+      />
+      {/* 2. Red overlay that wiggles and fades out */}
+      <Path
+        path={arrowPath}
+        color="#FF3B30"
+        opacity={flashOpacity}
+        style="stroke"
+        strokeCap="round"
+        strokeJoin="round"
+        strokeWidth={sw}
+      />
+    </Group>
   );
 });
 

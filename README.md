@@ -168,7 +168,7 @@ The app supports **dynamic configuration** loaded from the backend database (Red
 - **Dynamic Accent Icon**: Home Screen top character symbol is fetched from the database icons config.
 
 ### Connecting to Your Backend
-The app fetches configurations from the server URL saved in `AsyncStorage` under `multiplayer_url` (defaulting to the production URL `https://arrow-game-backend.vercel.app`).
+The app fetches configurations from the server URL saved in `AsyncStorage` under `multiplayer_url` (defaulting to the production URL `https://arrow-game-be.vercel.app`).
 To point the app to a custom or local backend:
 1. Open the app and navigate to **⚔️ Multiplayer Mode ⚔️**.
 2. Change the **Server URL** to your server IP address (e.g., `http://192.168.1.5:3000` for local running backend).

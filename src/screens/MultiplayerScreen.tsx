@@ -85,7 +85,7 @@ export function MultiplayerScreen() {
 
   // Connection & Room state
   const [playerName, setPlayerName] = useState('');
-  const [serverUrl, setServerUrl] = useState('https://arrow-game-backend.vercel.app/');
+  const [serverUrl, setServerUrl] = useState('https://arrow-game-be.vercel.app/');
   const [pusherKey, setPusherKey] = useState('1d9ae595090f679858b4');
   const [roomCode, setRoomCode] = useState('');
   const [step, setStep] = useState<MultiplayerStep>('setup');
@@ -345,9 +345,9 @@ export function MultiplayerScreen() {
         let savedUrl = await AsyncStorage.getItem('multiplayer_url');
         let savedPusherKey = await AsyncStorage.getItem('multiplayer_pusher_key');
         
-        // If the URL is not set, or contains a local host address, point it to the production URL
-        if (!savedUrl || savedUrl.includes('localhost') || savedUrl.includes('127.0.0.1')) {
-          savedUrl = 'https://arrow-game-backend.vercel.app/';
+        // If the URL is not set, contains a local host address, or contains the old production URL, point it to the new production URL
+        if (!savedUrl || savedUrl.includes('localhost') || savedUrl.includes('127.0.0.1') || savedUrl.includes('arrow-game-backend.vercel.app')) {
+          savedUrl = 'https://arrow-game-be.vercel.app/';
           await AsyncStorage.setItem('multiplayer_url', savedUrl);
         }
 
@@ -1225,12 +1225,16 @@ export function MultiplayerScreen() {
   const renderGame = () => {
     if (!board || !level) return null;
 
-    const maxW = width * 0.82;
-    const maxH = height * 0.44;
+    const maxW = width * 0.92;
+    const maxH = height * 0.52;
     const { columns, rows } = board.level.gridSize;
-    const sizeFromWidth = maxW / columns;
-    const sizeFromHeight = maxH / rows;
-    const cellSize = Math.min(sizeFromWidth, sizeFromHeight, 60);
+    // Cap the reference layout divisor to 10 so larger levels do not look too dense/compact on start.
+    // The board will overflow the screen container comfortably and can be panned or zoomed out by the user.
+    const referenceCols = Math.min(columns, 10);
+    const referenceRows = Math.min(rows, 10);
+    const sizeFromWidth = maxW / referenceCols;
+    const sizeFromHeight = maxH / referenceRows;
+    const cellSize = Math.min(sizeFromWidth, sizeFromHeight, 52);
     const boardWidth = cellSize * columns;
     const boardHeight = cellSize * rows;
 

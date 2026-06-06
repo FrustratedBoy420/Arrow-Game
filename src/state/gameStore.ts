@@ -292,7 +292,7 @@ export const useGameStore = create<GameStore>()(
 
       fetchGameConfig: async (serverUrl) => {
         set({ isFetchingConfig: true });
-        let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend.vercel.app';
+        let baseUrl = serverUrl?.trim() || 'https://arrow-game-be.vercel.app';
         baseUrl = baseUrl.replace(/\/$/, '');
         if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
           baseUrl = `https://${baseUrl}`;
@@ -351,7 +351,7 @@ export const useGameStore = create<GameStore>()(
        * Use this on internet reconnect to check for updates without heavy data fetch.
        */
       fetchVersionConfig: async (serverUrl) => {
-        let baseUrl = serverUrl?.trim() || 'https://arrow-game-backend.vercel.app';
+        let baseUrl = serverUrl?.trim() || 'https://arrow-game-be.vercel.app';
         baseUrl = baseUrl.replace(/\/$/, '');
         if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
           baseUrl = `https://${baseUrl}`;
@@ -382,8 +382,12 @@ export const useGameStore = create<GameStore>()(
         const { mergeLevelProgressMap } = await import('../systems/levelManagement');
 
         try {
-          const savedUrl = await AsyncStorage.getItem('multiplayer_url');
-          let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
+          let savedUrl = await AsyncStorage.getItem('multiplayer_url');
+          if (savedUrl && savedUrl.includes('arrow-game-backend.vercel.app')) {
+            savedUrl = 'https://arrow-game-be.vercel.app';
+            await AsyncStorage.setItem('multiplayer_url', savedUrl);
+          }
+          let baseUrl = savedUrl?.trim() || 'https://arrow-game-be.vercel.app';
           baseUrl = baseUrl.replace(/\/$/, '');
           if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
             baseUrl = `https://${baseUrl}`;
@@ -432,8 +436,12 @@ export const useGameStore = create<GameStore>()(
         console.log(`🔓 Fetching next ${NEXT_LEVEL_BATCH} levels (total: ${targetCount}).`);
 
         try {
-          const savedUrl = await AsyncStorage.getItem('multiplayer_url');
-          let baseUrl = savedUrl?.trim() || 'https://arrow-game-backend.vercel.app';
+          let savedUrl = await AsyncStorage.getItem('multiplayer_url');
+          if (savedUrl && savedUrl.includes('arrow-game-backend.vercel.app')) {
+            savedUrl = 'https://arrow-game-be.vercel.app';
+            await AsyncStorage.setItem('multiplayer_url', savedUrl);
+          }
+          let baseUrl = savedUrl?.trim() || 'https://arrow-game-be.vercel.app';
           baseUrl = baseUrl.replace(/\/$/, '');
           if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
             baseUrl = `https://${baseUrl}`;

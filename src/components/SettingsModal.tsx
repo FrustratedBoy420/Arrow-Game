@@ -110,7 +110,7 @@ export function SettingsModal({ visible, onClose, onRestart }: Props) {
                 onPress={async () => {
                   onClose();
                   const versionConfig = useGameStore.getState().versionConfig;
-                  const url = versionConfig?.termsUrl || 'https://arrow-game-backend.vercel.app/terms-and-conditions';
+                  const url = versionConfig?.termsUrl || 'https://arrow-game-be.vercel.app/terms-and-conditions';
                   try {
                     await Linking.openURL(url);
                   } catch (err) {
