@@ -1,5 +1,5 @@
 import { Canvas, Circle, Group, Path, Skia } from '@shopify/react-native-skia';
-import { useEffect, useMemo, memo, useState, useCallback } from 'react';
+import { useEffect, useMemo, memo, useState, useCallback, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -119,15 +119,21 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
     return dots;
   }, [board.level]);
 
-  // Pre-compute paths for all board arrows (memoized by board.arrows + cellSize).
-  const arrowPathsAll = useMemo(
-    () =>
-      board.arrows.map((arrow) => ({
-        id: arrow.id,
-        path: makeArrowPath(arrow, cellSize)
-      })),
-    [board.arrows, cellSize]
-  );
+  const pathCacheRef = useRef<Record<string, { path: any; cellSize: number }>>({});
+
+  // Pre-compute paths for all board arrows (memoized by board.arrows + cellSize, utilizing local ref cache).
+  const arrowPathsAll = useMemo(() => {
+    const cache = pathCacheRef.current;
+    return board.arrows.map((arrow) => {
+      const cacheKey = `${arrow.id}-${cellSize}`;
+      if (cache[cacheKey] && cache[cacheKey].cellSize === cellSize) {
+        return { id: arrow.id, path: cache[cacheKey].path };
+      }
+      const newPath = makeArrowPath(arrow, cellSize);
+      cache[cacheKey] = { path: newPath, cellSize };
+      return { id: arrow.id, path: newPath };
+    });
+  }, [board.arrows, cellSize]);
 
   // Build lookup sets for quick render-time checks.
   const blockedArrowIdSet = useMemo(
