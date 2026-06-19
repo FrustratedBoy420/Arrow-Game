@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 const interstitialAdUnitId = __DEV__
   ? TestIds.INTERSTITIAL
   : Platform.select({
-      android: 'ca-app-pub-3940256099942544/1033173712', // Google official test ID (replace with production Android unit ID)
+      android: 'ca-app-pub-2101586602209482/6861275013', // Production Android interstitial ad unit ID
       ios: 'ca-app-pub-3940256099942544/4411468910',     // Google official test ID (replace with production iOS unit ID)
       default: TestIds.INTERSTITIAL,
     });
