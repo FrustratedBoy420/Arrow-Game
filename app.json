@@ -19,7 +19,13 @@
           "imageWidth": 200
         }
       ],
-      "react-native-google-mobile-ads"
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-2101586602209482~5638858530",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ]
     ],
     "android": {
       "package": "com.app.arrow_verse",
@@ -40,9 +46,5 @@
       }
     },
     "owner": "kazal-tech"
-  },
-  "react-native-google-mobile-ads": {
-    "android_app_id": "ca-app-pub-2101586602209482~5638858530",
-    "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
   }
 }
