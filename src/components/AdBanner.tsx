@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, NativeModules } from 'react-native';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+
+const isAdMobAvailable = !!NativeModules.RNGoogleMobileAdsModule;
 
 const bannerAdUnitId = __DEV__
   ? TestIds.BANNER
@@ -13,7 +15,7 @@ const bannerAdUnitId = __DEV__
 export function AdBanner() {
   const [adLoaded, setAdLoaded] = useState(true);
 
-  if (!adLoaded) {
+  if (!isAdMobAvailable || !adLoaded) {
     return null;
   }
 
