@@ -2,7 +2,7 @@
   "expo": {
     "name": "ArrowVerse-Multiplayer",
     "slug": "arrow-escape",
-    "version": "0.2.0",
+    "version": "0.3.1",
     "orientation": "portrait",
     "scheme": "arrowversemultiplayer",
     "userInterfaceStyle": "light",
@@ -18,7 +18,8 @@
           "image": "./assets/icon.png",
           "imageWidth": 200
         }
-      ]
+      ],
+      "react-native-google-mobile-ads"
     ],
     "android": {
       "package": "com.app.arrow_verse",
@@ -39,5 +40,9 @@
       }
     },
     "owner": "kazal-tech"
+  },
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-3940256099942544~3347511713",
+    "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
   }
 }

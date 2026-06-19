@@ -27,6 +27,7 @@ import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 import { registerUserProfile } from '../utils/userRegistration';
 import { ProfileNameModal } from '../components/ProfileNameModal';
+import { AdBanner } from '../components/AdBanner';
 
 export function HomeScreen() {
   const navigation = useNavigation<AppNavigation>();
@@ -360,6 +361,8 @@ export function HomeScreen() {
         visible={profileModalVisible}
         onSubmit={handleProfileSubmit}
       />
+
+      <AdBanner />
     </SafeAreaView>
   );
 }

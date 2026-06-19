@@ -9,6 +9,7 @@ import { SettingsModal } from '../components/SettingsModal';
 import { useGameStore } from '../state/gameStore';
 import { audioManager } from '../utils/audio';
 import { theme } from '../theme/theme';
+import { adManager } from '../utils/ads';
 import type { AppNavigation } from '../types/navigation';
 
 export function FailScreen() {
@@ -51,8 +52,10 @@ export function FailScreen() {
           onPressIn={() => { btnScale.value = withSpring(0.94, { damping: 10, stiffness: 350 }); }}
           onPressOut={() => { btnScale.value = withSpring(1, { damping: 10, stiffness: 350 }); }}
           onPress={() => {
-            retry();
-            navigation.replace('Gameplay');
+            adManager.showInterstitial(() => {
+              retry();
+              navigation.replace('Gameplay');
+            });
           }}
         >
           <Animated.View style={[styles.button, buttonStyle]}>

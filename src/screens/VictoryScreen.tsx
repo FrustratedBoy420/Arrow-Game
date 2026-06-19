@@ -21,6 +21,7 @@ import { ensureLevelProgressMap } from '../systems/levelManagementStore';
 import { useGameStore } from '../state/gameStore';
 import { audioManager } from '../utils/audio';
 import { theme } from '../theme/theme';
+import { adManager } from '../utils/ads';
 import type { AppNavigation } from '../types/navigation';
 
 export function VictoryScreen() {
@@ -90,7 +91,11 @@ export function VictoryScreen() {
         <View style={styles.headerLeft}>
           <Pressable
             style={styles.backBtn}
-            onPress={() => navigation.navigate('Home')}
+            onPress={() => {
+              adManager.showInterstitial(() => {
+                navigation.navigate('Home');
+              });
+            }}
             accessibilityRole="button"
             accessibilityLabel="Back to Home"
           >
@@ -149,8 +154,10 @@ export function VictoryScreen() {
               btnScale.value = withSpring(1, { damping: 10, stiffness: 350 });
             }}
             onPress={() => {
-              retry();
-              navigation.replace('Gameplay');
+              adManager.showInterstitial(() => {
+                retry();
+                navigation.replace('Gameplay');
+              });
             }}
           >
             <Animated.View style={[styles.button, styles.replayButton, buttonStyle]}>
@@ -168,8 +175,10 @@ export function VictoryScreen() {
               btnScale.value = withSpring(1, { damping: 10, stiffness: 350 });
             }}
             onPress={() => {
-              nextLevel();
-              navigation.replace('Gameplay');
+              adManager.showInterstitial(() => {
+                nextLevel();
+                navigation.replace('Gameplay');
+              });
             }}
           >
             <Animated.View style={[styles.button, styles.nextButton, buttonStyle]}>

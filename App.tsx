@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { audioManager } from './src/utils/audio';
 import { initializeLevelManagement } from './src/systems/levelManagementInit';
+import { adManager } from './src/utils/ads';
 
 import { FailScreen } from './src/screens/FailScreen';
 import { GameplayScreen } from './src/screens/GameplayScreen';
@@ -59,6 +60,7 @@ export default function App() {
       try {
         await audioManager.init();
         await initializeLevelManagement();
+        await adManager.initialize();
 
         // Check if terms and privacy policy have been accepted
         const acceptedValue = await AsyncStorage.getItem('has_accepted_terms_v1');

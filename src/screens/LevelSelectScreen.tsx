@@ -9,6 +9,7 @@ import { AmbientBackground } from '../components/AmbientBackground';
 import { CheckpointLockModal } from '../components/CheckpointLockModal';
 import { GameHeader } from '../components/GameHeader';
 import { SettingsModal } from '../components/SettingsModal';
+import { AdBanner } from '../components/AdBanner';
 import { getTotalLevels } from '../levels/levels';
 import { useGameStore } from '../state/gameStore';
 import {
@@ -151,6 +152,8 @@ export function LevelSelectScreen() {
           </Text>
         </SafeAreaView>
       )}
+      
+      <AdBanner />
     </SafeAreaView>
   );
 }
