@@ -30,7 +30,8 @@ import { findArrowAtPoint, PuzzleBoardCanvas } from '../components/PuzzleBoardCa
 import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
 
 import { createInitialBoard, findBlockingArrow, resolveTap, isFrontClear } from '../game/engine';
-import { calculateNextMoveDelay, getFakeOpponentProfile, recordMatchResult, shouldBotMissMove } from '../game/botEngine';
+import { calculateNextMoveDelay, recordMatchResult, shouldBotMissMove } from '../game/botEngine';
+import { getRandomBotName } from '../game/botNames';
 import type { ArrowNode, BoardState, LevelDefinition } from '../game/types';
 import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
@@ -39,9 +40,12 @@ import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
 
 type MatchState = 'searching' | 'found' | 'playing' | 'results';
 
-const FAKE_NAMES = [
-  'Rahul_99', 'xPlayer', 'ArrowMaster', 'Ninja_22', 'ProSniper', 'CoolDude_07',
-  'PriyaGamer', 'Bot_Slayer', 'GhostRider', 'King_Arjun', 'Sahi_Mein', 'SK_Arrow99',
+const SEARCHING_MESSAGES = [
+  'Looking for opponents...',
+  'Matching skill levels...',
+  'Almost there...',
+  'Scanning arenas...',
+  'Finding a worthy rival...',
 ];
 
 export function MultiplayerRandomScreen() {
@@ -51,7 +55,7 @@ export function MultiplayerRandomScreen() {
 
   // ─── Matchmaking State ───────────────────────────────────────────
   const [matchState, setMatchState] = useState<MatchState>('searching');
-  const [opponent, setOpponent] = useState<{ name: string; level: number; winStreak: number } | null>(null);
+  const [opponent, setOpponent] = useState<{ name: string } | null>(null);
   const [exitModalVisible, setExitModalVisible] = useState(false);
   const [playerName, setPlayerName] = useState('You');
   const [userResigned, setUserResigned] = useState(false);
@@ -129,7 +133,7 @@ export function MultiplayerRandomScreen() {
   const myScoreRef = useRef(myScore);
   const oppScoreRef = useRef(oppScore);
   const userWonRef = useRef(false);
-  const [flashingName, setFlashingName] = useState(FAKE_NAMES[0]);
+  const [searchingMessage, setSearchingMessage] = useState(SEARCHING_MESSAGES[0]);
 
   useEffect(() => { boardRef.current = board; }, [board]);
   useEffect(() => { opponentArrowsLeftRef.current = opponentArrowsLeft; }, [opponentArrowsLeft]);
@@ -155,23 +159,21 @@ export function MultiplayerRandomScreen() {
       withTiming(0, { duration: 1500, easing: Easing.out(Easing.ease) }), -1, false
     ));
 
-    const nameInterval = setInterval(() => {
-      setFlashingName(FAKE_NAMES[Math.floor(Math.random() * FAKE_NAMES.length)]);
-    }, 380);
+    let msgIndex = 0;
+    const msgInterval = setInterval(() => {
+      msgIndex = (msgIndex + 1) % SEARCHING_MESSAGES.length;
+      setSearchingMessage(SEARCHING_MESSAGES[msgIndex]);
+    }, 2000);
 
     const searchTime = Math.random() * 2000 + 1500;
     const searchTimer = setTimeout(() => {
-      const profile = getFakeOpponentProfile();
-      setOpponent({
-        name: profile.name ?? 'Opponent',
-        level: profile.level,
-        winStreak: profile.winStreak
-      });
+      const name = getRandomBotName() ?? 'Opponent';
+      setOpponent({ name });
       setMatchState('found');
     }, searchTime);
 
     return () => {
-      clearInterval(nameInterval);
+      clearInterval(msgInterval);
       clearTimeout(searchTimer);
     };
   }, [matchState]);
@@ -403,6 +405,14 @@ export function MultiplayerRandomScreen() {
       }
     }, delay);
   }, [rematchRequestedByMe, opponent, startRematch]);
+
+  const handleFindNewMatch = useCallback(() => {
+    if (botTimerRef.current) clearTimeout(botTimerRef.current);
+    setRematchRequestedByMe(false);
+    setRematchStatus('idle');
+    setOpponent(null);
+    setMatchState('searching');
+  }, []);
 
   // ─── Back Button ──────────────────────────────────────────────────
   useFocusEffect(
@@ -648,6 +658,17 @@ export function MultiplayerRandomScreen() {
 
         <Pressable
           accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.findNewMatchBtn,
+            pressed && styles.btnPressed
+          ]}
+          onPress={handleFindNewMatch}
+        >
+          <Text style={styles.findNewMatchBtnText}>🔄 Find New Match</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
           style={styles.resultsLeaveBtn}
           onPress={() => navigation.goBack()}
         >
@@ -680,8 +701,7 @@ export function MultiplayerRandomScreen() {
             </View>
           </View>
 
-          <Text style={styles.flashingName}>{flashingName}</Text>
-          <Text style={styles.flashingNameSub}>is in queue...</Text>
+          <Text style={styles.searchingMessage}>{searchingMessage}</Text>
         </View>
 
         <ExitConfirmModal
@@ -704,16 +724,7 @@ export function MultiplayerRandomScreen() {
             <Text style={styles.matchFoundTitle}>MATCH FOUND!</Text>
             <Text style={styles.opponentAvatar}>👤</Text>
             <Text style={styles.opponentName}>{opponent?.name}</Text>
-            <View style={styles.opponentStatsRow}>
-              <View style={styles.statBadge}>
-                <Text style={styles.statText}>Level {opponent?.level}</Text>
-              </View>
-              {opponent && opponent.winStreak > 1 && (
-                <View style={[styles.statBadge, styles.streakBadge]}>
-                  <Text style={styles.streakText}>🔥 {opponent.winStreak} Win Streak</Text>
-                </View>
-              )}
-            </View>
+
             <Text style={styles.matchFoundSub}>Get ready to play...</Text>
           </Animated.View>
         </View>
@@ -922,16 +933,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.arrowStroke,
     zIndex: 1,
   },
-  flashingName: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: theme.colors.arrowStroke,
-    marginBottom: 4,
-  },
-  flashingNameSub: {
-    fontSize: 14,
+  searchingMessage: {
+    fontSize: 16,
+    fontWeight: '700',
     color: theme.colors.textMuted,
-    fontWeight: '600',
+    marginTop: 8,
   },
 
   // ─── Match Found ──────────────────────────────────────────────────
@@ -961,11 +967,7 @@ const styles = StyleSheet.create({
     color: theme.colors.arrowStroke,
     marginBottom: 12,
   },
-  opponentStatsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 20,
-  },
+
   statBadge: {
     backgroundColor: '#ECEFF1',
     paddingHorizontal: 14,
@@ -1299,6 +1301,23 @@ const styles = StyleSheet.create({
   rematchBtnText: {
     color: '#FFF',
     fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  findNewMatchBtn: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: theme.radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    borderWidth: 2,
+    borderColor: theme.colors.arrowStroke,
+    backgroundColor: 'transparent',
+  },
+  findNewMatchBtnText: {
+    color: theme.colors.arrowStroke,
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: 0.5,
   },

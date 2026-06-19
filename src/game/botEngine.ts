@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getRandomBotName } from './botNames';
 
 const MATCH_HISTORY_KEY = 'bot_match_history_v1';
 const MAX_HISTORY = 8;
@@ -6,15 +7,6 @@ const MAX_HISTORY = 8;
 // Base timings (ms)
 const BASE_MIN_DELAY = 600;
 const BASE_MAX_DELAY = 1500;
-
-const FIRST_NAMES = [
-  'Arjun', 'Priya', 'Rahul', 'Neha', 'Rohan', 'Anjali', 'Karan', 'Vikas',
-  'Aisha', 'Dev', 'Isha', 'Manish', 'Pooja', 'Siddharth', 'Tanvi', 'Yash'
-];
-
-const GAMING_SUFFIXES = [
-  '_Pro', '_99', '_Arrow', '_Gamer', 'OP', '_King', '_Master', 'X', '_YT', '_GG'
-];
 
 type MatchHistory = {
   results: boolean[];
@@ -90,21 +82,9 @@ export async function resetBotSession() {
   }
 }
 
-function generateBotName(): string {
-  const first = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)] ?? 'Player';
-  const suffix = GAMING_SUFFIXES[Math.floor(Math.random() * GAMING_SUFFIXES.length)] ?? '_Pro';
-  const useUnderscore = suffix.startsWith('_') || suffix.endsWith('X');
-  return useUnderscore ? `${first}${suffix}` : `${first}_${suffix}`;
-}
-
 export function getFakeOpponentProfile() {
-  const level = Math.floor(Math.random() * 40) + 10;
-  const winStreak = Math.random() > 0.55 ? Math.floor(Math.random() * 5) + 2 : 0;
-
   return {
-    name: generateBotName(),
-    level,
-    winStreak
+    name: getRandomBotName(),
   };
 }
 
