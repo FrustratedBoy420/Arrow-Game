@@ -82,12 +82,9 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
 }: Props) {
   const [localTaps, setLocalTaps] = useState<{ id: number; x: number; y: number }[]>([]);
 
-  const tapIdCounter = useRef(0);
-
   useEffect(() => {
     if (lastTap) {
-      tapIdCounter.current += 1;
-      setLocalTaps((prev) => [...prev, { id: tapIdCounter.current, x: lastTap.x, y: lastTap.y }]);
+      setLocalTaps((prev) => [...prev, { id: lastTap.timestamp, x: lastTap.x, y: lastTap.y }]);
     }
   }, [lastTap]);
 
@@ -149,28 +146,6 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
     [flashingArrows]
   );
 
-  const exitingArrowIdSet = useMemo(() => {
-    const ids = new Set<string>();
-    for (const arrow of exitingArrows) {
-      ids.add(arrow.id);
-      if (arrow.id.startsWith('me-')) {
-        ids.add(arrow.id.slice(3));
-      } else if (arrow.id.startsWith('opponent-')) {
-        ids.add(arrow.id.slice(9));
-      }
-    }
-    return ids;
-  }, [exitingArrows]);
-
-  const uniqueExitingArrows = useMemo(() => {
-    const seen = new Set<string>();
-    return exitingArrows.filter((arrow) => {
-      if (seen.has(arrow.id)) return false;
-      seen.add(arrow.id);
-      return true;
-    });
-  }, [exitingArrows]);
-
   return (
     <View style={[styles.container, { width, height }]}>
       {/* A single unified canvas that covers the board + padding to avoid mounting delays & GL blinks */}
@@ -198,12 +173,7 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
             ))}
             
             {arrowPathsAll
-              .filter(
-                ({ id }) =>
-                  !blockedArrowIdSet.has(id) &&
-                  !flashingArrowIdSet.has(id) &&
-                  !exitingArrowIdSet.has(id)
-              )
+              .filter(({ id }) => !blockedArrowIdSet.has(id) && !flashingArrowIdSet.has(id))
               .map(({ id, path }) => (
                 <Path
                   key={id}
@@ -242,7 +212,7 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
           </Group>
 
           {/* Exiting arrow overlays with slide animation — drawn with CANVAS_PADDING baked in */}
-          {uniqueExitingArrows.map((arrow) => (
+          {exitingArrows.map((arrow) => (
             <ExitingArrow
               key={`exit-${arrow.id}`}
               arrow={arrow}
@@ -372,7 +342,7 @@ const ExitingArrow = memo(function ExitingArrow({
       1,
       { duration, easing: moveEasing },
       (finished) => {
-        if (finished !== false) runOnJS(onDone)(arrow.id);
+        if (finished) runOnJS(onDone)(arrow.id);
       }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per mounted exit arrow
@@ -513,7 +483,7 @@ const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
             stiffness: 180,
             mass: 0.5,
           }, (fin2) => {
-            if (fin2 !== false) runOnJS(onDone)(arrow.id);
+            if (fin2) runOnJS(onDone)(arrow.id);
           });
         }
       }

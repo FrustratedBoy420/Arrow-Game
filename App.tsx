@@ -15,9 +15,7 @@ import { FailScreen } from './src/screens/FailScreen';
 import { GameplayScreen } from './src/screens/GameplayScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LevelSelectScreen } from './src/screens/LevelSelectScreen';
-import { MultiplayerFriendsScreen } from './src/screens/MultiplayerFriendsScreen';
-import { MultiplayerModeSelectScreen } from './src/screens/MultiplayerModeSelectScreen';
-import { MultiplayerRandomScreen } from './src/screens/MultiplayerRandomScreen';
+import { MultiplayerScreen } from './src/screens/MultiplayerScreen';
 import { TutorialScreen } from './src/screens/TutorialScreen';
 import { VictoryScreen } from './src/screens/VictoryScreen';
 import { TermsScreen } from './src/screens/TermsScreen';
@@ -34,9 +32,7 @@ export type RootStackParamList = {
   LevelSelect: undefined;
   Victory: undefined;
   Fail: undefined;
-  MultiplayerModeSelect: undefined;
-  MultiplayerFriends: { roomCode?: string } | undefined;
-  MultiplayerRandom: undefined;
+  Multiplayer: { roomCode?: string } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -150,9 +146,7 @@ export default function App() {
           <Stack.Screen name="Gameplay" component={GameplayScreen} />
           <Stack.Screen name="Victory" component={VictoryScreen} />
           <Stack.Screen name="Fail" component={FailScreen} />
-          <Stack.Screen name="MultiplayerModeSelect" component={MultiplayerModeSelectScreen} />
-          <Stack.Screen name="MultiplayerFriends" component={MultiplayerFriendsScreen} />
-          <Stack.Screen name="MultiplayerRandom" component={MultiplayerRandomScreen} />
+          <Stack.Screen name="Multiplayer" component={MultiplayerScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </GestureHandlerRootView>

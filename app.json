@@ -2,7 +2,7 @@
   "expo": {
     "name": "ArrowVerse-Multiplayer",
     "slug": "arrow-escape",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "portrait",
     "scheme": "arrowversemultiplayer",
     "userInterfaceStyle": "light",
@@ -21,23 +21,23 @@
       ]
     ],
     "android": {
-      "package": "com.arrowverse.multiplayer",
+      "package": "com.app.arrow_verse",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#F6F1E8"
       }
     },
     "ios": {
-      "bundleIdentifier": "com.arrowverse.multiplayer",
+      "bundleIdentifier": "com.app.arrow_verse",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "extra": {
       "eas": {
-        "projectId": "0c562cb9-3a12-4ac0-b75f-f385d23a5255"
+        "projectId": "7b5fe8bb-09c9-4011-9587-a35a9f544234"
       }
     },
-    "owner": "mridul_jaiswal_420"
+    "owner": "kazal-tech"
   }
 }
