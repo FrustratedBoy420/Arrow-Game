@@ -35,7 +35,7 @@
       }
     },
     "ios": {
-      "bundleIdentifier": "com.app.arrow_verse",
+      "bundleIdentifier": "com.app.arrowverse",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

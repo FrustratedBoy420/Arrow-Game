@@ -18,6 +18,9 @@ try {
   console.log('⚠️ react-native-google-mobile-ads is not supported in Expo Go. Ads are disabled.');
 }
 
+// For testing, we force TestIds.BANNER. Change this back to production IDs before releasing to the store.
+const bannerAdUnitId = TestIds.BANNER;
+/*
 const bannerAdUnitId = __DEV__
   ? TestIds.BANNER
   : Platform.select({
@@ -25,6 +28,7 @@ const bannerAdUnitId = __DEV__
       ios: 'ca-app-pub-3940256099942544/2934735716',     // Google official test ID (replace with production iOS unit ID)
       default: TestIds.BANNER,
     });
+*/
 
 export function AdBanner() {
   const [adLoaded, setAdLoaded] = useState(true);

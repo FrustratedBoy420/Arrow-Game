@@ -19,6 +19,9 @@ try {
   console.log('⚠️ react-native-google-mobile-ads is not supported in Expo Go. Ads are disabled.');
 }
 
+// For testing, we force TestIds.INTERSTITIAL. Change this back to production IDs before releasing to the store.
+const interstitialAdUnitId = TestIds.INTERSTITIAL;
+/*
 const interstitialAdUnitId = __DEV__
   ? TestIds.INTERSTITIAL
   : Platform.select({
@@ -26,6 +29,7 @@ const interstitialAdUnitId = __DEV__
       ios: 'ca-app-pub-3940256099942544/4411468910',     // Google official test ID (replace with production iOS unit ID)
       default: TestIds.INTERSTITIAL,
     });
+*/
 
 class AdManager {
   private interstitial: any = null;
