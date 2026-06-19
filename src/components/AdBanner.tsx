@@ -1,8 +1,22 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Platform, NativeModules } from 'react-native';
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { View, StyleSheet, Platform } from 'react-native';
 
-const isAdMobAvailable = !!NativeModules.RNGoogleMobileAdsModule;
+let BannerAd: any = null;
+let BannerAdSize: any = null;
+let TestIds: any = {
+  BANNER: 'ca-app-pub-3940256099942544/6300978111',
+};
+let isAdMobAvailable = false;
+
+try {
+  const ads = require('react-native-google-mobile-ads');
+  BannerAd = ads.BannerAd;
+  BannerAdSize = ads.BannerAdSize;
+  TestIds = ads.TestIds;
+  isAdMobAvailable = true;
+} catch (error) {
+  console.log('⚠️ react-native-google-mobile-ads is not supported in Expo Go. Ads are disabled.');
+}
 
 const bannerAdUnitId = __DEV__
   ? TestIds.BANNER
@@ -24,7 +38,7 @@ export function AdBanner() {
       <BannerAd
         unitId={bannerAdUnitId}
         size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-        onAdFailedToLoad={(err) => {
+        onAdFailedToLoad={(err: any) => {
           console.warn('❌ Banner ad failed to load:', err);
           setAdLoaded(false);
         }}
@@ -45,3 +59,4 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
 });
+

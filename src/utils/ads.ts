@@ -1,7 +1,23 @@
-import mobileAds, { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
-import { Platform, NativeModules } from 'react-native';
+import { Platform } from 'react-native';
 
-const isAdMobAvailable = !!NativeModules.RNGoogleMobileAdsModule;
+let mobileAds: any = null;
+let InterstitialAdClass: any = null;
+let AdEventType: any = null;
+let TestIds: any = {
+  INTERSTITIAL: 'ca-app-pub-3940256099942544/1033173712',
+};
+let isAdMobAvailable = false;
+
+try {
+  const ads = require('react-native-google-mobile-ads');
+  mobileAds = ads.default;
+  InterstitialAdClass = ads.InterstitialAd;
+  AdEventType = ads.AdEventType;
+  TestIds = ads.TestIds;
+  isAdMobAvailable = true;
+} catch (error) {
+  console.log('⚠️ react-native-google-mobile-ads is not supported in Expo Go. Ads are disabled.');
+}
 
 const interstitialAdUnitId = __DEV__
   ? TestIds.INTERSTITIAL
@@ -12,13 +28,12 @@ const interstitialAdUnitId = __DEV__
     });
 
 class AdManager {
-  private interstitial: InterstitialAd | null = null;
+  private interstitial: any = null;
   private isAdLoading = false;
   private isInitialized = false;
 
   async initialize() {
     if (!isAdMobAvailable) {
-      console.log('⚠️ AdMob native module is not available in this environment (e.g. Expo Go). Ads are disabled.');
       return;
     }
     if (this.isInitialized) return;
@@ -43,7 +58,7 @@ class AdManager {
 
     try {
       // Create a new instance
-      const interstitial = InterstitialAd.createForAdRequest(interstitialAdUnitId, {
+      const interstitial = InterstitialAdClass.createForAdRequest(interstitialAdUnitId, {
         requestNonPersonalizedAdsOnly: true, // Configured for privacy laws (GDPR/CCPA compliant)
       });
 
@@ -53,7 +68,7 @@ class AdManager {
         this.interstitial = interstitial;
       });
 
-      const unsubscribeError = interstitial.addAdEventListener(AdEventType.ERROR, (error) => {
+      const unsubscribeError = interstitial.addAdEventListener(AdEventType.ERROR, (error: any) => {
         console.warn('❌ Interstitial Ad failed to load:', error);
         this.isAdLoading = false;
         this.interstitial = null;
@@ -70,7 +85,6 @@ class AdManager {
 
   showInterstitial(onClose: () => void) {
     if (!isAdMobAvailable || !this.isInitialized) {
-      console.log('⚠️ Ads not initialized or AdMob not available. Proceeding without ad.');
       onClose();
       return;
     }
@@ -91,7 +105,7 @@ class AdManager {
           }
         );
 
-        this.interstitial.show().catch((err) => {
+        this.interstitial.show().catch((err: any) => {
           console.warn('❌ Failed to show interstitial ad:', err);
           this.interstitial = null;
           onClose();
@@ -104,7 +118,6 @@ class AdManager {
         this.loadInterstitial();
       }
     } else {
-      console.log('⚠️ Interstitial Ad not loaded yet. Proceeding immediately.');
       onClose();
       // Try to load again
       this.loadInterstitial();
@@ -113,4 +126,5 @@ class AdManager {
 }
 
 export const adManager = new AdManager();
+
 
