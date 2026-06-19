@@ -75,7 +75,12 @@ export function GameplayScreen() {
       navigation.replace('Fail');
       return;
     }
-  }, [status, navigation]);
+
+    if (status === 'won' && exitingArrows.length === 0) {
+      navigation.replace('Victory');
+      return;
+    }
+  }, [status, navigation, exitingArrows.length]);
 
   useFocusEffect(
     useCallback(() => {
@@ -111,10 +116,13 @@ export function GameplayScreen() {
   const handleExitDone = useCallback((arrowId: string) => {
     setExitingArrows((prev) => {
       const next = prev.filter((a) => a.id !== arrowId);
+      // Only navigate to Victory after all exiting arrows have completed their animations
+      // AND the game status is 'won'
       if (useGameStore.getState().status === 'won' && next.length === 0) {
+        // Add small delay to allow UI to fully settle after final animation
         setTimeout(() => {
           navigation.replace('Victory');
-        }, 0);
+        }, 100);
       }
       return next;
     });

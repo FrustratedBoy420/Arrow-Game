@@ -86,7 +86,7 @@ function decodeArrowsLeft(arrowsLeft: number): { remainingCount: number; index: 
   return { remainingCount, index };
 }
 
-export function MultiplayerScreen() {
+export function MultiplayerFriendsScreen() {
   const navigation = useNavigation<AppNavigation>();
   const route = useRoute<any>();
   const linkRoomCode = route.params?.roomCode;
@@ -115,6 +115,7 @@ export function MultiplayerScreen() {
   const [lastTap, setLastTap] = useState<{ x: number; y: number; timestamp: number } | undefined>(undefined);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
+  const [localMatchEnded, setLocalMatchEnded] = useState(false);
   
   // Live progress tracking
   const [opponentName, setOpponentName] = useState('');
@@ -573,7 +574,7 @@ export function MultiplayerScreen() {
           unstable_batchedUpdates(() => {
             setLocalPlayerTimes({});
             setBoard(createInitialBoard(currentLevel, 3));
-            setMyArrowsInitial(currentLevel.arrows.length);
+          setLocalMatchEnded(false);
             setOpponentArrowsLeft(currentLevel.arrows.length);
 
             const other = playersRef.current.find(p => p.toLowerCase() !== playerNameRef.current.toLowerCase()) || 'Opponent';
@@ -589,6 +590,7 @@ export function MultiplayerScreen() {
             setScores(initialScores);
 
             setExitingArrows([]);
+            setLocalMatchEnded(false);
             setStep('game');
           });
           
@@ -632,8 +634,6 @@ export function MultiplayerScreen() {
         console.log('Pusher received: [player_left]', data);
         setPlayers(data.players);
         setReadyStates({});
-        setRematchStates({});
-        setRequestingRematch(false);
         setOpponentName('');
         // Also update match results status if we are on results screen
         setMatchResults((prev) =>
@@ -797,6 +797,7 @@ export function MultiplayerScreen() {
           }))
         );
 
+        setRematchStates({});
         setStep('results');
       });
 
@@ -945,16 +946,10 @@ export function MultiplayerScreen() {
     if (requestingRematch) return;
     setRequestingRematch(true);
     try {
-      const res = await apiPost('/api/rematch-request', {
+      await apiPost('/api/rematch-request', {
         name: playerName.trim(),
         roomCode: roomCode.trim().toUpperCase()
       });
-      if (res && res.success) {
-        setRematchStates((prev) => ({
-          ...prev,
-          [playerName]: true
-        }));
-      }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to request rematch.');
     } finally {
@@ -1010,6 +1005,19 @@ export function MultiplayerScreen() {
       setFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
     }, 520);
   }, []);
+
+  useEffect(() => {
+    if (step !== 'game' || localMatchEnded) return;
+
+    const boardComplete = board?.arrows.length === 0;
+    const userOutOfLives = board?.livesLeft === 0;
+    const animationsComplete = exitingArrows.length === 0;
+
+    if ((boardComplete && animationsComplete) || userOutOfLives) {
+      setLocalMatchEnded(true);
+      setStep('results');
+    }
+  }, [step, board?.arrows.length, board?.livesLeft, exitingArrows.length, localMatchEnded]);
 
   const handleArrowPress = useCallback((arrowId: string) => {
     if (!roomCode) return;
@@ -1427,27 +1435,13 @@ export function MultiplayerScreen() {
     const didIAbandon = abandonedPlayer && abandonedPlayer.name.toLowerCase() === playerName.toLowerCase();
 
     const getSharedBoardWinner = (): string => {
-      const playersList = players;
-      const hasFailureOrAbandon = matchResults.some(
-        (r) => r.status === 'abandoned' || r.status === 'failed' || r.status === 'failed_lives'
-      );
-
-      if (!hasFailureOrAbandon && playersList.length >= 2) {
-        const p1Name = playersList[0] || '';
-        const p2Name = playersList[1] || '';
-        const p1Score = getCaseInsensitiveVal(scores, p1Name) || 0;
-        const p2Score = getCaseInsensitiveVal(scores, p2Name) || 0;
-        if (p1Score === p2Score) {
-          return 'None'; // Draw
-        }
-      }
-
       if (matchWinner) {
         return matchWinner;
       }
       if (abandonedPlayer) {
         return matchWinner || 'None'; // Use server winner if someone resigned
       }
+      const playersList = players;
       if (playersList.length < 2) return matchWinner || playerName || 'None';
       const p1Name = playersList[0] || '';
       const p2Name = playersList[1] || '';
@@ -1520,14 +1514,14 @@ export function MultiplayerScreen() {
           <View style={styles.resultsDivider} />
 
           {/* Player result rows */}
-          {matchResults.map((result) => {
+          {matchResults.map((result, index) => {
             const isMe = result.name.toLowerCase() === playerName.toLowerCase();
             const isWinner = result.name.toLowerCase() === localWinner.toLowerCase();
             const playerScore = getCaseInsensitiveVal(scores, result.name) || 0;
 
             return (
               <View
-                key={result.name}
+                key={`${result.name}-${result.status}-${index}`}
                 style={[
                   styles.playerResultRow,
                   isMe && styles.playerResultRowMe
@@ -1575,37 +1569,29 @@ export function MultiplayerScreen() {
 
         {/* Rematch Section */}
         <View style={styles.rematchCard}>
-          {players.length < 2 || matchResults.some(r => r.status === 'abandoned') ? (
+          {isOtherRematchRequested && (
             <View style={styles.rematchTipBox}>
-              <Text style={styles.rematchTipText}>⚠️ Opponent left the arena. Rematch unavailable.</Text>
+              <Text style={styles.rematchTipText}>⚡ {otherPlayer} wants a rematch!</Text>
             </View>
-          ) : (
-            <>
-              {isOtherRematchRequested && (
-                <View style={styles.rematchTipBox}>
-                  <Text style={styles.rematchTipText}>⚡ {otherPlayer} wants a rematch!</Text>
-                </View>
-              )}
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.rematchBtn,
-                  (isRematchRequested || requestingRematch) ? styles.rematchBtnWaiting : styles.rematchBtnActive,
-                  pressed && styles.btnPressed
-                ]}
-                onPress={handleRequestRematch}
-                disabled={isRematchRequested || requestingRematch}
-              >
-                <Text style={styles.rematchBtnText}>
-                  {requestingRematch
-                    ? 'Sending…'
-                    : isRematchRequested
-                    ? '⏳ Waiting for opponent…'
-                    : '⚔️ Request Rematch'}
-                </Text>
-              </Pressable>
-            </>
           )}
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.rematchBtn,
+              (isRematchRequested || requestingRematch) ? styles.rematchBtnWaiting : styles.rematchBtnActive,
+              pressed && styles.btnPressed
+            ]}
+            onPress={handleRequestRematch}
+            disabled={isRematchRequested || requestingRematch}
+          >
+            <Text style={styles.rematchBtnText}>
+              {requestingRematch
+                ? 'Sending…'
+                : isRematchRequested
+                ? '⏳ Waiting for opponent…'
+                : '⚔️ Request Rematch'}
+            </Text>
+          </Pressable>
         </View>
 
         <Pressable

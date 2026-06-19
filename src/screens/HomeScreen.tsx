@@ -322,7 +322,7 @@ export function HomeScreen() {
             onPressOut={() => {
               multiScale.value = withSpring(1, { damping: 10, stiffness: 350 });
             }}
-            onPress={() => navigation.navigate('Multiplayer')}
+            onPress={() => navigation.navigate('MultiplayerModeSelect')}
           >
             <Animated.View style={[styles.btn, styles.multiplayerBtn, multiAnimStyle]}>
               <Text style={[styles.btnText, styles.multiplayerText]}>
