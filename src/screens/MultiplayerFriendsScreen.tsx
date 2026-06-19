@@ -86,7 +86,7 @@ function decodeArrowsLeft(arrowsLeft: number): { remainingCount: number; index: 
   return { remainingCount, index };
 }
 
-export function MultiplayerScreen() {
+export function MultiplayerFriendsScreen() {
   const navigation = useNavigation<AppNavigation>();
   const route = useRoute<any>();
   const linkRoomCode = route.params?.roomCode;
@@ -115,6 +115,7 @@ export function MultiplayerScreen() {
   const [lastTap, setLastTap] = useState<{ x: number; y: number; timestamp: number } | undefined>(undefined);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
+  const [localMatchEnded, setLocalMatchEnded] = useState(false);
   
   // Live progress tracking
   const [opponentName, setOpponentName] = useState('');
@@ -573,7 +574,7 @@ export function MultiplayerScreen() {
           unstable_batchedUpdates(() => {
             setLocalPlayerTimes({});
             setBoard(createInitialBoard(currentLevel, 3));
-            setMyArrowsInitial(currentLevel.arrows.length);
+          setLocalMatchEnded(false);
             setOpponentArrowsLeft(currentLevel.arrows.length);
 
             const other = playersRef.current.find(p => p.toLowerCase() !== playerNameRef.current.toLowerCase()) || 'Opponent';
@@ -589,6 +590,7 @@ export function MultiplayerScreen() {
             setScores(initialScores);
 
             setExitingArrows([]);
+            setLocalMatchEnded(false);
             setStep('game');
           });
           
@@ -1003,6 +1005,19 @@ export function MultiplayerScreen() {
       setFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
     }, 520);
   }, []);
+
+  useEffect(() => {
+    if (step !== 'game' || localMatchEnded) return;
+
+    const boardComplete = board?.arrows.length === 0;
+    const userOutOfLives = board?.livesLeft === 0;
+    const animationsComplete = exitingArrows.length === 0;
+
+    if ((boardComplete && animationsComplete) || userOutOfLives) {
+      setLocalMatchEnded(true);
+      setStep('results');
+    }
+  }, [step, board?.arrows.length, board?.livesLeft, exitingArrows.length, localMatchEnded]);
 
   const handleArrowPress = useCallback((arrowId: string) => {
     if (!roomCode) return;
@@ -1499,14 +1514,14 @@ export function MultiplayerScreen() {
           <View style={styles.resultsDivider} />
 
           {/* Player result rows */}
-          {matchResults.map((result) => {
+          {matchResults.map((result, index) => {
             const isMe = result.name.toLowerCase() === playerName.toLowerCase();
             const isWinner = result.name.toLowerCase() === localWinner.toLowerCase();
             const playerScore = getCaseInsensitiveVal(scores, result.name) || 0;
 
             return (
               <View
-                key={result.name}
+                key={`${result.name}-${result.status}-${index}`}
                 style={[
                   styles.playerResultRow,
                   isMe && styles.playerResultRowMe
