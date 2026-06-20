@@ -47,8 +47,10 @@ type GameStore = {
     showAds: boolean;
     androidBanner: string;
     androidInterstitial: string;
+    androidAppOpen: string;
     iosBanner: string;
     iosInterstitial: string;
+    iosAppOpen: string;
   };
   resetAllProgress: () => void;
   // Level Management System Integration
@@ -113,10 +115,12 @@ export const useGameStore = create<GameStore>()(
       versionConfig: null,
       adsConfig: {
         showAds: true,
-        androidBanner: 'ca-app-pub-2101586602209482/8247764481',
-        androidInterstitial: 'ca-app-pub-2101586602209482/6861275013',
+        androidBanner: 'ca-app-pub-1466180289159501/3095811477',
+        androidInterstitial: 'ca-app-pub-1466180289159501/2069670266',
+        androidAppOpen: 'ca-app-pub-1466180289159501/1199286193',
         iosBanner: 'ca-app-pub-3940256099942544/2934735716',
         iosInterstitial: 'ca-app-pub-3940256099942544/4411468910',
+        iosAppOpen: 'ca-app-pub-3940256099942544/9257395921',
       },
       levelProgressMap: initialLevelMap,
       starsEarnedThisLevel: 0,

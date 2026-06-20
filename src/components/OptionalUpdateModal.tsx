@@ -13,7 +13,7 @@ interface OptionalUpdateModalProps {
 
 export function OptionalUpdateModal({ visible, latestVersion, onClose }: OptionalUpdateModalProps) {
   const handleUpdatePress = async () => {
-    const url = 'https://play.google.com/store/apps/details?id=com.arrowverse.multiplayer';
+    const url = 'https://play.google.com/store/apps/details?id=com.app.arrow_verse';
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {

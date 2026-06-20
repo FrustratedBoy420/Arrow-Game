@@ -14,7 +14,7 @@ interface ForcedUpdateScreenProps {
 export function ForcedUpdateScreen({ currentVersion, requiredVersion }: ForcedUpdateScreenProps) {
   const handleUpdatePress = async () => {
     // Open a store link or fallback website
-    const url = 'https://play.google.com/store/apps/details?id=com.arrowverse.multiplayer';
+    const url = 'https://play.google.com/store/apps/details?id=com.app.arrow_verse';
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {

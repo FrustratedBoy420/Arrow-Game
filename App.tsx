@@ -46,6 +46,16 @@ import { registerUserProfile } from './src/utils/userRegistration';
 
 import * as SplashScreen from 'expo-splash-screen';
 
+// Deep linking configuration for React Navigation
+const linking = {
+  prefixes: ['arrowversemultiplayer://'],
+  config: {
+    screens: {
+      MultiplayerFriends: 'join/:roomCode',
+    },
+  },
+};
+
 // Prevent splash screen from auto-hiding until we finish loading resources
 SplashScreen.preventAutoHideAsync();
 
@@ -136,7 +146,7 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer>
+      <NavigationContainer linking={linking}>
         <StatusBar style="dark" backgroundColor={theme.colors.bgPrimary} />
         <Stack.Navigator
           initialRouteName="Home"
