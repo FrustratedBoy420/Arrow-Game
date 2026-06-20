@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { useGameStore } from '../state/gameStore';
 
 let mobileAds: any = null;
 let InterstitialAdClass: any = null;
@@ -18,18 +19,6 @@ try {
 } catch (error) {
   console.log('⚠️ react-native-google-mobile-ads is not supported in Expo Go. Ads are disabled.');
 }
-
-// For testing, we force TestIds.INTERSTITIAL. Change this back to production IDs before releasing to the store.
-const interstitialAdUnitId = TestIds.INTERSTITIAL;
-/*
-const interstitialAdUnitId = __DEV__
-  ? TestIds.INTERSTITIAL
-  : Platform.select({
-      android: 'ca-app-pub-2101586602209482/6861275013', // Production Android interstitial ad unit ID
-      ios: 'ca-app-pub-3940256099942544/4411468910',     // Google official test ID (replace with production iOS unit ID)
-      default: TestIds.INTERSTITIAL,
-    });
-*/
 
 class AdManager {
   private interstitial: any = null;
@@ -53,6 +42,15 @@ class AdManager {
 
   loadInterstitial() {
     if (!isAdMobAvailable) return;
+
+    // Check if ads are enabled dynamically
+    const adsConfig = useGameStore.getState().adsConfig;
+    if (!adsConfig || !adsConfig.showAds) {
+      console.log('Ads are disabled globally via config.');
+      this.interstitial = null;
+      return;
+    }
+
     if (this.isAdLoading || (this.interstitial && this.interstitial.loaded)) {
       return;
     }
@@ -61,6 +59,13 @@ class AdManager {
     console.log('🔄 Loading Interstitial Ad...');
 
     try {
+      // Dynamic selection of unitId: Google Test IDs in dev, backend real IDs in preview/release
+      const interstitialAdUnitId = __DEV__
+        ? TestIds.INTERSTITIAL
+        : Platform.OS === 'android'
+          ? adsConfig.androidInterstitial
+          : adsConfig.iosInterstitial;
+
       // Create a new instance
       const interstitial = InterstitialAdClass.createForAdRequest(interstitialAdUnitId, {
         requestNonPersonalizedAdsOnly: true, // Configured for privacy laws (GDPR/CCPA compliant)
@@ -89,6 +94,14 @@ class AdManager {
 
   showInterstitial(onClose: () => void) {
     if (!isAdMobAvailable || !this.isInitialized) {
+      onClose();
+      return;
+    }
+
+    // Check if ads are enabled dynamically
+    const adsConfig = useGameStore.getState().adsConfig;
+    if (!adsConfig || !adsConfig.showAds) {
+      console.log('Ads are disabled globally via config. Skipping interstitial.');
       onClose();
       return;
     }

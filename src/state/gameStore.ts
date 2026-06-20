@@ -43,6 +43,13 @@ type GameStore = {
     critical: string;
     termsUrl?: string;
   } | null;
+  adsConfig: {
+    showAds: boolean;
+    androidBanner: string;
+    androidInterstitial: string;
+    iosBanner: string;
+    iosInterstitial: string;
+  };
   resetAllProgress: () => void;
   // Level Management System Integration
   levelProgressMap: Map<number, LevelProgress>;
@@ -104,6 +111,13 @@ export const useGameStore = create<GameStore>()(
         homeArrow: '➤'
       },
       versionConfig: null,
+      adsConfig: {
+        showAds: true,
+        androidBanner: 'ca-app-pub-2101586602209482/8247764481',
+        androidInterstitial: 'ca-app-pub-2101586602209482/6861275013',
+        iosBanner: 'ca-app-pub-3940256099942544/2934735716',
+        iosInterstitial: 'ca-app-pub-3940256099942544/4411468910',
+      },
       levelProgressMap: initialLevelMap,
       starsEarnedThisLevel: 0,
       levelStartTime: Date.now(),
@@ -304,7 +318,7 @@ export const useGameStore = create<GameStore>()(
           const resData = await response.json();
 
           if (resData) {
-            const { levels: serverLevels, music, icons, version, pusherKey, pusherCluster } = resData;
+            const { levels: serverLevels, music, icons, version, ads, pusherKey, pusherCluster } = resData;
 
             if (pusherKey) {
               await AsyncStorage.setItem('multiplayer_pusher_key', pusherKey.trim());
@@ -343,7 +357,8 @@ export const useGameStore = create<GameStore>()(
                 bgMusic: null
               },
               iconsConfig: icons ? { ...get().iconsConfig, ...icons } : get().iconsConfig,
-              versionConfig: version || null
+              versionConfig: version || null,
+              adsConfig: ads ? { ...get().adsConfig, ...ads } : get().adsConfig
             });
           }
         } catch (err) {
@@ -549,7 +564,8 @@ export const useGameStore = create<GameStore>()(
         dynamicLevels: state.dynamicLevels,
         musicUrls: state.musicUrls,
         iconsConfig: state.iconsConfig,
-        versionConfig: state.versionConfig
+        versionConfig: state.versionConfig,
+        adsConfig: state.adsConfig
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
