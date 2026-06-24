@@ -40,6 +40,7 @@ export function GameplayScreen() {
   const undo = useGameStore((s) => s.undo);
   const useHint = useGameStore((s) => s.useHint);
   const hintUsedThisLevel = useGameStore((s) => s.hintUsedThisLevel);
+  const isAdmin = useGameStore((s) => !!s.iconsConfig?.unlockAllLevels);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [backModalVisible, setBackModalVisible] = useState(false);
@@ -175,7 +176,9 @@ export function GameplayScreen() {
   );
 
   const handleHint = useCallback(() => {
-    if (useGameStore.getState().hintUsedThisLevel) {
+    const state = useGameStore.getState();
+    const isAdminUser = !!state.iconsConfig?.unlockAllLevels;
+    if (state.hintUsedThisLevel && !isAdminUser) {
       Alert.alert('Hint Used', 'You only get one hint per level.');
       return;
     }
@@ -239,7 +242,7 @@ export function GameplayScreen() {
         onUndo={undo}
         onHint={handleHint}
         onRestart={retry}
-        hintDisabled={hintUsedThisLevel}
+        hintDisabled={hintUsedThisLevel && !isAdmin}
       />
       <SettingsModal
         visible={settingsVisible}

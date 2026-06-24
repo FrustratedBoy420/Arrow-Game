@@ -2,7 +2,7 @@
   "expo": {
     "name": "ArrowVerse-Multiplayer",
     "slug": "arrow-escape",
-    "version": "0.3.1",
+    "version": "0.3.2",
     "orientation": "portrait",
     "scheme": "arrowversemultiplayer",
     "userInterfaceStyle": "light",

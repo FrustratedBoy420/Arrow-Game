@@ -275,8 +275,9 @@ export const useGameStore = create<GameStore>()(
       },
 
       useHint: () => {
-        const { board, status, gameStartTime, hintUsedThisLevel } = get();
-        if (status !== 'playing' || hintUsedThisLevel) return null;
+        const { board, status, gameStartTime, hintUsedThisLevel, iconsConfig } = get();
+        const isAdmin = !!iconsConfig?.unlockAllLevels;
+        if (status !== 'playing' || (hintUsedThisLevel && !isAdmin)) return null;
 
         if (gameStartTime === null) {
           set({ gameStartTime: Date.now() });
@@ -298,7 +299,7 @@ export const useGameStore = create<GameStore>()(
           board: result.board,
           status: nextStatus,
           lastHintArrowId: hintArrow.id,
-          hintUsedThisLevel: true
+          hintUsedThisLevel: isAdmin ? false : true
         });
 
         return hintArrow.id;

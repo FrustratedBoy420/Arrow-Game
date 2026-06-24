@@ -1,4 +1,4 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { CheckpointGateProgress } from '../systems/levelManagement';
 import { theme } from '../theme/theme';
@@ -8,11 +8,6 @@ type Props = {
   gate: CheckpointGateProgress | null;
   onClose: () => void;
 };
-
-function starLine(stars: number): string {
-  if (stars <= 0) return '—';
-  return '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
-}
 
 export function CheckpointLockModal({ visible, gate, onClose }: Props) {
   if (!gate) return null;
@@ -52,16 +47,6 @@ export function CheckpointLockModal({ visible, gate, onClose }: Props) {
             )}
           </View>
 
-          <Text style={styles.breakdownTitle}>Your stars</Text>
-          <ScrollView style={styles.breakdownScroll} showsVerticalScrollIndicator={false}>
-            {gate.levelBreakdown.map(({ level, stars }) => (
-              <View key={level} style={styles.breakdownRow}>
-                <Text style={styles.breakdownLevel}>Level {level}</Text>
-                <Text style={styles.breakdownStars}>{starLine(stars)}</Text>
-              </View>
-            ))}
-          </ScrollView>
-
           <Pressable style={styles.button} onPress={onClose} accessibilityRole="button">
             <Text style={styles.buttonText}>Got it</Text>
           </Pressable>
@@ -82,7 +67,6 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 340,
-    maxHeight: '80%',
     backgroundColor: theme.colors.white,
     borderRadius: 24,
     padding: 24,
@@ -111,7 +95,7 @@ const styles = StyleSheet.create({
     lineHeight: 20
   },
   progressSection: {
-    marginBottom: 16
+    marginBottom: 24
   },
   progressLabels: {
     flexDirection: 'row',
@@ -157,35 +141,6 @@ const styles = StyleSheet.create({
     color: theme.colors.difficultyEasy,
     textAlign: 'center',
     marginTop: 10
-  },
-  breakdownTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: theme.colors.textMuted,
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    textTransform: 'uppercase'
-  },
-  breakdownScroll: {
-    maxHeight: 200,
-    marginBottom: 16
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderSoft
-  },
-  breakdownLevel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.arrowStroke
-  },
-  breakdownStars: {
-    fontSize: 14,
-    letterSpacing: 1
   },
   button: {
     backgroundColor: theme.colors.arrowStroke,
