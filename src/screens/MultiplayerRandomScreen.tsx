@@ -62,6 +62,7 @@ export function MultiplayerRandomScreen() {
   const [rematchRequestedByMe, setRematchRequestedByMe] = useState(false);
   const [rematchStatus, setRematchStatus] = useState<'idle' | 'waiting' | 'accepted' | 'declined'>('idle');
   const [dbLevels, setDbLevels] = useState<LevelDefinition[]>([]);
+  const [rematchTimerVal, setRematchTimerVal] = useState<number | null>(null);
 
   useEffect(() => {
     const loadProfileName = async () => {
@@ -439,6 +440,33 @@ export function MultiplayerRandomScreen() {
     setMatchState('searching');
   }, []);
 
+  useEffect(() => {
+    if (matchState !== 'results') {
+      setRematchTimerVal(null);
+      return;
+    }
+    if (rematchRequestedByMe) {
+      setRematchTimerVal(null);
+      return;
+    }
+
+    setRematchTimerVal(5);
+
+    const interval = setInterval(() => {
+      setRematchTimerVal((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          clearInterval(interval);
+          handleFindNewMatch();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [matchState, rematchRequestedByMe, handleFindNewMatch]);
+
   // ─── Back Button ──────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
@@ -667,6 +695,8 @@ export function MultiplayerRandomScreen() {
                 ? rematchStatus === 'waiting'
                   ? '⏳ Waiting for opponent…'
                   : 'Sending…'
+                : rematchTimerVal !== null
+                ? `⚔️ Request Rematch (${rematchTimerVal}s)`
                 : '⚔️ Request Rematch'}
             </Text>
           </Pressable>

@@ -334,6 +334,7 @@ const ExitingArrow = memo(function ExitingArrow({
   onDone: (arrowId: string) => void;
 }) {
   const animProgress = useSharedValue(0);
+  const calledRef = useRef(false);
 
   const exitDir = getExitDirection(arrow);
   const v = dirVec[exitDir];
@@ -427,7 +428,16 @@ const ExitingArrow = memo(function ExitingArrow({
 
   const { points, cumDist, totalLength, arrowLength } = trackPointsAndDistances;
 
+  // JS-side wrapper so runOnJS can call it from the UI thread and the ref stays in sync.
+  const handleDone = useCallback(() => {
+    if (!calledRef.current) {
+      calledRef.current = true;
+      onDone(arrow.id);
+    }
+  }, [onDone, arrow.id]);
+
   useEffect(() => {
+    calledRef.current = false;
     // Exit speed scales with the cell size (e.g. 13.5 cells per second)
     // so that smaller cells on large levels cross the screen at the same visual rate as large levels.
     const cellsPerSec = 13.5;
@@ -438,30 +448,19 @@ const ExitingArrow = memo(function ExitingArrow({
 
     animProgress.value = 0;
 
-    let called = false;
-    const handleDone = () => {
-      if (!called) {
-        called = true;
-        runOnJS(onDone)(arrow.id);
-      }
-    };
-
     animProgress.value = withTiming(
       1,
       { duration, easing: moveEasing },
       (finished) => {
+        'worklet';
         if (finished !== false) {
-          handleDone();
+          runOnJS(handleDone)();
         }
       }
     );
 
-    return () => {
-      if (!called) {
-        called = true;
-        onDone(arrow.id);
-      }
-    };
+    // Don't call handleDone in cleanup — let the animation finish naturally.
+    // The parent clears exitingArrows on level reset anyway.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per mounted exit arrow
   }, [totalLength, cellSize]);
 
@@ -549,30 +548,92 @@ const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
   // Slide all the way to touch the blocker (offset 0.1 to avoid overlapping/clipping)
   const slideDist = cellSize * Math.max(0.2, cellsDistance - 0.1);
 
-  // Pre-compiled combined arrow path (shaft + head) colored in red and translated hardware-acceleratedly
-  const path = useMemo(() => {
-    return makeArrowPath(arrow, cellSize);
-  }, [arrow, cellSize]);
+  // 1. Build a track path that traces the arrow body and extends slideDist forward
+  const trackPath = useMemo(() => {
+    const path = Skia.Path.Make();
+    const cells = arrow.fullPath;
+    if (cells.length === 0) return path;
+
+    const first = cells[0]!;
+    const start = centerOf(first, cellSize);
+    path.moveTo(start.x, start.y);
+
+    for (let i = 1; i < cells.length; i++) {
+      const pt = centerOf(cells[i]!, cellSize);
+      path.lineTo(pt.x, pt.y);
+    }
+
+    const head = cells[cells.length - 1]!;
+    const lastCenter = centerOf(head, cellSize);
+
+    const exitEnd = {
+      x: lastCenter.x + v.x * slideDist,
+      y: lastCenter.y + v.y * slideDist
+    };
+    path.lineTo(exitEnd.x, exitEnd.y);
+
+    return path;
+  }, [arrow, cellSize, slideDist, v]);
+
+  // 2. Calculate cumulative segment distances and point positions
+  const trackPointsAndDistances = useMemo(() => {
+    const cells = arrow.fullPath;
+    const points: { x: number; y: number }[] = [];
+    if (cells.length === 0) {
+      return { points: [{ x: 0, y: 0 }], cumDist: [0], totalLength: 0, arrowLength: 0 };
+    }
+
+    for (let i = 0; i < cells.length; i++) {
+      const pt = centerOf(cells[i]!, cellSize);
+      points.push({ x: pt.x, y: pt.y });
+    }
+
+    const headCell = cells[cells.length - 1]!;
+    const lastCenter = centerOf(headCell, cellSize);
+    points.push({
+      x: lastCenter.x + v.x * slideDist,
+      y: lastCenter.y + v.y * slideDist
+    });
+
+    const cumDist: number[] = [0];
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      const dx = points[i + 1]!.x - points[i]!.x;
+      const dy = points[i + 1]!.y - points[i]!.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      total += dist;
+      cumDist.push(total);
+    }
+
+    const arrowLength = Math.max(0, (cells.length - 1) * cellSize);
+    return { points, cumDist, totalLength: total, arrowLength };
+  }, [arrow, cellSize, slideDist, v]);
+
+  const { points, cumDist, totalLength, arrowLength } = trackPointsAndDistances;
 
   // Adjust timing organically based on distance
   const forwardDuration = Math.max(140, Math.min(280, cellsDistance * 80));
 
-  useEffect(() => {
-    progress.value = 0;
+  const calledRef = useRef(false);
 
-    let called = false;
-    const handleDone = () => {
-      if (!called) {
-        called = true;
-        runOnJS(onDone)(arrow.id);
-      }
-    };
+  // JS-side wrapper so runOnJS can call it from the UI thread and the ref stays in sync.
+  const handleDone = useCallback(() => {
+    if (!calledRef.current) {
+      calledRef.current = true;
+      onDone(arrow.id);
+    }
+  }, [onDone, arrow.id]);
+
+  useEffect(() => {
+    calledRef.current = false;
+    progress.value = 0;
 
     progress.value = withSequence(
       withTiming(
         1,
         { duration: forwardDuration, easing: Easing.bezier(0.25, 1, 0.5, 1) },
         (finished) => {
+          'worklet';
           if (finished) {
             runOnJS(onCollisionPoint)(blocker);
           }
@@ -586,41 +647,67 @@ const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
           mass: 0.6
         },
         (finished) => {
+          'worklet';
           if (finished !== false) {
-            handleDone();
+            runOnJS(handleDone)();
           }
         }
       )
     );
 
-    return () => {
-      if (!called) {
-        called = true;
-        onDone(arrow.id);
-      }
-    };
+    // Don't call handleDone in cleanup — let the animation finish naturally.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const animatedTransform = useDerivedValue(() => {
-    const offset = progress.value * slideDist;
+  // Dynamic start and end values for path trimming
+  const startVal = useDerivedValue(() => {
+    const t = progress.value;
+    return totalLength > 0 ? (t * (totalLength - arrowLength)) / totalLength : 0;
+  });
+
+  const endVal = useDerivedValue(() => {
+    const t = progress.value;
+    return totalLength > 0 ? (arrowLength + t * (totalLength - arrowLength)) / totalLength : 0;
+  });
+
+  const headPath = useMemo(() => makeGenericHeadPath(cellSize), [cellSize]);
+
+  const headTransform = useDerivedValue(() => {
+    const t = progress.value;
+    const distance = arrowLength + t * (totalLength - arrowLength);
+    const { x, y, angle } = getPointAtDistance(distance, cumDist, points);
     return [
-      { translateX: v.x * offset },
-      { translateY: v.y * offset }
+      { translateX: x },
+      { translateY: y },
+      { rotate: angle }
     ];
   });
 
   return (
-    <Group transform={animatedTransform}>
+    <>
+      {/* Draw the sliding red shaft segment */}
       <Path
-        path={path}
+        path={trackPath}
+        start={startVal}
+        end={endVal}
         color="#FF3B30"
         style="stroke"
         strokeCap="round"
         strokeJoin="round"
         strokeWidth={sw}
       />
-    </Group>
+      {/* Draw the sliding red arrowhead */}
+      <Group transform={headTransform}>
+        <Path
+          path={headPath}
+          color="#FF3B30"
+          style="stroke"
+          strokeCap="round"
+          strokeJoin="round"
+          strokeWidth={sw}
+        />
+      </Group>
+    </>
   );
 });
 
@@ -871,27 +958,27 @@ const TapRipple = memo(function TapRipple({
 
   const rippleSize = cellSize * 0.8;
 
+  const calledRef = useRef(false);
+
+  const handleDone = useCallback(() => {
+    if (!calledRef.current) {
+      calledRef.current = true;
+      onDone(id);
+    }
+  }, [onDone, id]);
+
   useEffect(() => {
+    calledRef.current = false;
     scale.value = withTiming(1.3, { duration: 300, easing: Easing.out(Easing.quad) });
-    
-    let called = false;
-    const handleDone = () => {
-      if (!called) {
-        called = true;
-        runOnJS(onDone)(id);
-      }
-    };
 
     opacity.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.quad) }, (fin) => {
-      if (fin) handleDone();
+      'worklet';
+      if (fin) {
+        runOnJS(handleDone)();
+      }
     });
 
-    return () => {
-      if (!called) {
-        called = true;
-        onDone(id);
-      }
-    };
+    // Don't call handleDone in cleanup — let the animation finish naturally.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

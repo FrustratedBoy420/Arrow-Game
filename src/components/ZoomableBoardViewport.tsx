@@ -84,8 +84,9 @@ export function ZoomableBoardViewport({
     viewportH.value = height;
 
     if (isFirstLayout) {
-      const fitScaleX = boardWidth > 0 ? width / boardWidth : 1;
-      const fitScaleY = boardHeight > 0 ? height / boardHeight : 1;
+      // Scale down slightly (multiply by 0.85) to ensure the board is initially zoomed out with comfortable padding.
+      const fitScaleX = boardWidth > 0 ? (width * 0.85) / boardWidth : 1;
+      const fitScaleY = boardHeight > 0 ? (height * 0.85) / boardHeight : 1;
       const fitScale = Math.min(1.0, fitScaleX, fitScaleY);
 
       scale.value = fitScale;

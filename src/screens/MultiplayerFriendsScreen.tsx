@@ -127,6 +127,7 @@ export function MultiplayerFriendsScreen() {
   const [matchResults, setMatchResults] = useState<ServerPlayer[]>([]);
   const [rematchStates, setRematchStates] = useState<Record<string, boolean>>({});
   const [requestingRematch, setRequestingRematch] = useState(false);
+  const [rematchTimerVal, setRematchTimerVal] = useState<number | null>(null);
 
   // Shared Board state
   const [scores, setScores] = useState<Record<string, number>>({});
@@ -217,6 +218,24 @@ export function MultiplayerFriendsScreen() {
   useEffect(() => {
     roomCodeRef.current = roomCode;
   }, [roomCode]);
+
+  const disconnectPusher = useCallback(() => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    if (channelRef.current && roomCodeRef.current) {
+      channelRef.current.unbind_all();
+    }
+    if (pusherRef.current) {
+      if (roomCodeRef.current) {
+        pusherRef.current.unsubscribe(`room-${roomCodeRef.current}`);
+      }
+      pusherRef.current.disconnect();
+      pusherRef.current = null;
+    }
+    channelRef.current = null;
+  }, []);
 
   const joinRoomWithDetails = async (
     nameVal: string,
@@ -394,25 +413,7 @@ export function MultiplayerFriendsScreen() {
     return () => {
       disconnectPusher();
     };
-  }, [linkRoomCode]);
-
-  const disconnectPusher = () => {
-    if (countdownIntervalRef.current) {
-      clearInterval(countdownIntervalRef.current);
-      countdownIntervalRef.current = null;
-    }
-    if (channelRef.current && roomCodeRef.current) {
-      channelRef.current.unbind_all();
-    }
-    if (pusherRef.current) {
-      if (roomCodeRef.current) {
-        pusherRef.current.unsubscribe(`room-${roomCodeRef.current}`);
-      }
-      pusherRef.current.disconnect();
-      pusherRef.current = null;
-    }
-    channelRef.current = null;
-  };
+  }, [linkRoomCode, disconnectPusher]);
 
   const apiPost = useCallback(async (endpoint: string, body: object) => {
     let cleanUrl = serverUrl.trim();
@@ -601,6 +602,8 @@ export function MultiplayerFriendsScreen() {
 
             setExitingArrows([]);
             setLocalMatchEnded(false);
+            setMatchResults([]);
+            setMatchWinner('');
             setStep('game');
           });
           
@@ -705,9 +708,12 @@ export function MultiplayerFriendsScreen() {
           });
           confirmedClearsRef.current = nextConfirmed;
 
+          const nextScores = computeScores(nextOwners);
+
           unstable_batchedUpdates(() => {
             setArrowOwners(nextOwners);
             setConfirmedClears(nextConfirmed);
+            setScores(nextScores);
           });
           return;
         }
@@ -977,7 +983,7 @@ export function MultiplayerFriendsScreen() {
     }
   };
 
-  const handleLeaveRoom = async () => {
+  const handleLeaveRoom = useCallback(async () => {
     try {
       await apiPost('/api/leave-room', {
         name: playerName.trim(),
@@ -1000,7 +1006,37 @@ export function MultiplayerFriendsScreen() {
     setLocalPlayerTimes({});
     setArrowOwners({});
     setConfirmedClears({});
-  };
+    setMatchResults([]);
+    setMatchWinner('');
+  }, [playerName, roomCode, disconnectPusher, apiPost]);
+
+  useEffect(() => {
+    if (step !== 'results' || matchResults.length === 0) {
+      setRematchTimerVal(null);
+      return;
+    }
+    const isRematchRequested = getCaseInsensitiveVal(rematchStates, playerName) || false;
+    if (isRematchRequested || requestingRematch) {
+      setRematchTimerVal(null);
+      return;
+    }
+
+    setRematchTimerVal(5);
+
+    const interval = setInterval(() => {
+      setRematchTimerVal((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          clearInterval(interval);
+          handleLeaveRoom();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [step, matchResults.length, rematchStates, playerName, requestingRematch, handleLeaveRoom]);
 
   const recordMyCompletionTime = useCallback((): number | null => {
     const elapsedMs = getElapsedMs(gameStartedAtRef.current);
@@ -1075,7 +1111,6 @@ export function MultiplayerFriendsScreen() {
           return [...prev, { ...arrow, color: '#43A047' }];
         });
         setArrowOwners(nextOwners);
-        setScores(newScores);
         setBoard(nextBoard);
       });
 
@@ -1317,7 +1352,16 @@ export function MultiplayerFriendsScreen() {
   };
 
   const renderGame = () => {
-    if (!board || !level) return null;
+    if (!board || !level) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={theme.colors.arrowStroke} style={{ marginBottom: 15 }} />
+          <Text style={{ fontSize: 16, color: theme.colors.textMuted, fontWeight: '500' }}>
+            Loading Arena Level...
+          </Text>
+        </View>
+      );
+    }
 
     const maxW = width * 0.92;
     const maxH = height * 0.52;
@@ -1444,6 +1488,22 @@ export function MultiplayerFriendsScreen() {
   };
 
   const renderResults = () => {
+    if (matchResults.length === 0) {
+      return (
+        <View style={styles.resultsContainer}>
+          <View style={[styles.resultsCard, { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }]}>
+            <ActivityIndicator size="large" color={theme.colors.arrowStroke} style={{ marginBottom: 20 }} />
+            <Text style={[styles.winTitle, { color: theme.colors.arrowStroke, fontSize: 24, textAlign: 'center', fontWeight: 'bold' }]}>
+              Calculating Results...
+            </Text>
+            <Text style={[styles.winSub, { color: theme.colors.textMuted, fontSize: 16, textAlign: 'center', marginTop: 10, paddingHorizontal: 20 }]}>
+              Waiting for final server confirmation
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
     const otherPlayer = players.find(p => p.toLowerCase() !== playerName.toLowerCase()) || 'Opponent';
     const isRematchRequested = getCaseInsensitiveVal(rematchStates, playerName) || false;
     const isOtherRematchRequested = getCaseInsensitiveVal(rematchStates, otherPlayer) || false;
@@ -1608,6 +1668,8 @@ export function MultiplayerFriendsScreen() {
                 ? 'Sending…'
                 : isRematchRequested
                 ? '⏳ Waiting for opponent…'
+                : rematchTimerVal !== null
+                ? `⚔️ Request Rematch (${rematchTimerVal}s)`
                 : '⚔️ Request Rematch'}
             </Text>
           </Pressable>
