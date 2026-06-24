@@ -81,6 +81,7 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
   lastTap
 }: Props) {
   const [localTaps, setLocalTaps] = useState<{ id: number; x: number; y: number }[]>([]);
+  const [localFlashingArrows, setLocalFlashingArrows] = useState<ArrowNode[]>([]);
 
   const tapIdCounter = useRef(0);
 
@@ -94,6 +95,21 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
   const handleTapIndicatorDone = useCallback((id: number) => {
     setLocalTaps((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  const handleCollisionPointInternal = useCallback((blocker: ArrowNode | null) => {
+    if (!blocker) return;
+    setLocalFlashingArrows((prev) => {
+      if (prev.some((a) => a.id === blocker.id)) return prev;
+      return [...prev, blocker];
+    });
+    setTimeout(() => {
+      setLocalFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
+    }, 520);
+    if (onCollisionPoint) {
+      onCollisionPoint(blocker);
+    }
+  }, [onCollisionPoint]);
+
   const cellSize = (width / board.level.gridSize.columns);
   const height = cellSize * board.level.gridSize.rows;
   const strokeW = Math.max(3, cellSize * 0.13);
@@ -144,10 +160,14 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
     [blockedArrows]
   );
 
-  const flashingArrowIdSet = useMemo(
-    () => new Set(flashingArrows.map((a) => a.id)),
-    [flashingArrows]
-  );
+  const flashingArrowIdSet = useMemo(() => {
+    const ids = new Set<string>();
+    if (flashingArrows) {
+      flashingArrows.forEach((a) => ids.add(a.id));
+    }
+    localFlashingArrows.forEach((a) => ids.add(a.id));
+    return ids;
+  }, [flashingArrows, localFlashingArrows]);
 
   const exitingArrowIdSet = useMemo(() => {
     const ids = new Set<string>();
@@ -226,19 +246,35 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
                 cellSize={cellSize}
                 strokeWidth={strokeW}
                 onDone={onBlockedDone}
-                onCollisionPoint={onCollisionPoint}
+                onCollisionPoint={handleCollisionPointInternal}
               />
             ))}
 
             {/* Flashing arrow overlays — blocker briefly flashes red on collision */}
-            {flashingArrows.map((arrow) => (
-              <FlashingArrowOverlay
-                key={`flash-${arrow.id}`}
-                arrow={arrow}
-                cellSize={cellSize}
-                strokeWidth={strokeW}
-              />
-            ))}
+            {flashingArrows.map((arrow) => {
+              const cacheKey = `${arrow.id}-${cellSize}`;
+              const path = pathCacheRef.current[cacheKey]?.path || makeArrowPath(arrow, cellSize);
+              return (
+                <FlashingArrowOverlay
+                  key={`flash-prop-${arrow.id}`}
+                  path={path}
+                  cellSize={cellSize}
+                  strokeWidth={strokeW}
+                />
+              );
+            })}
+            {localFlashingArrows.map((arrow) => {
+              const cacheKey = `${arrow.id}-${cellSize}`;
+              const path = pathCacheRef.current[cacheKey]?.path || makeArrowPath(arrow, cellSize);
+              return (
+                <FlashingArrowOverlay
+                  key={`flash-local-${arrow.id}`}
+                  path={path}
+                  cellSize={cellSize}
+                  strokeWidth={strokeW}
+                />
+              );
+            })}
           </Group>
 
           {/* Exiting arrow overlays with slide animation — drawn with CANVAS_PADDING baked in */}
@@ -349,13 +385,47 @@ const ExitingArrow = memo(function ExitingArrow({
     return path;
   }, [arrow, cellSize, extensionLength, v]);
 
-  const { totalLength, arrowLength } = useMemo(() => {
-    const it = Skia.ContourMeasureIter(trackPath, false, 1);
-    const contourVal = it.next();
-    const trackLen = contourVal ? contourVal.length() : 0;
-    const arrowLen = Math.max(0, trackLen - extensionLength);
-    return { totalLength: trackLen, arrowLength: arrowLen };
-  }, [trackPath, extensionLength]);
+  const trackPointsAndDistances = useMemo(() => {
+    const cells = arrow.fullPath;
+    const points: { x: number; y: number }[] = [];
+    if (cells.length === 0) {
+      return { points: [{ x: 0, y: 0 }], cumDist: [0], totalLength: 0, arrowLength: 0 };
+    }
+
+    // 1. Map all cells of fullPath to their center points, shifted by CANVAS_PADDING
+    for (let i = 0; i < cells.length; i++) {
+      const pt = centerOf(cells[i]!, cellSize);
+      points.push({
+        x: pt.x + CANVAS_PADDING,
+        y: pt.y + CANVAS_PADDING
+      });
+    }
+
+    // 2. Add the exit end point extending from the last cell (the tip)
+    const headCell = cells[cells.length - 1]!;
+    const lastCenter = centerOf(headCell, cellSize);
+    points.push({
+      x: lastCenter.x + v.x * extensionLength + CANVAS_PADDING,
+      y: lastCenter.y + v.y * extensionLength + CANVAS_PADDING
+    });
+
+    // 3. Compute cumulative distances
+    const cumDist: number[] = [0];
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      const dx = points[i + 1]!.x - points[i]!.x;
+      const dy = points[i + 1]!.y - points[i]!.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      total += dist;
+      cumDist.push(total);
+    }
+
+    const arrowLength = Math.max(0, (cells.length - 1) * cellSize);
+
+    return { points, cumDist, totalLength: total, arrowLength };
+  }, [arrow, cellSize, extensionLength, v]);
+
+  const { points, cumDist, totalLength, arrowLength } = trackPointsAndDistances;
 
   useEffect(() => {
     // Exit speed scales with the cell size (e.g. 13.5 cells per second)
@@ -380,46 +450,25 @@ const ExitingArrow = memo(function ExitingArrow({
 
   const startVal = useDerivedValue(() => {
     const t = animProgress.value;
-    return (t * (totalLength - arrowLength)) / totalLength;
+    return totalLength > 0 ? (t * (totalLength - arrowLength)) / totalLength : 0;
   });
 
   const endVal = useDerivedValue(() => {
     const t = animProgress.value;
-    return (arrowLength + t * (totalLength - arrowLength)) / totalLength;
+    return totalLength > 0 ? (arrowLength + t * (totalLength - arrowLength)) / totalLength : 0;
   });
 
   const headPath = useMemo(() => makeGenericHeadPath(cellSize), [cellSize]);
 
-  const initialTransform = useMemo(() => {
-    const cells = arrow.fullPath;
-    if (cells.length === 0) return [{ translateX: 0 }, { translateY: 0 }, { rotate: 0 }];
-    const head = cells[cells.length - 1]!;
-    const center = centerOf(head, cellSize);
-    const angle = getDirectionAngle(exitDir);
-    return [
-      { translateX: center.x + CANVAS_PADDING },
-      { translateY: center.y + CANVAS_PADDING },
-      { rotate: angle }
-    ];
-  }, [arrow, cellSize, exitDir]);
-
   const headTransform = useDerivedValue(() => {
     const t = animProgress.value;
     const distance = arrowLength + t * (totalLength - arrowLength);
-    const it = Skia.ContourMeasureIter(trackPath, false, 1);
-    const contour = it.next();
-    if (contour) {
-      const length = contour.length();
-      const clampedDistance = Math.max(0, Math.min(length, distance));
-      const [pos, tan] = contour.getPosTan(clampedDistance);
-      const angle = Math.atan2(tan.y, tan.x);
-      return [
-        { translateX: pos.x },
-        { translateY: pos.y },
-        { rotate: angle }
-      ];
-    }
-    return initialTransform;
+    const { x, y, angle } = getPointAtDistance(distance, cumDist, points);
+    return [
+      { translateX: x },
+      { translateY: y },
+      { rotate: angle }
+    ];
   });
 
   const pathColor = arrow.color || theme.colors.arrowStroke;
@@ -486,37 +535,74 @@ const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
   // The track path is the shaft path plus an extension of length slideDist
   const trackPath = useMemo(() => makeShaftPath(arrow, cellSize, slideDist), [arrow, cellSize, slideDist]);
 
-  const { totalLength, shaftLength } = useMemo(() => {
-    const it = Skia.ContourMeasureIter(trackPath, false, 1);
-    const contourVal = it.next();
-    const trackLen = contourVal ? contourVal.length() : 0;
-    const sLen = Math.max(0, trackLen - slideDist);
-    return { totalLength: trackLen, shaftLength: sLen };
-  }, [trackPath, slideDist]);
+  const trackPointsAndDistances = useMemo(() => {
+    const cells = arrow.fullPath;
+    const points: { x: number; y: number }[] = [];
+    if (cells.length === 0) {
+      return { points: [{ x: 0, y: 0 }], cumDist: [0], totalLength: 0, shaftLength: 0 };
+    }
+
+    // 1. Map all cells of fullPath to their center points
+    for (let i = 0; i < cells.length; i++) {
+      const pt = centerOf(cells[i]!, cellSize);
+      points.push(pt);
+    }
+
+    // 2. Add the slide end point extending from the last cell (the tip)
+    const headCell = cells[cells.length - 1]!;
+    const lastCenter = centerOf(headCell, cellSize);
+    points.push({
+      x: lastCenter.x + v.x * slideDist,
+      y: lastCenter.y + v.y * slideDist
+    });
+
+    // 3. Compute cumulative distances
+    const cumDist: number[] = [0];
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      const dx = points[i + 1]!.x - points[i]!.x;
+      const dy = points[i + 1]!.y - points[i]!.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      total += dist;
+      cumDist.push(total);
+    }
+
+    const shaftLength = Math.max(0, (cells.length - 1) * cellSize);
+
+    return { points, cumDist, totalLength: total, shaftLength };
+  }, [arrow, cellSize, slideDist, v]);
+
+  const { points, cumDist, totalLength, shaftLength } = trackPointsAndDistances;
 
   // Adjust timing organically based on distance
-  const forwardDuration = Math.max(100, Math.min(220, cellsDistance * 60));
+  const forwardDuration = Math.max(140, Math.min(280, cellsDistance * 80));
 
   useEffect(() => {
     progress.value = 0;
 
-    progress.value = withTiming(
-      1,
-      { duration: forwardDuration, easing: Easing.bezier(0.25, 1, 0.5, 1) },
-      (fin) => {
-        if (fin) {
-          runOnJS(onCollisionPoint)(blocker);
-          
-          // Snap back with a premium snappy spring recoil bounce
-          progress.value = withSpring(0, {
-            damping: 12,
-            stiffness: 180,
-            mass: 0.5,
-          }, (fin2) => {
-            if (fin2 !== false) runOnJS(onDone)(arrow.id);
-          });
+    progress.value = withSequence(
+      withTiming(
+        1,
+        { duration: forwardDuration, easing: Easing.bezier(0.25, 1, 0.5, 1) },
+        (finished) => {
+          if (finished) {
+            runOnJS(onCollisionPoint)(blocker);
+          }
         }
-      }
+      ),
+      withSpring(
+        0,
+        {
+          damping: 14,
+          stiffness: 200,
+          mass: 0.6
+        },
+        (finished) => {
+          if (finished !== false) {
+            runOnJS(onDone)(arrow.id);
+          }
+        }
+      )
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -533,36 +619,15 @@ const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
 
   const headPath = useMemo(() => makeGenericHeadPath(cellSize), [cellSize]);
 
-  const initialTransform = useMemo(() => {
-    const cells = arrow.fullPath;
-    if (cells.length === 0) return [{ translateX: 0 }, { translateY: 0 }, { rotate: 0 }];
-    const head = cells[cells.length - 1]!;
-    const center = centerOf(head, cellSize);
-    const angle = getDirectionAngle(exitDir);
-    return [
-      { translateX: center.x },
-      { translateY: center.y },
-      { rotate: angle }
-    ];
-  }, [arrow, cellSize, exitDir]);
-
   const headTransform = useDerivedValue(() => {
     const offset = progress.value * slideDist;
     const distance = shaftLength + offset;
-    const it = Skia.ContourMeasureIter(trackPath, false, 1);
-    const contour = it.next();
-    if (contour) {
-      const length = contour.length();
-      const clampedDistance = Math.max(0, Math.min(length, distance));
-      const [pos, tan] = contour.getPosTan(clampedDistance);
-      const angle = Math.atan2(tan.y, tan.x);
-      return [
-        { translateX: pos.x },
-        { translateY: pos.y },
-        { rotate: angle }
-      ];
-    }
-    return initialTransform;
+    const { x, y, angle } = getPointAtDistance(distance, cumDist, points);
+    return [
+      { translateX: x },
+      { translateY: y },
+      { rotate: angle }
+    ];
   });
 
   return (
@@ -597,18 +662,16 @@ const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
 // FlashingArrowOverlay — briefly shows the blocker in red, then fades away.
 // ---------------------------------------------------------------------------
 const FlashingArrowOverlay = memo(function FlashingArrowOverlay({
-  arrow,
+  path,
   cellSize,
   strokeWidth: sw
 }: {
-  arrow: ArrowNode;
+  path: any;
   cellSize: number;
   strokeWidth: number;
 }) {
   const flashOpacity = useSharedValue(1);
   const shake = useSharedValue(0);
-
-  const arrowPath = useMemo(() => makeArrowPath(arrow, cellSize), [arrow, cellSize]);
 
   useEffect(() => {
     // Hold bright red briefly, then fade out the red overlay
@@ -620,9 +683,9 @@ const FlashingArrowOverlay = memo(function FlashingArrowOverlay({
     // Organic decay shake animation on impact using spring
     shake.value = 6;
     shake.value = withSpring(0, {
-      damping: 6,
-      stiffness: 300,
-      mass: 0.5
+      damping: 10,
+      stiffness: 200,
+      mass: 0.8
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -639,7 +702,7 @@ const FlashingArrowOverlay = memo(function FlashingArrowOverlay({
     <Group transform={shakeTransform}>
       {/* 1. Base arrow in normal color so it stays visible while flashing/shaking */}
       <Path
-        path={arrowPath}
+        path={path}
         color={theme.colors.arrowStroke}
         style="stroke"
         strokeCap="round"
@@ -648,7 +711,7 @@ const FlashingArrowOverlay = memo(function FlashingArrowOverlay({
       />
       {/* 2. Red overlay that wiggles and fades out */}
       <Path
-        path={arrowPath}
+        path={path}
         color="#FF3B30"
         opacity={flashOpacity}
         style="stroke"
@@ -663,6 +726,58 @@ const FlashingArrowOverlay = memo(function FlashingArrowOverlay({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function getPointAtDistance(
+  d: number,
+  cumDist: number[],
+  points: { x: number; y: number }[]
+) {
+  'worklet';
+  if (points.length === 0) return { x: 0, y: 0, angle: 0 };
+  if (d <= 0) {
+    const p = points[0]!;
+    let angle = 0;
+    if (points.length > 1) {
+      angle = Math.atan2(points[1]!.y - points[0]!.y, points[1]!.x - points[0]!.x);
+    }
+    return { x: p.x, y: p.y, angle };
+  }
+  const lastIdx = points.length - 1;
+  if (d >= cumDist[lastIdx]!) {
+    const p = points[lastIdx]!;
+    let angle = 0;
+    if (points.length > 1) {
+      angle = Math.atan2(
+        points[lastIdx]!.y - points[lastIdx - 1]!.y,
+        points[lastIdx]!.x - points[lastIdx - 1]!.x
+      );
+    }
+    return { x: p.x, y: p.y, angle };
+  }
+
+  // Find the segment containing d
+  for (let i = 0; i < lastIdx; i++) {
+    const startD = cumDist[i]!;
+    const endD = cumDist[i + 1]!;
+    if (d >= startD && d <= endD) {
+      const segLen = endD - startD;
+      const ratio = segLen > 0 ? (d - startD) / segLen : 0;
+      const pStart = points[i]!;
+      const pEnd = points[i + 1]!;
+      const dx = pEnd.x - pStart.x;
+      const dy = pEnd.y - pStart.y;
+      const angle = Math.atan2(dy, dx);
+      return {
+        x: pStart.x + dx * ratio,
+        y: pStart.y + dy * ratio,
+        angle
+      };
+    }
+  }
+
+  // Fallback
+  return { x: 0, y: 0, angle: 0 };
+}
 
 /**
  * Build a Skia path that traces through all fullPath cells and draws an arrowhead at the tip.

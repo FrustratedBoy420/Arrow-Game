@@ -105,7 +105,6 @@ export function MultiplayerRandomScreen() {
   const [board, setBoard] = useState<BoardState | null>(null);
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
   const [blockedArrows, setBlockedArrows] = useState<{ arrow: ArrowNode; blocker: ArrowNode | null }[]>([]);
-  const [flashingArrows, setFlashingArrows] = useState<ArrowNode[]>([]);
   const [lastTap, setLastTap] = useState<{ x: number; y: number; timestamp: number } | undefined>(undefined);
   const [myScore, setMyScore] = useState(0);
   const [oppScore, setOppScore] = useState(0);
@@ -238,7 +237,6 @@ export function MultiplayerRandomScreen() {
       setOppScore(0);
       setExitingArrows([]);
       setBlockedArrows([]);
-      setFlashingArrows([]);
       userWonRef.current = false;
       setMatchState('playing');
     });
@@ -380,7 +378,6 @@ export function MultiplayerRandomScreen() {
       setOppScore(0);
       setExitingArrows([]);
       setBlockedArrows([]);
-      setFlashingArrows([]);
       setUserResigned(false);
       userWonRef.current = false;
       setMatchState('playing');
@@ -538,16 +535,7 @@ export function MultiplayerRandomScreen() {
     setBlockedArrows((prev) => prev.filter((b) => b.arrow.id !== arrowId));
   }, []);
 
-  const handleCollisionPoint = useCallback((blocker: ArrowNode | null) => {
-    if (!blocker) return;
-    setFlashingArrows((prev) => {
-      if (prev.some((a) => a.id === blocker.id)) return prev;
-      return [...prev, blocker];
-    });
-    setTimeout(() => {
-      setFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
-    }, 520);
-  }, []);
+
 
   const isLeading = myScore > oppScore;
   const isTrailing = myScore < oppScore;
@@ -834,13 +822,11 @@ export function MultiplayerRandomScreen() {
               board={currentBoard}
               exitingArrows={exitingArrows}
               blockedArrows={blockedArrows}
-              flashingArrows={flashingArrows}
               width={boardWidth}
               enableTouch={false}
               onArrowPress={handleArrowPress}
               onExitDone={handleExitDone}
               onBlockedDone={handleBlockedDone}
-              onCollisionPoint={handleCollisionPoint}
               lastTap={lastTap}
             />
             </Animated.View>

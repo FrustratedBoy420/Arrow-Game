@@ -45,7 +45,6 @@ export function GameplayScreen() {
   const [backModalVisible, setBackModalVisible] = useState(false);
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
   const [blockedArrows, setBlockedArrows] = useState<BlockedArrowEntry[]>([]);
-  const [flashingArrows, setFlashingArrows] = useState<ArrowNode[]>([]);
   const [lastTap, setLastTap] = useState<{ x: number; y: number; timestamp: number } | undefined>(undefined);
   const pendingNav = useRef<'Victory' | 'Fail' | null>(null);
   const boardScale = useSharedValue(1);
@@ -103,7 +102,6 @@ export function GameplayScreen() {
   useEffect(() => {
     setExitingArrows([]);
     setBlockedArrows([]);
-    setFlashingArrows([]);
   }, [currentLevelId]);
 
   useEffect(() => {
@@ -132,18 +130,7 @@ export function GameplayScreen() {
     setBlockedArrows((prev) => prev.filter((b) => b.arrow.id !== arrowId));
   }, []);
 
-  /** Called at the collision moment in BlockedArrowOverlay — flash the blocker red. */
-  const handleCollisionPoint = useCallback((blocker: ArrowNode | null) => {
-    if (!blocker) return;
-    setFlashingArrows((prev) => {
-      if (prev.some((a) => a.id === blocker.id)) return prev;
-      return [...prev, blocker];
-    });
-    // Remove after the flash animation completes (~460ms total in FlashingArrowOverlay).
-    setTimeout(() => {
-      setFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
-    }, 520);
-  }, []);
+
 
   const handleArrowPress = useCallback(
     (arrowId: string) => {
@@ -238,13 +225,11 @@ export function GameplayScreen() {
               board={board}
               exitingArrows={exitingArrows}
               blockedArrows={blockedArrows}
-              flashingArrows={flashingArrows}
               width={boardWidth}
               enableTouch={false}
               onArrowPress={handleArrowPress}
               onExitDone={handleExitDone}
               onBlockedDone={handleBlockedDone}
-              onCollisionPoint={handleCollisionPoint}
               lastTap={lastTap}
             />
           </Animated.View>

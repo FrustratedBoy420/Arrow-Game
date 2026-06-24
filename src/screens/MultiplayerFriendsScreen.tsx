@@ -111,7 +111,6 @@ export function MultiplayerFriendsScreen() {
   const [board, setBoard] = useState<BoardState | null>(null);
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
   const [blockedArrows, setBlockedArrows] = useState<{ arrow: ArrowNode; blocker: ArrowNode | null }[]>([]);
-  const [flashingArrows, setFlashingArrows] = useState<ArrowNode[]>([]);
   const [lastTap, setLastTap] = useState<{ x: number; y: number; timestamp: number } | undefined>(undefined);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
@@ -1020,16 +1019,7 @@ export function MultiplayerFriendsScreen() {
     setBlockedArrows((prev) => prev.filter((b) => b.arrow.id !== arrowId));
   }, []);
 
-  const handleCollisionPoint = useCallback((blocker: import('../game/types').ArrowNode | null) => {
-    if (!blocker) return;
-    setFlashingArrows((prev) => {
-      if (prev.some((a) => a.id === blocker.id)) return prev;
-      return [...prev, blocker];
-    });
-    setTimeout(() => {
-      setFlashingArrows((prev) => prev.filter((a) => a.id !== blocker.id));
-    }, 520);
-  }, []);
+
 
   useEffect(() => {
     if (step !== 'game' || localMatchEnded) return;
@@ -1432,13 +1422,11 @@ export function MultiplayerFriendsScreen() {
                 board={board}
                 exitingArrows={exitingArrows}
                 blockedArrows={blockedArrows}
-                flashingArrows={flashingArrows}
                 width={boardWidth}
                 enableTouch={false}
                 onArrowPress={handleArrowPress}
                 onExitDone={handleExitDone}
                 onBlockedDone={handleBlockedDone}
-                onCollisionPoint={handleCollisionPoint}
                 lastTap={lastTap}
               />
             </Animated.View>
