@@ -438,13 +438,30 @@ const ExitingArrow = memo(function ExitingArrow({
 
     animProgress.value = 0;
 
+    let called = false;
+    const handleDone = () => {
+      if (!called) {
+        called = true;
+        runOnJS(onDone)(arrow.id);
+      }
+    };
+
     animProgress.value = withTiming(
       1,
       { duration, easing: moveEasing },
       (finished) => {
-        if (finished !== false) runOnJS(onDone)(arrow.id);
+        if (finished !== false) {
+          handleDone();
+        }
       }
     );
+
+    return () => {
+      if (!called) {
+        called = true;
+        onDone(arrow.id);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per mounted exit arrow
   }, [totalLength, cellSize]);
 
@@ -532,53 +549,24 @@ const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
   // Slide all the way to touch the blocker (offset 0.1 to avoid overlapping/clipping)
   const slideDist = cellSize * Math.max(0.2, cellsDistance - 0.1);
 
-  // The track path is the shaft path plus an extension of length slideDist
-  const trackPath = useMemo(() => makeShaftPath(arrow, cellSize, slideDist), [arrow, cellSize, slideDist]);
-
-  const trackPointsAndDistances = useMemo(() => {
-    const cells = arrow.fullPath;
-    const points: { x: number; y: number }[] = [];
-    if (cells.length === 0) {
-      return { points: [{ x: 0, y: 0 }], cumDist: [0], totalLength: 0, shaftLength: 0 };
-    }
-
-    // 1. Map all cells of fullPath to their center points
-    for (let i = 0; i < cells.length; i++) {
-      const pt = centerOf(cells[i]!, cellSize);
-      points.push(pt);
-    }
-
-    // 2. Add the slide end point extending from the last cell (the tip)
-    const headCell = cells[cells.length - 1]!;
-    const lastCenter = centerOf(headCell, cellSize);
-    points.push({
-      x: lastCenter.x + v.x * slideDist,
-      y: lastCenter.y + v.y * slideDist
-    });
-
-    // 3. Compute cumulative distances
-    const cumDist: number[] = [0];
-    let total = 0;
-    for (let i = 0; i < points.length - 1; i++) {
-      const dx = points[i + 1]!.x - points[i]!.x;
-      const dy = points[i + 1]!.y - points[i]!.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      total += dist;
-      cumDist.push(total);
-    }
-
-    const shaftLength = Math.max(0, (cells.length - 1) * cellSize);
-
-    return { points, cumDist, totalLength: total, shaftLength };
-  }, [arrow, cellSize, slideDist, v]);
-
-  const { points, cumDist, totalLength, shaftLength } = trackPointsAndDistances;
+  // Pre-compiled combined arrow path (shaft + head) colored in red and translated hardware-acceleratedly
+  const path = useMemo(() => {
+    return makeArrowPath(arrow, cellSize);
+  }, [arrow, cellSize]);
 
   // Adjust timing organically based on distance
   const forwardDuration = Math.max(140, Math.min(280, cellsDistance * 80));
 
   useEffect(() => {
     progress.value = 0;
+
+    let called = false;
+    const handleDone = () => {
+      if (!called) {
+        called = true;
+        runOnJS(onDone)(arrow.id);
+      }
+    };
 
     progress.value = withSequence(
       withTiming(
@@ -599,62 +587,40 @@ const BlockedArrowOverlay = memo(function BlockedArrowOverlay({
         },
         (finished) => {
           if (finished !== false) {
-            runOnJS(onDone)(arrow.id);
+            handleDone();
           }
         }
       )
     );
+
+    return () => {
+      if (!called) {
+        called = true;
+        onDone(arrow.id);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startVal = useDerivedValue(() => {
+  const animatedTransform = useDerivedValue(() => {
     const offset = progress.value * slideDist;
-    return totalLength > 0 ? (offset / totalLength) : 0;
-  });
-
-  const endVal = useDerivedValue(() => {
-    const offset = progress.value * slideDist;
-    return totalLength > 0 ? ((shaftLength + offset) / totalLength) : 0;
-  });
-
-  const headPath = useMemo(() => makeGenericHeadPath(cellSize), [cellSize]);
-
-  const headTransform = useDerivedValue(() => {
-    const offset = progress.value * slideDist;
-    const distance = shaftLength + offset;
-    const { x, y, angle } = getPointAtDistance(distance, cumDist, points);
     return [
-      { translateX: x },
-      { translateY: y },
-      { rotate: angle }
+      { translateX: v.x * offset },
+      { translateY: v.y * offset }
     ];
   });
 
   return (
-    <>
-      {/* Draw the moving shaft segment */}
+    <Group transform={animatedTransform}>
       <Path
-        path={trackPath}
-        start={startVal}
-        end={endVal}
+        path={path}
         color="#FF3B30"
         style="stroke"
         strokeCap="round"
         strokeJoin="round"
         strokeWidth={sw}
       />
-      {/* Draw the moving arrowhead */}
-      <Group transform={headTransform}>
-        <Path
-          path={headPath}
-          color="#FF3B30"
-          style="stroke"
-          strokeCap="round"
-          strokeJoin="round"
-          strokeWidth={sw}
-        />
-      </Group>
-    </>
+    </Group>
   );
 });
 
@@ -907,9 +873,25 @@ const TapRipple = memo(function TapRipple({
 
   useEffect(() => {
     scale.value = withTiming(1.3, { duration: 300, easing: Easing.out(Easing.quad) });
+    
+    let called = false;
+    const handleDone = () => {
+      if (!called) {
+        called = true;
+        runOnJS(onDone)(id);
+      }
+    };
+
     opacity.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.quad) }, (fin) => {
-      if (fin) runOnJS(onDone)(id);
+      if (fin) handleDone();
     });
+
+    return () => {
+      if (!called) {
+        called = true;
+        onDone(id);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
