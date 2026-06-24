@@ -37,7 +37,6 @@ export function VictoryScreen() {
   const coins = useGameStore((state) => state.coins);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
-  const [profileName, setProfileName] = useState('Player');
 
   const progressMap = ensureLevelProgressMap(levelProgressMap);
   const totalStars = getTotalStarsEarned(progressMap);
@@ -49,12 +48,6 @@ export function VictoryScreen() {
 
   useEffect(() => {
     audioManager.playSound('victory');
-
-    const loadName = async () => {
-      const name = await AsyncStorage.getItem('user_profile_name');
-      if (name) setProfileName(name);
-    };
-    void loadName();
 
     const startTime = gameStartTime ?? levelStartTime;
     const timeTaken = Math.round((Date.now() - startTime) / 1000);
@@ -104,12 +97,6 @@ export function VictoryScreen() {
         </View>
 
         <View style={styles.headerCenter}>
-          <View style={styles.profileBadge}>
-            <Text style={styles.profileEmoji}>👤</Text>
-            <Text style={styles.profileNameText} numberOfLines={1} ellipsizeMode="tail">
-              {profileName}
-            </Text>
-          </View>
           <View style={styles.starCounter}>
             <Text style={styles.starEmoji}>⭐</Text>
             <Text style={styles.starText}>

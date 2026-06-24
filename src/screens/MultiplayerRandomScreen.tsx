@@ -61,6 +61,7 @@ export function MultiplayerRandomScreen() {
   const [userResigned, setUserResigned] = useState(false);
   const [rematchRequestedByMe, setRematchRequestedByMe] = useState(false);
   const [rematchStatus, setRematchStatus] = useState<'idle' | 'waiting' | 'accepted' | 'declined'>('idle');
+  const [dbLevels, setDbLevels] = useState<LevelDefinition[]>([]);
 
   useEffect(() => {
     const loadProfileName = async () => {
@@ -71,7 +72,32 @@ export function MultiplayerRandomScreen() {
         console.warn(e);
       }
     };
+    
+    const loadDbLevels = async () => {
+      try {
+        let savedUrl = await AsyncStorage.getItem('multiplayer_url');
+        let baseUrl = savedUrl?.trim() || 'https://arrow-game-be.vercel.app';
+        baseUrl = baseUrl.replace(/\/$/, '');
+        if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+          baseUrl = `https://${baseUrl}`;
+        }
+        
+        console.log('📡 Fetching complete levels list from DB config...');
+        const response = await fetch(`${baseUrl}/api/config`);
+        if (response.ok) {
+          const resData = await response.json();
+          if (resData && Array.isArray(resData.levels) && resData.levels.length > 0) {
+            setDbLevels(resData.levels);
+            console.log(`✅ Loaded ${resData.levels.length} levels from DB config for Multiplayer Random.`);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to load DB levels for random play:', e);
+      }
+    };
+
     void loadProfileName();
+    void loadDbLevels();
   }, []);
 
   // ─── Game State ──────────────────────────────────────────────────
@@ -190,11 +216,12 @@ export function MultiplayerRandomScreen() {
   }, [matchState]);
 
   const startGame = () => {
-    if (!dynamicLevels || dynamicLevels.length === 0) {
+    const levelsToUse = dbLevels.length > 0 ? dbLevels : (dynamicLevels || []);
+    if (levelsToUse.length === 0) {
       navigation.goBack();
       return;
     }
-    const randLevel = dynamicLevels[Math.floor(Math.random() * dynamicLevels.length)];
+    const randLevel = levelsToUse[Math.floor(Math.random() * levelsToUse.length)];
     if (!randLevel) {
       navigation.goBack();
       return;
@@ -331,11 +358,12 @@ export function MultiplayerRandomScreen() {
   }, [matchState, board?.arrows.length, board?.livesLeft, exitingArrows.length, handleGameOver]);
 
   const startRematch = useCallback(() => {
-    if (!dynamicLevels || dynamicLevels.length === 0) {
+    const levelsToUse = dbLevels.length > 0 ? dbLevels : (dynamicLevels || []);
+    if (levelsToUse.length === 0) {
       navigation.goBack();
       return;
     }
-    const randLevel = dynamicLevels[Math.floor(Math.random() * dynamicLevels.length)];
+    const randLevel = levelsToUse[Math.floor(Math.random() * levelsToUse.length)];
     if (!randLevel) {
       navigation.goBack();
       return;
@@ -367,7 +395,7 @@ export function MultiplayerRandomScreen() {
     boardScale.value = 0.94;
     boardOpacity.value = withTiming(1, { duration: 400, easing: Easing.bezier(0.16, 1, 0.3, 1) });
     boardScale.value = withSpring(1, { damping: 15, stiffness: 100, mass: 0.8 });
-  }, [dynamicLevels, navigation]);
+  }, [dbLevels, dynamicLevels, navigation]);
 
   const handleRequestRematch = useCallback(() => {
     if (rematchRequestedByMe) return;
