@@ -56,6 +56,7 @@ type GameStore = {
   // Level Management System Integration
   levelProgressMap: Map<number, LevelProgress>;
   starsEarnedThisLevel: number;
+  coinsEarnedThisLevel: number;
   levelStartTime: number;
   gameStartTime: number | null;
   finalStarsCalculated: number;
@@ -124,6 +125,7 @@ export const useGameStore = create<GameStore>()(
       },
       levelProgressMap: initialLevelMap,
       starsEarnedThisLevel: 0,
+      coinsEarnedThisLevel: 0,
       levelStartTime: Date.now(),
       gameStartTime: null,
       finalStarsCalculated: 3,
@@ -196,7 +198,8 @@ export const useGameStore = create<GameStore>()(
           finalStarsCalculated: 3,
           isPaused: false,
           pausedAt: null,
-          accumulatedPausedTime: 0
+          accumulatedPausedTime: 0,
+          coinsEarnedThisLevel: 0
         });
       },
 
@@ -513,6 +516,9 @@ export const useGameStore = create<GameStore>()(
         const levelProgressMap = ensureLevelProgressMap(get().levelProgressMap);
         const { currentLevelId, finalStarsCalculated, dynamicLevels } = get();
 
+        const progress = levelProgressMap.get(currentLevelId);
+        const wasAlreadyCompleted = progress ? progress.isCompleted : false;
+
         const result = completeLevelWithStars(
           levelProgressMap,
           currentLevelId,
@@ -521,9 +527,12 @@ export const useGameStore = create<GameStore>()(
           finalStarsCalculated
         );
 
+        const coinsEarnedThisTime = wasAlreadyCompleted ? 0 : 25;
+
         set((state) => ({ 
           starsEarnedThisLevel: finalStarsCalculated,
-          coins: state.coins + 25 
+          coins: state.coins + coinsEarnedThisTime,
+          coinsEarnedThisLevel: state.coinsEarnedThisLevel + coinsEarnedThisTime
         }));
 
         // Persist updated progress (includes newly unlocked levels from checkLevelUnlocks)

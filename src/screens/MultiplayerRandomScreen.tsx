@@ -133,12 +133,18 @@ export function MultiplayerRandomScreen() {
   const myScoreRef = useRef(myScore);
   const oppScoreRef = useRef(oppScore);
   const userWonRef = useRef(false);
+  const resultsShownAtRef = useRef<number>(0);
   const [searchingMessage, setSearchingMessage] = useState(SEARCHING_MESSAGES[0]);
 
   useEffect(() => { boardRef.current = board; }, [board]);
   useEffect(() => { opponentArrowsLeftRef.current = opponentArrowsLeft; }, [opponentArrowsLeft]);
   useEffect(() => { levelRef.current = level; }, [level]);
-  useEffect(() => { matchStateRef.current = matchState; }, [matchState]);
+  useEffect(() => { 
+    matchStateRef.current = matchState; 
+    if (matchState === 'results') {
+      resultsShownAtRef.current = Date.now();
+    }
+  }, [matchState]);
   useEffect(() => { myScoreRef.current = myScore; }, [myScore]);
   useEffect(() => { oppScoreRef.current = oppScore; }, [oppScore]);
 
@@ -371,6 +377,28 @@ export function MultiplayerRandomScreen() {
 
   const handleRequestRematch = useCallback(() => {
     if (rematchRequestedByMe) return;
+
+    const timeSinceResults = Date.now() - resultsShownAtRef.current;
+    if (timeSinceResults > 5000) {
+      setRematchRequestedByMe(true);
+      setRematchStatus('declined');
+      Alert.alert(
+        'Rematch Request Declined',
+        `${opponent?.name ?? 'Opponent'} has left the arena.`,
+        [
+          {
+            text: 'Find New Match',
+            onPress: () => {
+              setRematchRequestedByMe(false);
+              setRematchStatus('idle');
+              setOpponent(null);
+              setMatchState('searching');
+            }
+          }
+        ]
+      );
+      return;
+    }
 
     setRematchRequestedByMe(true);
     setRematchStatus('waiting');

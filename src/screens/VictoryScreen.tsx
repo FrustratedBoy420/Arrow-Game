@@ -35,9 +35,9 @@ export function VictoryScreen() {
   const levelProgressMap = useGameStore((state) => state.levelProgressMap);
   const finalStarsCalculated = useGameStore((state) => state.finalStarsCalculated);
   const coins = useGameStore((state) => state.coins);
+  const coinsEarnedThisLevel = useGameStore((state) => state.coinsEarnedThisLevel);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
-  const [profileName, setProfileName] = useState('Player');
 
   const progressMap = ensureLevelProgressMap(levelProgressMap);
   const totalStars = getTotalStarsEarned(progressMap);
@@ -49,12 +49,6 @@ export function VictoryScreen() {
 
   useEffect(() => {
     audioManager.playSound('victory');
-
-    const loadName = async () => {
-      const name = await AsyncStorage.getItem('user_profile_name');
-      if (name) setProfileName(name);
-    };
-    void loadName();
 
     const startTime = gameStartTime ?? levelStartTime;
     const timeTaken = Math.round((Date.now() - startTime) / 1000);
@@ -104,12 +98,7 @@ export function VictoryScreen() {
         </View>
 
         <View style={styles.headerCenter}>
-          <View style={styles.profileBadge}>
-            <Text style={styles.profileEmoji}>👤</Text>
-            <Text style={styles.profileNameText} numberOfLines={1} ellipsizeMode="tail">
-              {profileName}
-            </Text>
-          </View>
+
           <View style={styles.starCounter}>
             <Text style={styles.starEmoji}>⭐</Text>
             <Text style={styles.starText}>
@@ -140,7 +129,9 @@ export function VictoryScreen() {
         <Animated.Text style={[styles.stars, starStyle]}>{starDisplay}</Animated.Text>
         <Animated.View style={textStyle}>
           <Text style={styles.title}>Level Complete!</Text>
-          <Text style={styles.reward}>+25 coins</Text>
+          {coinsEarnedThisLevel > 0 ? (
+            <Text style={styles.reward}>+{coinsEarnedThisLevel} coins</Text>
+          ) : null}
         </Animated.View>
 
         <View style={styles.buttonContainer}>
@@ -222,22 +213,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  profileBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 22,
-    ...theme.shadows.sm
-  },
-  profileEmoji: { fontSize: 18, marginRight: 6 },
-  profileNameText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: theme.colors.arrowStroke,
-    maxWidth: 70
-  },
+
   starCounter: {
     flexDirection: 'row',
     alignItems: 'center',
