@@ -65,6 +65,7 @@ export function MultiplayerRandomScreen() {
   const [rematchStatus, setRematchStatus] = useState<'idle' | 'waiting' | 'accepted' | 'declined'>('idle');
   const [dbLevels, setDbLevels] = useState<LevelDefinition[]>([]);
   const [rematchTimerVal, setRematchTimerVal] = useState<number | null>(null);
+  const [rematchRequestedByOpponent, setRematchRequestedByOpponent] = useState(false);
 
   useEffect(() => {
     const loadProfileName = async () => {
@@ -154,6 +155,7 @@ export function MultiplayerRandomScreen() {
 
   // ─── Bot logic refs ───────────────────────────────────────────────
   const botTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const botRematchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const boardRef = useRef<BoardState | null>(board);
   const opponentArrowsLeftRef = useRef(opponentArrowsLeft);
   const levelRef = useRef<LevelDefinition | null>(level);
@@ -242,6 +244,7 @@ export function MultiplayerRandomScreen() {
       setBlockedArrows([]);
       userWonRef.current = false;
       setMatchState('playing');
+      setRematchRequestedByOpponent(false);
     });
 
     boardRef.current = initialBoard;
@@ -384,6 +387,7 @@ export function MultiplayerRandomScreen() {
       setUserResigned(false);
       userWonRef.current = false;
       setMatchState('playing');
+      setRematchRequestedByOpponent(false);
     });
 
     boardRef.current = initialBoard;
@@ -398,6 +402,14 @@ export function MultiplayerRandomScreen() {
   }, [dbLevels, dynamicLevels, navigation]);
 
   const handleRequestRematch = useCallback(() => {
+    if (rematchRequestedByOpponent) {
+      setRematchRequestedByOpponent(false);
+      setRematchRequestedByMe(false);
+      setRematchStatus('idle');
+      startRematch();
+      return;
+    }
+
     if (rematchRequestedByMe) return;
 
     setRematchRequestedByMe(true);
@@ -432,15 +444,60 @@ export function MultiplayerRandomScreen() {
         );
       }
     }, delay);
-  }, [rematchRequestedByMe, opponent, startRematch]);
+  }, [rematchRequestedByMe, rematchRequestedByOpponent, opponent, startRematch]);
 
   const handleFindNewMatch = useCallback(() => {
     if (botTimerRef.current) clearTimeout(botTimerRef.current);
+    if (botRematchTimerRef.current) {
+      clearTimeout(botRematchTimerRef.current);
+      botRematchTimerRef.current = null;
+    }
     setRematchRequestedByMe(false);
+    setRematchRequestedByOpponent(false);
     setRematchStatus('idle');
     setOpponent(null);
     setMatchState('searching');
   }, []);
+
+  // ─── Opponent Rematch Simulation ─────────────────────────────────
+  useEffect(() => {
+    if (matchState !== 'results') {
+      setRematchRequestedByOpponent(false);
+      if (botRematchTimerRef.current) {
+        clearTimeout(botRematchTimerRef.current);
+        botRematchTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (rematchRequestedByMe) {
+      if (botRematchTimerRef.current) {
+        clearTimeout(botRematchTimerRef.current);
+        botRematchTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Roll for opponent requesting a rematch: 45% probability
+    const willRequestRematch = Math.random() < 0.45;
+
+    if (willRequestRematch) {
+      const delay = Math.random() * 2500 + 2000; // 2.0s to 4.5s
+      botRematchTimerRef.current = setTimeout(() => {
+        if (matchStateRef.current === 'results' && !rematchRequestedByMe) {
+          setRematchRequestedByOpponent(true);
+        }
+      }, delay);
+    }
+
+    return () => {
+      if (botRematchTimerRef.current) {
+        clearTimeout(botRematchTimerRef.current);
+        botRematchTimerRef.current = null;
+      }
+    };
+  }, [matchState, rematchRequestedByMe]);
+
 
   useEffect(() => {
     if (matchState !== 'results') {
@@ -682,6 +739,11 @@ export function MultiplayerRandomScreen() {
         </View>
 
         <View style={styles.rematchCard}>
+          {rematchRequestedByOpponent && (
+            <View style={styles.rematchTipBox}>
+              <Text style={styles.rematchTipText}>⚡ {opponent?.name ?? 'Opponent'} wants a rematch!</Text>
+            </View>
+          )}
           <Pressable
             accessibilityRole="button"
             style={({ pressed }) => [
@@ -697,6 +759,8 @@ export function MultiplayerRandomScreen() {
                 ? rematchStatus === 'waiting'
                   ? '⏳ Waiting for opponent…'
                   : 'Sending…'
+                : rematchRequestedByOpponent
+                ? '🤝 Accept Rematch'
                 : rematchTimerVal !== null
                 ? `⚔️ Request Rematch (${rematchTimerVal}s)`
                 : '⚔️ Request Rematch'}
@@ -895,7 +959,7 @@ export function MultiplayerRandomScreen() {
     return (
       <SafeAreaView style={styles.screen}>
         <AmbientBackground />
-        <View style={styles.lobbyHeader}>
+        <View style={[styles.lobbyHeader, { marginTop: (insets.top > 0 ? insets.top : 24) + 8 }]}>
           <Text style={styles.lobbyTitle}>⚔️ Arena Lobby</Text>
         </View>
         {renderResults()}
