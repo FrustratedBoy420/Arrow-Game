@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
   Easing,
@@ -50,6 +51,7 @@ const SEARCHING_MESSAGES = [
 
 export function MultiplayerRandomScreen() {
   const navigation = useNavigation<AppNavigation>();
+  const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const dynamicLevels = useGameStore((s) => s.dynamicLevels);
 
@@ -731,7 +733,7 @@ export function MultiplayerRandomScreen() {
       <SafeAreaView style={styles.screen}>
         <AmbientBackground />
         {/* Back button */}
-        <Pressable style={styles.topBackBtn} onPress={() => setExitModalVisible(true)}>
+        <Pressable style={[styles.topBackBtn, { top: (insets.top > 0 ? insets.top : 24) + 8 }]} onPress={() => setExitModalVisible(true)}>
           <Text style={styles.topBackText}>‹</Text>
         </Pressable>
 
@@ -792,7 +794,7 @@ export function MultiplayerRandomScreen() {
         <AmbientBackground />
 
         {/* ── Scoreboard Header (same as MultiplayerFriendsScreen) ── */}
-        <View style={styles.scoreboardContainer}>
+        <View style={[styles.scoreboardContainer, { marginTop: (insets.top > 0 ? insets.top : 24) + 4 }]}>
           {/* Me */}
           <View style={[styles.scoreCard, isLeading && styles.scoreCardActive]}>
             <Text style={styles.scorePlayerName} numberOfLines={1}>

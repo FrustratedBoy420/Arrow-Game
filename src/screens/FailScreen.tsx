@@ -1,6 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { AmbientBackground } from '../components/AmbientBackground';
@@ -14,6 +15,7 @@ import type { AppNavigation } from '../types/navigation';
 
 export function FailScreen() {
   const navigation = useNavigation<AppNavigation>();
+  const insets = useSafeAreaInsets();
   const retry = useGameStore((state) => state.retry);
   const [settingsVisible, setSettingsVisible] = useState(false);
 
@@ -30,7 +32,7 @@ export function FailScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <AmbientBackground />
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top : 24, height: 56 + (insets.top > 0 ? insets.top : 24) }]}>
         <View style={styles.headerSpacer} />
         <Pressable
           style={styles.settingsBtn}
@@ -86,8 +88,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 44,
-    height: 100
   },
   headerSpacer: { flex: 1 },
   settingsBtn: {

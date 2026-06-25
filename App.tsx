@@ -1,6 +1,7 @@
 import 'react-native-gesture-handler';
 
 import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -122,12 +123,14 @@ export default function App() {
 
   if (isForcedUpdateRequired) {
     return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <ForcedUpdateScreen 
-          currentVersion={CURRENT_APP_VERSION} 
-          requiredVersion={versionConfig!.critical} 
-        />
-      </GestureHandlerRootView>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <ForcedUpdateScreen 
+            currentVersion={CURRENT_APP_VERSION} 
+            requiredVersion={versionConfig!.critical} 
+          />
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
     );
   }
 
@@ -138,35 +141,39 @@ export default function App() {
   // Display terms consent screen if not accepted yet
   if (!hasAcceptedTerms) {
     return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <TermsScreen onAccept={handleTermsAccept} onReject={handleTermsReject} />
-      </GestureHandlerRootView>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <TermsScreen onAccept={handleTermsAccept} onReject={handleTermsReject} />
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer linking={linking}>
-        <StatusBar style="dark" backgroundColor={theme.colors.bgPrimary} />
-        <Stack.Navigator
-          initialRouteName="Home"
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: theme.colors.bgPrimary },
-            animation: 'fade'
-          }}
-        >
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Tutorial" component={TutorialScreen} />
-          <Stack.Screen name="LevelSelect" component={LevelSelectScreen} />
-          <Stack.Screen name="Gameplay" component={GameplayScreen} />
-          <Stack.Screen name="Victory" component={VictoryScreen} />
-          <Stack.Screen name="Fail" component={FailScreen} />
-          <Stack.Screen name="MultiplayerModeSelect" component={MultiplayerModeSelectScreen} />
-          <Stack.Screen name="MultiplayerFriends" component={MultiplayerFriendsScreen} />
-          <Stack.Screen name="MultiplayerRandom" component={MultiplayerRandomScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </GestureHandlerRootView>
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <NavigationContainer linking={linking}>
+          <StatusBar style="dark" backgroundColor={theme.colors.bgPrimary} />
+          <Stack.Navigator
+            initialRouteName="Home"
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.colors.bgPrimary },
+              animation: 'fade'
+            }}
+          >
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="Tutorial" component={TutorialScreen} />
+            <Stack.Screen name="LevelSelect" component={LevelSelectScreen} />
+            <Stack.Screen name="Gameplay" component={GameplayScreen} />
+            <Stack.Screen name="Victory" component={VictoryScreen} />
+            <Stack.Screen name="Fail" component={FailScreen} />
+            <Stack.Screen name="MultiplayerModeSelect" component={MultiplayerModeSelectScreen} />
+            <Stack.Screen name="MultiplayerFriends" component={MultiplayerFriendsScreen} />
+            <Stack.Screen name="MultiplayerRandom" component={MultiplayerRandomScreen} />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }

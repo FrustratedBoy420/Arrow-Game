@@ -18,6 +18,7 @@ import {
   unstable_batchedUpdates,
   View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -89,6 +90,7 @@ function decodeArrowsLeft(arrowsLeft: number): { remainingCount: number; index: 
 export function MultiplayerFriendsScreen() {
   const navigation = useNavigation<AppNavigation>();
   const route = useRoute<any>();
+  const insets = useSafeAreaInsets();
   const linkRoomCode = route.params?.roomCode;
   const { width, height } = useWindowDimensions();
 
@@ -1449,7 +1451,7 @@ export function MultiplayerFriendsScreen() {
     return (
       <View style={styles.gameContainer}>
         {/* Shared Scoreboard Header */}
-        <View style={styles.scoreboardContainer}>
+        <View style={[styles.scoreboardContainer, { marginTop: (insets.top > 0 ? insets.top : 24) + 4 }]}>
           {/* Player 1 (Local Player) */}
           <View style={[
             styles.scoreCard, 
@@ -1739,7 +1741,7 @@ export function MultiplayerFriendsScreen() {
     <SafeAreaView style={styles.screen}>
       <AmbientBackground />
       {step !== 'setup' && step !== 'game' && (
-        <View style={styles.lobbyHeader}>
+        <View style={[styles.lobbyHeader, { marginTop: (insets.top > 0 ? insets.top : 24) + 8 }]}>
           <Text style={styles.lobbyTitle}>⚔️ Arena Lobby</Text>
         </View>
       )}

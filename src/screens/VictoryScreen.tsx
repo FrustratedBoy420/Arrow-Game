@@ -3,6 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -26,6 +27,7 @@ import type { AppNavigation } from '../types/navigation';
 
 export function VictoryScreen() {
   const navigation = useNavigation<AppNavigation>();
+  const insets = useSafeAreaInsets();
   const nextLevel = useGameStore((state) => state.nextLevel);
   const retry = useGameStore((state) => state.retry);
   const recordLevelCompletion = useGameStore((state) => state.recordLevelCompletion);
@@ -80,7 +82,7 @@ export function VictoryScreen() {
       <AmbientBackground />
 
       {/* ── Top Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top : 24, height: 56 + (insets.top > 0 ? insets.top : 24) }]}>
         <View style={styles.headerLeft}>
           <Pressable
             style={styles.backBtn}
@@ -191,8 +193,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 44,
-    height: 100
   },
   headerLeft: {
     width: 44,

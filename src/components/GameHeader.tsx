@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Difficulty } from '../game/types';
 import { theme } from '../theme/theme';
@@ -24,8 +25,11 @@ export function GameHeader({
   onBack,
   onSettings
 }: Props) {
+  const insets = useSafeAreaInsets();
+  const safeTop = insets.top > 0 ? insets.top : 24;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: safeTop, minHeight: 56 + safeTop }]}>
       {/* Left: back button */}
       <View style={styles.side}>
         {showBack ? (
@@ -71,9 +75,7 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.borderSoft,
     borderBottomWidth: 1,
     flexDirection: 'row',
-    minHeight: 100,
     paddingHorizontal: 24,
-    paddingTop: 44,
     paddingBottom: 8
   },
   side: {

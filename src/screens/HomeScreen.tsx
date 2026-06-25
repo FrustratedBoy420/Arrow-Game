@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState, useCallback } from 'react';
 import { BackHandler, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNetInfo } from '@react-native-community/netinfo';
 import Animated, {
   Easing,
@@ -31,6 +32,7 @@ import { AdBanner } from '../components/AdBanner';
 
 export function HomeScreen() {
   const navigation = useNavigation<AppNavigation>();
+  const insets = useSafeAreaInsets();
   const hasSeenTutorial = useGameStore((s) => s.hasSeenTutorial);
   const iconsConfig = useGameStore((s) => s.iconsConfig);
   const fetchGameConfig = useGameStore((s) => s.fetchGameConfig);
@@ -214,7 +216,7 @@ export function HomeScreen() {
       <AmbientBackground />
 
       {/* ── Top Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top : 24, height: 56 + (insets.top > 0 ? insets.top : 24) }]}>
         <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           {/* Profile Badge */}
           <View style={styles.profileBadge}>
@@ -375,8 +377,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 44,
-    height: 100
   },
 
   profileBadge: {
