@@ -189,7 +189,7 @@ export function ZoomableBoardViewport({
 
   const boardGesture = Gesture.Simultaneous(
     pinch,
-    Gesture.Exclusive(pan, singleTap)
+    Gesture.Race(pan, singleTap)
   );
 
   const stageTransformStyle = useAnimatedStyle(() => ({

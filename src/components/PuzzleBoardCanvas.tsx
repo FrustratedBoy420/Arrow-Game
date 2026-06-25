@@ -42,9 +42,9 @@ type Props = {
 const arrowHeadSize = 12;
 
 /** Target slide speed — scales duration by path length so all arrows feel snappy but smooth. */
-const EXIT_SPEED_PX_PER_SEC = 750;
-const EXIT_DURATION_MIN_MS = 450;
-const EXIT_DURATION_MAX_MS = 1500;
+const EXIT_SPEED_PX_PER_SEC = 1200;
+const EXIT_DURATION_MIN_MS = 200;
+const EXIT_DURATION_MAX_MS = 800;
 
 const CANVAS_PADDING = 500;
 
@@ -438,9 +438,9 @@ const ExitingArrow = memo(function ExitingArrow({
 
   useEffect(() => {
     calledRef.current = false;
-    // Exit speed scales with the cell size (e.g. 13.5 cells per second)
+    // Exit speed scales with the cell size (e.g. 22.0 cells per second)
     // so that smaller cells on large levels cross the screen at the same visual rate as large levels.
-    const cellsPerSec = 13.5;
+    const cellsPerSec = 22.0;
     const speedPxPerSec = cellsPerSec * cellSize;
     const ms = Math.round((totalLength / speedPxPerSec) * 1000);
     const duration = Math.min(EXIT_DURATION_MAX_MS, Math.max(EXIT_DURATION_MIN_MS, ms));
@@ -917,13 +917,63 @@ function getHeadPoints(pt: { x: number; y: number }, dir: Direction, cellSize: n
   }
 }
 
+function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(px - ax, py - ay);
+  }
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
 export function findArrowAtPoint(arrows: ArrowNode[], x: number, y: number, cellSize: number) {
-  return arrows.find((arrow) =>
-    getArrowCells(arrow).some((cell) => {
+  // 1. Priority 1: Direct Cell Hit. If tap falls inside a cell's boundary (<= 0.5 * cellSize) of any arrow, select it immediately.
+  for (const arrow of arrows) {
+    const cells = getArrowCells(arrow);
+    for (const cell of cells) {
       const c = centerOf(cell, cellSize);
-      return Math.hypot(c.x - x, c.y - y) <= cellSize * 0.6;
-    })
-  );
+      if (Math.hypot(c.x - x, c.y - y) <= cellSize * 0.5) {
+        return arrow;
+      }
+    }
+  }
+
+  // 2. Priority 2: Proximity selection. Calculate shortest distance to arrow polyline segments within 1.2 * cellSize slop.
+  let closestArrow: ArrowNode | null = null;
+  let minDistance = Infinity;
+  const maxDistance = cellSize * 1.2;
+
+  for (const arrow of arrows) {
+    const cells = getArrowCells(arrow);
+    if (cells.length === 0) continue;
+
+    let arrowDist = Infinity;
+    const points = cells.map((cell) => centerOf(cell, cellSize));
+
+    const firstPt = points[0];
+    if (points.length === 1 && firstPt) {
+      arrowDist = Math.hypot(firstPt.x - x, firstPt.y - y);
+    } else {
+      for (let i = 0; i < points.length - 1; i++) {
+        const ptA = points[i];
+        const ptB = points[i + 1];
+        if (ptA && ptB) {
+          const d = distanceToSegment(x, y, ptA.x, ptA.y, ptB.x, ptB.y);
+          if (d < arrowDist) {
+            arrowDist = d;
+          }
+        }
+      }
+    }
+
+    if (arrowDist < minDistance && arrowDist <= maxDistance) {
+      minDistance = arrowDist;
+      closestArrow = arrow;
+    }
+  }
+
+  return closestArrow;
 }
 
 const styles = StyleSheet.create({

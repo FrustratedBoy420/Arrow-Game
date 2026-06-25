@@ -450,7 +450,7 @@ export function MultiplayerRandomScreen() {
       return;
     }
 
-    setRematchTimerVal(5);
+    setRematchTimerVal(10);
 
     const interval = setInterval(() => {
       setRematchTimerVal((prev) => {

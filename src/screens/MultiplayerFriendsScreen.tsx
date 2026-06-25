@@ -137,17 +137,22 @@ export function MultiplayerFriendsScreen() {
   const scoresRef = useRef(scores);
   const arrowOwnersRef = useRef(arrowOwners);
   const confirmedClearsRef = useRef(confirmedClears);
+  const unconfirmedTapsRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     scoresRef.current = scores;
   }, [scores]);
 
   useEffect(() => {
-    arrowOwnersRef.current = arrowOwners;
+    if (Object.keys(arrowOwners).length >= Object.keys(arrowOwnersRef.current).length) {
+      arrowOwnersRef.current = arrowOwners;
+    }
   }, [arrowOwners]);
 
   useEffect(() => {
-    confirmedClearsRef.current = confirmedClears;
+    if (Object.keys(confirmedClears).length >= Object.keys(confirmedClearsRef.current).length) {
+      confirmedClearsRef.current = confirmedClears;
+    }
   }, [confirmedClears]);
 
 
@@ -196,7 +201,10 @@ export function MultiplayerFriendsScreen() {
   }, [opponentName]);
 
   useEffect(() => {
-    boardRef.current = board;
+    const currentRefBoard = boardRef.current;
+    if (!currentRefBoard || (board && board.arrows.length <= currentRefBoard.arrows.length)) {
+      boardRef.current = board;
+    }
   }, [board]);
 
   useEffect(() => {
@@ -504,6 +512,7 @@ export function MultiplayerFriendsScreen() {
     arrowOwnersRef.current = {};
     confirmedClearsRef.current = {};
     scoresRef.current = {};
+    unconfirmedTapsRef.current = {};
     setStep('setup');
     setRoomCode('');
     setPlayers([]);
@@ -587,6 +596,7 @@ export function MultiplayerFriendsScreen() {
           arrowOwnersRef.current = {};
           confirmedClearsRef.current = {};
           scoresRef.current = initialScores;
+          unconfirmedTapsRef.current = {};
 
           unstable_batchedUpdates(() => {
             setLocalPlayerTimes({});
@@ -692,6 +702,10 @@ export function MultiplayerFriendsScreen() {
           }
         }
 
+        if (arrowId) {
+          delete unconfirmedTapsRef.current[arrowId];
+        }
+
         const isMe = progressName.toLowerCase() === me;
         const isConflict = !!data.isConflict;
         const serverOwners: Record<string, string> = data.arrowOwners || {};
@@ -713,8 +727,11 @@ export function MultiplayerFriendsScreen() {
           unstable_batchedUpdates(() => {
             setArrowOwners(nextOwners);
             setConfirmedClears(nextConfirmed);
-            setScores(nextScores);
           });
+
+          setTimeout(() => {
+            setScores(nextScores);
+          }, 300);
           return;
         }
 
@@ -752,13 +769,13 @@ export function MultiplayerFriendsScreen() {
           // Reconcile board state
           const currentBoard = boardRef.current;
           if (currentBoard) {
-            const remainingArrows = currentBoard.arrows.filter((a) => !nextOwners[a.id]);
-            const removedIds = currentBoard.removedIds.slice();
-            Object.keys(nextOwners).forEach((id) => {
-              if (!removedIds.includes(id)) {
-                removedIds.push(id);
-              }
-            });
+            const levelArrows = levelRef.current?.arrows || [];
+            const remainingArrows = levelArrows.filter(
+              (a) => !nextOwners[a.id] && !unconfirmedTapsRef.current[a.id]
+            );
+            const removedIds = levelArrows
+              .filter((a) => nextOwners[a.id] || unconfirmedTapsRef.current[a.id])
+              .map((a) => a.id);
 
             // Trigger exited animation if opponent cleared a new arrow in our current active board
             const arrowNode = currentBoard.arrows.find((a) => a.id === arrowId);
@@ -794,8 +811,11 @@ export function MultiplayerFriendsScreen() {
 
           // Apply state updates at the top level
           setArrowOwners(nextOwners);
-          setScores(nextScores);
           setConfirmedClears(nextConfirmed);
+
+          setTimeout(() => {
+            setScores(nextScores);
+          }, 300);
 
           if (typeof data.arrowsLeft === 'number') {
             setOpponentArrowsLeft(Math.floor(data.arrowsLeft));
@@ -998,6 +1018,7 @@ export function MultiplayerFriendsScreen() {
     arrowOwnersRef.current = {};
     confirmedClearsRef.current = {};
     scoresRef.current = {};
+    unconfirmedTapsRef.current = {};
     setStep('setup');
     setRoomCode('');
     setPlayers([]);
@@ -1021,7 +1042,7 @@ export function MultiplayerFriendsScreen() {
       return;
     }
 
-    setRematchTimerVal(5);
+    setRematchTimerVal(10);
 
     const interval = setInterval(() => {
       setRematchTimerVal((prev) => {
@@ -1092,27 +1113,24 @@ export function MultiplayerFriendsScreen() {
 
       const nextBoard = result.board;
 
-      // Claim ownership locally
-      const myName = playerNameRef.current;
-      const nextOwners = {
-        ...currentOwners,
-        [arrowId]: myName
-      };
-      const newScores = computeScores(nextOwners);
-
-      // Sync refs synchronously
+      // Sync refs synchronously (board only, not scores/owners yet)
       boardRef.current = nextBoard;
-      arrowOwnersRef.current = nextOwners;
-      scoresRef.current = newScores;
+      unconfirmedTapsRef.current[arrowId] = true;
 
       unstable_batchedUpdates(() => {
         setExitingArrows((prev) => {
           if (prev.some((a) => a.id === arrow.id)) return prev;
           return [...prev, { ...arrow, color: '#43A047' }];
         });
-        setArrowOwners(nextOwners);
         setBoard(nextBoard);
       });
+
+      const myName = playerNameRef.current;
+      const nextOwners = {
+        ...currentOwners,
+        [arrowId]: myName
+      };
+      const newScores = computeScores(nextOwners);
 
       // Encode arrowsLeft
       const levelArrows = levelRef.current?.arrows || [];
