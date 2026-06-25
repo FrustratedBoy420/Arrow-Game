@@ -175,6 +175,7 @@ export function MultiplayerFriendsScreen() {
 
   const pusherRef = useRef<Pusher | null>(null);
   const channelRef = useRef<any>(null);
+  const privateChannelRef = useRef<any>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const boardScale = useSharedValue(1);
   const boardOpacity = useSharedValue(1);
@@ -189,8 +190,6 @@ export function MultiplayerFriendsScreen() {
   const roomCodeRef = useRef(roomCode);
   const gameStartedAtRef = useRef<number | null>(null);
   const localPlayerTimesRef = useRef(localPlayerTimes);
-  const progressQueueRef = useRef<{ body: any; resolve: any; reject: any }[]>([]);
-  const isProcessingQueueRef = useRef(false);
 
   useEffect(() => {
     playerNameRef.current = playerName;
@@ -235,14 +234,19 @@ export function MultiplayerFriendsScreen() {
     if (channelRef.current && roomCodeRef.current) {
       channelRef.current.unbind_all();
     }
+    if (privateChannelRef.current && roomCodeRef.current) {
+      privateChannelRef.current.unbind_all();
+    }
     if (pusherRef.current) {
       if (roomCodeRef.current) {
         pusherRef.current.unsubscribe(`room-${roomCodeRef.current}`);
+        pusherRef.current.unsubscribe(`private-room-${roomCodeRef.current}`);
       }
       pusherRef.current.disconnect();
       pusherRef.current = null;
     }
     channelRef.current = null;
+    privateChannelRef.current = null;
   }, []);
 
   const joinRoomWithDetails = async (
@@ -457,35 +461,7 @@ export function MultiplayerFriendsScreen() {
   }, [serverUrl]);
 
   const sendProgressUpdate = useCallback((body: any): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      progressQueueRef.current.push({ body, resolve, reject });
-      
-      const processQueue = async () => {
-        if (isProcessingQueueRef.current || progressQueueRef.current.length === 0) {
-          return;
-        }
-        isProcessingQueueRef.current = true;
-        
-        while (progressQueueRef.current.length > 0) {
-          const item = progressQueueRef.current[0];
-          if (!item) {
-            progressQueueRef.current.shift();
-            continue;
-          }
-          try {
-            const res = await apiPost('/api/update-progress', item.body);
-            item.resolve(res);
-          } catch (err) {
-            console.warn('Queue progress update failed:', err);
-            item.reject(err);
-          }
-          progressQueueRef.current.shift();
-        }
-        isProcessingQueueRef.current = false;
-      };
-      
-      void processQueue();
-    });
+    return apiPost('/api/update-progress', body);
   }, [apiPost]);
 
   const handleLobbyTimeout = useCallback(async (reason: 'lobby' | 'session' = 'lobby') => {
@@ -632,12 +608,45 @@ export function MultiplayerFriendsScreen() {
     disconnectPusher();
 
     try {
+      let cleanUrl = serverUrl.trim();
+      cleanUrl = cleanUrl.replace(/\/$/, '');
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+        cleanUrl = `https://${cleanUrl}`;
+      }
+      const authUrl = `${cleanUrl}/api/pusher-auth`;
+
       console.log('Connecting to Pusher with key:', keyToUse, 'cluster:', clusterToUse || pusherCluster);
       const PusherConstructor: any = (Pusher as any).Pusher || Pusher;
       const pusher = new PusherConstructor(keyToUse || 'f9b17011ec538bf95e08', {
         cluster: clusterToUse || pusherCluster || 'ap2',
         forceTLS: true,
-        enabledTransports: ['ws', 'wss']
+        enabledTransports: ['ws', 'wss'],
+        channelAuthorization: {
+          customHandler: async ({ socketId, channelName }: { socketId: string, channelName: string }, callback: (error: Error | null, data: any) => void) => {
+            try {
+              const response = await fetch(authUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  socket_id: socketId,
+                  channel_name: channelName,
+                }),
+              });
+
+              if (!response.ok) {
+                throw new Error(`Auth failed with status ${response.status}`);
+              }
+
+              const authData = await response.json();
+              callback(null, authData);
+            } catch (error) {
+              console.error('Pusher auth error:', error);
+              callback(error as Error, null);
+            }
+          }
+        }
       });
 
       pusherRef.current = pusher;
@@ -645,6 +654,10 @@ export function MultiplayerFriendsScreen() {
       const channelName = `room-${code}`;
       const channel = pusher.subscribe(channelName);
       channelRef.current = channel;
+
+      const privateChannelName = `private-room-${code}`;
+      const privateChannel = pusher.subscribe(privateChannelName);
+      privateChannelRef.current = privateChannel;
 
       channel.bind('player_joined', (data: any) => {
         console.log('Pusher received: [player_joined]', data);
@@ -679,8 +692,8 @@ export function MultiplayerFriendsScreen() {
         startCountdownTimer(data.gameStartsAt, data.countdownSeconds || 5);
       });
 
-      channel.bind('opponent_progress', (data: any) => {
-        console.log('Pusher received: [opponent_progress]', data);
+      const handleOpponentProgress = (data: any) => {
+        console.log('Pusher received progress:', data);
         const progressName = String(data.name || data.playerName || '').trim();
         const me = playerNameRef.current.trim().toLowerCase();
 
@@ -817,11 +830,15 @@ export function MultiplayerFriendsScreen() {
             setScores(nextScores);
           }, 300);
 
-          if (typeof data.arrowsLeft === 'number') {
-            setOpponentArrowsLeft(Math.floor(data.arrowsLeft));
+          if (typeof data.arrowsLeft === 'number' && !isMe) {
+            const opponentCount = Math.floor(data.arrowsLeft);
+            setOpponentArrowsLeft((prev) => Math.min(prev, opponentCount));
           }
         });
-      });
+      };
+
+      channel.bind('opponent_progress', handleOpponentProgress);
+      privateChannel.bind('client-opponent_progress', handleOpponentProgress);
 
       channel.bind('room_terminated', (data: any) => {
         console.log('Pusher received: [room_terminated]', data);
@@ -1135,6 +1152,20 @@ export function MultiplayerFriendsScreen() {
       // Encode arrowsLeft
       const levelArrows = levelRef.current?.arrows || [];
       const encodedProgress = encodeArrowsLeft(nextBoard.arrows.length, arrowId, levelArrows);
+
+      if (privateChannelRef.current) {
+        privateChannelRef.current.trigger('client-opponent_progress', {
+          name: myName,
+          arrowsLeft: encodedProgress,
+          removedArrowId: arrowId,
+          scores: newScores,
+          arrowOwners: nextOwners,
+          boardState: {
+            removedArrowId: arrowId,
+            scores: newScores
+          }
+        });
+      }
 
       sendProgressUpdate({
         name: myName,
