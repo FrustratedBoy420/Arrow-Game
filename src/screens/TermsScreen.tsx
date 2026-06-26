@@ -76,7 +76,7 @@ export function TermsScreen({ onAccept, onReject }: TermsScreenProps) {
 
   const openDetailedTerms = async () => {
     const versionConfig = useGameStore.getState().versionConfig;
-    const url = versionConfig?.termsUrl || 'https://arrow-game-be.vercel.app/terms-and-conditions';
+    const url = versionConfig?.termsUrl || 'https://arrow-game-terms-policies.vercel.app/';
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
