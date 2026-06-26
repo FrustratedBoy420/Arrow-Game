@@ -45,12 +45,18 @@ type GameStore = {
   } | null;
   adsConfig: {
     showAds: boolean;
+    showBanner: boolean;
+    showInterstitial: boolean;
+    showAppOpen: boolean;
+    showRewarded: boolean;
     androidBanner: string;
     androidInterstitial: string;
     androidAppOpen: string;
+    androidRewarded: string;
     iosBanner: string;
     iosInterstitial: string;
     iosAppOpen: string;
+    iosRewarded: string;
   };
   resetAllProgress: () => void;
   // Level Management System Integration
@@ -67,7 +73,7 @@ type GameStore = {
   retry: () => void;
   nextLevel: () => void;
   undo: () => void;
-  useHint: () => string | null;
+  useHint: (force?: boolean) => string | null;
   toggleSound: () => void;
   toggleHaptics: () => void;
   toggleMusic: () => void;
@@ -118,16 +124,21 @@ export const useGameStore = create<GameStore>()(
       versionConfig: null,
       adsConfig: {
         showAds: true,
+        showBanner: true,
+        showInterstitial: true,
+        showAppOpen: true,
+        showRewarded: true,
         androidBanner: 'ca-app-pub-1466180289159501/3095811477',
         androidInterstitial: 'ca-app-pub-1466180289159501/2069670266',
         androidAppOpen: 'ca-app-pub-1466180289159501/1199286193',
+        androidRewarded: 'ca-app-pub-1466180289159501/6436078651',
         iosBanner: 'ca-app-pub-3940256099942544/2934735716',
         iosInterstitial: 'ca-app-pub-3940256099942544/4411468910',
         iosAppOpen: 'ca-app-pub-3940256099942544/9257395921',
+        iosRewarded: 'ca-app-pub-3940256099942544/5224354917',
       },
       levelProgressMap: initialLevelMap,
       starsEarnedThisLevel: 0,
-      coinsEarnedThisLevel: 0,
       hasRecordedCurrentLevel: false,
       levelStartTime: Date.now(),
       gameStartTime: null,
@@ -280,10 +291,10 @@ export const useGameStore = create<GameStore>()(
         });
       },
 
-      useHint: () => {
+      useHint: (force = false) => {
         const { board, status, gameStartTime, hintUsedThisLevel, iconsConfig } = get();
         const isAdmin = !!iconsConfig?.unlockAllLevels;
-        if (status !== 'playing' || (hintUsedThisLevel && !isAdmin)) return null;
+        if (status !== 'playing' || (hintUsedThisLevel && !isAdmin && !force)) return null;
 
         if (gameStartTime === null) {
           set({ gameStartTime: Date.now() });

@@ -24,6 +24,7 @@ import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
+import { adManager } from '../utils/ads';
 
 type BlockedArrowEntry = { arrow: ArrowNode; blocker: ArrowNode | null };
 
@@ -178,23 +179,57 @@ export function GameplayScreen() {
   const handleHint = useCallback(() => {
     const state = useGameStore.getState();
     const isAdminUser = !!state.iconsConfig?.unlockAllLevels;
-    if (state.hintUsedThisLevel && !isAdminUser) {
-      Alert.alert('Hint Used', 'You only get one hint per level.');
-      return;
-    }
 
     const currentBoard = useGameStore.getState().board;
     const hintArrow = currentBoard.arrows.find((a) => isFrontClear(a, currentBoard));
-    const hintedId = useHint();
-    if (hintedId && hintArrow) {
-      setExitingArrows((prev) => {
-        if (prev.some((a) => a.id === hintArrow.id)) return prev;
-        return [...prev, { ...hintArrow, color: '#43A047' }];
-      });
-      void playCorrectFeedback();
-    } else {
+    if (!hintArrow) {
       Alert.alert('No Hint', 'No valid move right now. Try Undo!');
+      return;
     }
+
+    const triggerHint = (force = false) => {
+      const hintedId = useHint(force);
+      if (hintedId) {
+        setExitingArrows((prev) => {
+          if (prev.some((a) => a.id === hintArrow.id)) return prev;
+          return [...prev, { ...hintArrow, color: '#43A047' }];
+        });
+        void playCorrectFeedback();
+      }
+    };
+
+    if (state.hintUsedThisLevel && !isAdminUser) {
+      if (!adManager.isRewardedAdReady()) {
+        Alert.alert(
+          'Ad Loading',
+          'The reward video is still loading. Please try again in a few seconds.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Get Another Hint',
+        'Would you like to watch a short video to get another hint for this level?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Watch Ad',
+            onPress: () => {
+              adManager.showRewarded(
+                () => {
+                  triggerHint(true);
+                },
+                () => {}
+              );
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    triggerHint(false);
   }, [useHint]);
 
   return (
@@ -242,7 +277,7 @@ export function GameplayScreen() {
         onUndo={undo}
         onHint={handleHint}
         onRestart={retry}
-        hintDisabled={hintUsedThisLevel && !isAdmin}
+        hintDisabled={false}
       />
       <SettingsModal
         visible={settingsVisible}

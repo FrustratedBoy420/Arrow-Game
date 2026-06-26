@@ -23,7 +23,7 @@ export function AdBanner() {
   const [adLoaded, setAdLoaded] = useState(true);
   const adsConfig = useGameStore((state) => state.adsConfig);
 
-  if (!isAdMobAvailable || !adLoaded || !adsConfig || !adsConfig.showAds) {
+  if (!isAdMobAvailable || !adLoaded || !adsConfig || !adsConfig.showAds || !adsConfig.showBanner) {
     return null;
   }
 
