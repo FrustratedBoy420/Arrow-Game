@@ -63,6 +63,15 @@ export function MultiplayerRandomScreen() {
   const [matchState, setMatchState] = useState<MatchState>('searching');
   const [opponent, setOpponent] = useState<{ name: string } | null>(null);
   const [exitModalVisible, setExitModalVisible] = useState(false);
+
+  // Track multiplayer active status to prevent App Open Ads from showing mid-game
+  useEffect(() => {
+    const setIsMultiplayerActive = useGameStore.getState().setIsMultiplayerActive;
+    setIsMultiplayerActive(true);
+    return () => {
+      setIsMultiplayerActive(false);
+    };
+  }, []);
   const [playerName, setPlayerName] = useState('You');
   const [userResigned, setUserResigned] = useState(false);
   const [rematchRequestedByMe, setRematchRequestedByMe] = useState(false);

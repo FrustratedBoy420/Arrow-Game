@@ -41,34 +41,19 @@ export function PrivacyPolicyModal({ visible, onClose }: PrivacyPolicyModalProps
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={true}
           >
-            <Text style={styles.sectionTitle}>1. Our Promise to You</Text>
+            <Text style={styles.sectionTitle}>1. Data We Collect</Text>
             <Text style={styles.paragraph}>
-              We promise that we will never steal your personal data, sell it, or engage in any harmful activity. Your privacy is our priority. Ham aapka koi bhi data nahi churayenge aur kuch harmful nahi karenge.
+              We only collect a randomly generated anonymous System ID on your device to track your game progress, stars, unlocked levels, and multiplayer outcomes.
             </Text>
 
-            <Text style={styles.sectionTitle}>2. What We Collect</Text>
+            <Text style={styles.sectionTitle}>2. Data We Do NOT Collect</Text>
             <Text style={styles.paragraph}>
-              We only collect a randomly generated anonymous System ID on your device. This identifier is necessary to track your game progress, stars, unlocked levels, and multiplayer match outcomes.
+              We do not collect any personal information. We do not ask for or store your name, email, phone number, contacts, or device-specific hardware metadata.
             </Text>
 
-            <Text style={styles.sectionTitle}>3. What We Do NOT Collect</Text>
+            <Text style={styles.sectionTitle}>3. Storage & Third-Parties</Text>
             <Text style={styles.paragraph}>
-              We do not collect any personal information. This means we do not ask for, collect, or store your name, email address, phone number, physical location, contacts, or device-specific hardware metadata.
-            </Text>
-
-            <Text style={styles.sectionTitle}>4. Data Storage & Deletion</Text>
-            <Text style={styles.paragraph}>
-              Your anonymous System ID and game progress are stored securely on our backend server database. If your profile remains inactive for more than 30 days, your record will be automatically deleted from our server.
-            </Text>
-
-            <Text style={styles.sectionTitle}>5. Third-Party Services</Text>
-            <Text style={styles.paragraph}>
-              We use Pusher for real-time multiplayer connections. Pusher only routes real-time events based on your anonymous System ID and does not receive any personal identifiers.
-            </Text>
-
-            <Text style={styles.sectionTitle}>6. Contact & Changes</Text>
-            <Text style={styles.paragraph}>
-              We may update this policy periodically. The latest version will always be viewable from the game settings. If you have any questions, you can contact the developer.
+              Your progress is saved securely on our servers and is automatically deleted after 30 days of inactivity. We use Pusher for real-time multiplayer coordination (no personal data is shared).
             </Text>
           </ScrollView>
 
@@ -120,25 +105,24 @@ export function TermsScreen({ onAccept, onReject }: TermsScreenProps) {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Terms & Consent</Text>
           <Text style={styles.cardText}>
-            Welcome to ArrowVerse-Multiplayer! Before starting your journey, please accept our terms.
-          </Text>
-          <Text style={styles.cardTextHighlight}>
-            We do not collect your personal data or track your device. We only use a basic anonymous System ID to save your level progress.
+            We only use an anonymous System ID to save your level progress. No personal data is ever collected or tracked.
           </Text>
 
-          <Pressable
-            style={styles.linkButton}
-            onPress={() => setModalVisible(true)}
-          >
-            <Text style={styles.linkText}>Read detailed Privacy Policy</Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.linkButton, { marginTop: 8 }]}
-            onPress={openDetailedTerms}
-          >
-            <Text style={styles.linkText}>Detailed Terms & Conditions</Text>
-          </Pressable>
+          <View style={styles.linksRow}>
+            <Pressable
+              style={styles.linkButton}
+              onPress={() => setModalVisible(true)}
+            >
+              <Text style={styles.linkText}>Privacy Policy</Text>
+            </Pressable>
+            <Text style={styles.linkDivider}>|</Text>
+            <Pressable
+              style={styles.linkButton}
+              onPress={openDetailedTerms}
+            >
+              <Text style={styles.linkText}>Terms & Conditions</Text>
+            </Pressable>
+          </View>
         </View>
 
         <Pressable style={styles.acceptBtn} onPress={onAccept}>
@@ -193,17 +177,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontWeight: '600',
     letterSpacing: 2,
-    marginBottom: 32,
+    marginBottom: 20,
   },
   card: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 20,
-    padding: 24,
+    padding: 20,
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 340,
     alignItems: 'center',
     ...theme.shadows.md,
-    marginBottom: 32,
+    marginBottom: 24,
   },
   cardTitle: {
     fontSize: 22,
@@ -218,13 +202,16 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 12,
   },
-  cardTextHighlight: {
+  linksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8
+  },
+  linkDivider: {
+    color: theme.colors.textMuted,
     fontSize: 14,
-    color: theme.colors.arrowStroke,
-    textAlign: 'center',
-    fontWeight: '600',
-    lineHeight: 18,
-    marginBottom: 16,
+    opacity: 0.5
   },
   linkButton: {
     paddingVertical: 6,

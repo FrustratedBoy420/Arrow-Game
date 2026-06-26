@@ -92,6 +92,8 @@ type GameStore = {
   accumulatedPausedTime: number;
   pauseGame: () => void;
   resumeGame: () => void;
+  isMultiplayerActive: boolean;
+  setIsMultiplayerActive: (active: boolean) => void;
 };
 
 // Use LOADING_LEVEL stub — real levels come from the DB on first fetch
@@ -173,6 +175,8 @@ export const useGameStore = create<GameStore>()(
           });
         }
       },
+      isMultiplayerActive: false,
+      setIsMultiplayerActive: (active) => set({ isMultiplayerActive: active }),
 
       resetAllProgress: () => {
         const freshMap = require('../systems/levelManagement').initializeLevelMap();
@@ -385,6 +389,11 @@ export const useGameStore = create<GameStore>()(
               iconsConfig: icons ? { ...get().iconsConfig, ...icons } : get().iconsConfig,
               versionConfig: version || null,
               adsConfig: ads ? { ...get().adsConfig, ...ads } : get().adsConfig
+            });
+
+            // Dynamically import adManager to preload ads now that adsConfig is loaded
+            void import('../utils/ads').then(({ adManager }) => {
+              adManager.preloadAllAds();
             });
           }
         } catch (err) {

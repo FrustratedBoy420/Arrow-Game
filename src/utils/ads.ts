@@ -67,7 +67,8 @@ class AdManager {
           // Check if user is in active gameplay to avoid showing ad mid-game
           const state = useGameStore.getState();
           const isSingleplayerActive = state.status === 'playing';
-          if (isSingleplayerActive) {
+          const isMultiplayerActive = state.isMultiplayerActive;
+          if (isSingleplayerActive || isMultiplayerActive) {
             console.log('User is in active gameplay, skipping App Open ad.');
             return;
           }
@@ -225,7 +226,7 @@ class AdManager {
 
         // Safety check: Do not auto-show if user is playing
         const state = useGameStore.getState();
-        if (state.status === 'playing') {
+        if (state.status === 'playing' || state.isMultiplayerActive) {
           console.log('User is in active gameplay, not auto-showing loaded App Open ad.');
           return;
         }
@@ -501,6 +502,17 @@ class AdManager {
 
   isAdShowing(): boolean {
     return this.isFullScreenAdShowing;
+  }
+
+  preloadAllAds() {
+    if (!isAdMobAvailable || !this.isInitialized) return;
+    
+    this.loadInterstitial();
+    this.loadRewarded();
+
+    if (!this.appOpenAd && !this.isAppOpenAdLoading) {
+      this.loadAndShowAppOpenAd();
+    }
   }
 }
 

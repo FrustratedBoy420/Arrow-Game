@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState, useRef } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
@@ -17,9 +17,11 @@ import Animated, {
 import { AmbientBackground } from '../components/AmbientBackground';
 import GearIcon from '../components/GearIcon';
 import { SettingsModal } from '../components/SettingsModal';
-import { getTotalStarsEarned, getUnlockedLevelCount } from '../systems/levelManagement';
-import { ensureLevelProgressMap } from '../systems/levelManagementStore';
+import { getTotalStarsEarned, getUnlockedLevelCount, getCheckpointRequiredStars, getCheckpointGateProgress, CheckpointGateProgress } from '../systems/levelManagement';
+import { ensureLevelProgressMap, isLevelLocked } from '../systems/levelManagementStore';
+import { getNextLevelId } from '../levels/levels';
 import { useGameStore } from '../state/gameStore';
+import { CheckpointLockModal } from '../components/CheckpointLockModal';
 import { audioManager } from '../utils/audio';
 import { theme } from '../theme/theme';
 import { adManager } from '../utils/ads';
@@ -42,6 +44,7 @@ export function VictoryScreen() {
   const coinsEarnedThisLevel = useGameStore((state) => state.coinsEarnedThisLevel);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [checkpointGate, setCheckpointGate] = useState<CheckpointGateProgress | null>(null);
 
   const progressMap = ensureLevelProgressMap(levelProgressMap);
   const totalStars = getTotalStarsEarned(progressMap);
@@ -172,10 +175,19 @@ export function VictoryScreen() {
               btnScale.value = withSpring(1, { damping: 10, stiffness: 350 });
             }}
             onPress={() => {
-              adManager.showInterstitial(() => {
-                nextLevel();
-                navigation.replace('Gameplay');
-              });
+              const currentLevelId = useGameStore.getState().currentLevelId;
+              const nextId = getNextLevelId(currentLevelId);
+              const progressMap = ensureLevelProgressMap(useGameStore.getState().levelProgressMap);
+              
+              if (isLevelLocked(progressMap, nextId)) {
+                const gate = getCheckpointGateProgress(progressMap, nextId);
+                setCheckpointGate(gate);
+              } else {
+                adManager.showInterstitial(() => {
+                  nextLevel();
+                  navigation.replace('Gameplay');
+                });
+              }
             }}
           >
             <Animated.View style={[styles.button, styles.nextButton, buttonStyle]}>
@@ -188,6 +200,14 @@ export function VictoryScreen() {
       <SettingsModal
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
+      />
+      <CheckpointLockModal
+        visible={checkpointGate !== null}
+        gate={checkpointGate}
+        onClose={() => {
+          setCheckpointGate(null);
+          navigation.navigate('Home');
+        }}
       />
       <AdBanner />
     </SafeAreaView>

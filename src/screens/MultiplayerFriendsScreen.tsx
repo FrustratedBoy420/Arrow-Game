@@ -42,6 +42,7 @@ import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
 import { registerUserProfile } from '../utils/userRegistration';
 import { adManager } from '../utils/ads';
 import { AdBanner } from '../components/AdBanner';
+import { useGameStore } from '../state/gameStore';
 
 type MultiplayerStep = 'setup' | 'lobby' | 'game' | 'results';
 
@@ -136,6 +137,15 @@ export function MultiplayerFriendsScreen() {
 
   // Custom Alert State
   const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '' });
+
+  // Track multiplayer active status to prevent App Open Ads from showing mid-game
+  useEffect(() => {
+    const setIsMultiplayerActive = useGameStore.getState().setIsMultiplayerActive;
+    setIsMultiplayerActive(true);
+    return () => {
+      setIsMultiplayerActive(false);
+    };
+  }, []);
 
   // Shared Board state
   const [scores, setScores] = useState<Record<string, number>>({});
