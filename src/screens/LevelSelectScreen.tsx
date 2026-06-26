@@ -12,6 +12,7 @@ import { SettingsModal } from '../components/SettingsModal';
 import { AdBanner } from '../components/AdBanner';
 import { getTotalLevels } from '../levels/levels';
 import { useGameStore } from '../state/gameStore';
+import { CustomAlertModal } from '../components/CustomAlertModal';
 import {
   checkLevelUnlocks,
   getCheckpointGateProgress,
@@ -38,6 +39,7 @@ export function LevelSelectScreen() {
 
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [checkpointGate, setCheckpointGate] = useState<CheckpointGateProgress | null>(null);
+  const [lockedLevelAlert, setLockedLevelAlert] = useState({ visible: false, message: '' });
   const [, setLockRevision] = useState(0);
 
   useFocusEffect(
@@ -85,7 +87,7 @@ export function LevelSelectScreen() {
       }
     }
 
-    Alert.alert('🔒 Level Locked', `Complete Level ${id - 1} to unlock.`);
+    setLockedLevelAlert({ visible: true, message: `Complete Level ${id - 1} to unlock.` });
   };
 
   return (
@@ -135,6 +137,14 @@ export function LevelSelectScreen() {
         visible={checkpointGate !== null}
         gate={checkpointGate}
         onClose={() => setCheckpointGate(null)}
+      />
+
+      <CustomAlertModal
+        visible={lockedLevelAlert.visible}
+        title="Level Locked"
+        description={lockedLevelAlert.message}
+        iconName="lock-closed"
+        onClose={() => setLockedLevelAlert({ visible: false, message: '' })}
       />
 
       {/* Offline / Syncing Banner warning at the bottom */}

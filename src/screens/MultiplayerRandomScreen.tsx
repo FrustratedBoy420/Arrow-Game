@@ -29,6 +29,7 @@ import { ExitConfirmModal } from '../components/ExitConfirmModal';
 import { LivesIndicator } from '../components/LivesIndicator';
 import { findArrowAtPoint, PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
 import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
+import { CustomAlertModal } from '../components/CustomAlertModal';
 
 import { createInitialBoard, findBlockingArrow, resolveTap, isFrontClear } from '../game/engine';
 import { calculateNextMoveDelay, recordMatchResult, shouldBotMissMove } from '../game/botEngine';
@@ -63,6 +64,7 @@ export function MultiplayerRandomScreen() {
   const [userResigned, setUserResigned] = useState(false);
   const [rematchRequestedByMe, setRematchRequestedByMe] = useState(false);
   const [rematchStatus, setRematchStatus] = useState<'idle' | 'waiting' | 'accepted' | 'declined'>('idle');
+  const [rematchDeclinedAlert, setRematchDeclinedAlert] = useState(false);
   const [dbLevels, setDbLevels] = useState<LevelDefinition[]>([]);
   const [rematchTimerVal, setRematchTimerVal] = useState<number | null>(null);
   const [rematchRequestedByOpponent, setRematchRequestedByOpponent] = useState(false);
@@ -427,21 +429,7 @@ export function MultiplayerRandomScreen() {
         }, 800);
       } else {
         setRematchStatus('declined');
-        Alert.alert(
-          'Rematch Request Declined',
-          `${opponent?.name ?? 'Opponent'} has left the arena.`,
-          [
-            {
-              text: 'Find New Match',
-              onPress: () => {
-                setRematchRequestedByMe(false);
-                setRematchStatus('idle');
-                setOpponent(null);
-                setMatchState('searching');
-              }
-            }
-          ]
-        );
+        setRematchDeclinedAlert(true);
       }
     }, delay);
   }, [rematchRequestedByMe, rematchRequestedByOpponent, opponent, startRematch]);
@@ -963,6 +951,20 @@ export function MultiplayerRandomScreen() {
           <Text style={styles.lobbyTitle}>⚔️ Arena Lobby</Text>
         </View>
         {renderResults()}
+        
+        <CustomAlertModal
+          visible={rematchDeclinedAlert}
+          title="Rematch Request Declined"
+          description={`${opponent?.name ?? 'Opponent'} has left the arena.`}
+          buttonText="FIND NEW MATCH"
+          onClose={() => {
+            setRematchDeclinedAlert(false);
+            setRematchRequestedByMe(false);
+            setRematchStatus('idle');
+            setOpponent(null);
+            setMatchState('searching');
+          }}
+        />
       </SafeAreaView>
     );
   }

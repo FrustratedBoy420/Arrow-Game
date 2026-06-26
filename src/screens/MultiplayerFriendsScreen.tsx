@@ -33,6 +33,7 @@ import { AmbientBackground } from '../components/AmbientBackground';
 import { LivesIndicator } from '../components/LivesIndicator';
 import { findArrowAtPoint, PuzzleBoardCanvas } from '../components/PuzzleBoardCanvas';
 import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
+import { CustomAlertModal } from '../components/CustomAlertModal';
 import { createInitialBoard, findBlockingArrow, resolveTap } from '../game/engine';
 import type { ArrowNode, BoardState, LevelDefinition } from '../game/types';
 import { theme } from '../theme/theme';
@@ -130,6 +131,9 @@ export function MultiplayerFriendsScreen() {
   const [rematchStates, setRematchStates] = useState<Record<string, boolean>>({});
   const [requestingRematch, setRequestingRematch] = useState(false);
   const [rematchTimerVal, setRematchTimerVal] = useState<number | null>(null);
+
+  // Custom Alert State
+  const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '' });
 
   // Shared Board state
   const [scores, setScores] = useState<Record<string, number>>({});
@@ -361,7 +365,7 @@ export function MultiplayerFriendsScreen() {
 
       connectAndSubscribePusher(newCode, trimmedKey, clusterVal || pusherCluster);
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to join room.');
+      setCustomAlert({ visible: true, title: 'Error', message: err.message || 'Failed to join room.' });
     } finally {
       setConnecting(false);
     }
@@ -480,9 +484,9 @@ export function MultiplayerFriendsScreen() {
       }
     }
     if (reason === 'session') {
-      Alert.alert('Session Expired', 'The room code has expired after 1 hour. Please generate a new code.');
+      setCustomAlert({ visible: true, title: 'Session Expired', message: 'The room code has expired after 1 hour. Please generate a new code.' });
     } else {
-      Alert.alert('Lobby Terminated', 'Lobby has been terminated due to 2-minute inactivity.');
+      setCustomAlert({ visible: true, title: 'Lobby Terminated', message: 'Lobby has been terminated due to 2-minute inactivity.' });
     }
     disconnectPusher();
     gameStartedAtRef.current = null;
@@ -844,7 +848,7 @@ export function MultiplayerFriendsScreen() {
 
       channel.bind('room_terminated', (data: any) => {
         console.log('Pusher received: [room_terminated]', data);
-        Alert.alert('Room Terminated', data.message || 'This room has been terminated by the administrator.');
+        setCustomAlert({ visible: true, title: 'Room Terminated', message: data.message || 'This room has been terminated by the administrator.' });
         setStep('setup');
         disconnectPusher();
       });

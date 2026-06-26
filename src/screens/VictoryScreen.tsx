@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -37,6 +37,7 @@ export function VictoryScreen() {
   const levelProgressMap = useGameStore((state) => state.levelProgressMap);
   const finalStarsCalculated = useGameStore((state) => state.finalStarsCalculated);
   const coins = useGameStore((state) => state.coins);
+  const coinsEarnedThisLevel = useGameStore((state) => state.coinsEarnedThisLevel);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
 
@@ -48,7 +49,12 @@ export function VictoryScreen() {
   const textOpacity = useSharedValue(0);
   const btnScale = useSharedValue(1);
 
+  const hasRecordedRef = useRef(false);
+
   useEffect(() => {
+    if (hasRecordedRef.current) return;
+    hasRecordedRef.current = true;
+
     audioManager.playSound('victory');
 
     const startTime = gameStartTime ?? levelStartTime;
@@ -129,7 +135,7 @@ export function VictoryScreen() {
         <Animated.Text style={[styles.stars, starStyle]}>{starDisplay}</Animated.Text>
         <Animated.View style={textStyle}>
           <Text style={styles.title}>Level Complete!</Text>
-          <Text style={styles.reward}>+25 coins</Text>
+          <Text style={styles.reward}>+{coinsEarnedThisLevel} coins</Text>
         </Animated.View>
 
         <View style={styles.buttonContainer}>

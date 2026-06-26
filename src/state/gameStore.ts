@@ -56,6 +56,8 @@ type GameStore = {
   // Level Management System Integration
   levelProgressMap: Map<number, LevelProgress>;
   starsEarnedThisLevel: number;
+  coinsEarnedThisLevel: number;
+  hasRecordedCurrentLevel: boolean;
   levelStartTime: number;
   gameStartTime: number | null;
   finalStarsCalculated: number;
@@ -99,6 +101,7 @@ export const useGameStore = create<GameStore>()(
       hapticsEnabled: true,
       musicEnabled: true,
       coins: 0,
+      coinsEarnedThisLevel: 0,
       lastHintArrowId: null,
       hintUsedThisLevel: false,
       dynamicLevels: null,
@@ -124,6 +127,8 @@ export const useGameStore = create<GameStore>()(
       },
       levelProgressMap: initialLevelMap,
       starsEarnedThisLevel: 0,
+      coinsEarnedThisLevel: 0,
+      hasRecordedCurrentLevel: false,
       levelStartTime: Date.now(),
       gameStartTime: null,
       finalStarsCalculated: 3,
@@ -196,7 +201,8 @@ export const useGameStore = create<GameStore>()(
           finalStarsCalculated: 3,
           isPaused: false,
           pausedAt: null,
-          accumulatedPausedTime: 0
+          accumulatedPausedTime: 0,
+          hasRecordedCurrentLevel: false,
         });
       },
 
@@ -511,8 +517,18 @@ export const useGameStore = create<GameStore>()(
       },
 
       recordLevelCompletion: async (timeTaken, heartsLost) => {
-        const levelProgressMap = ensureLevelProgressMap(get().levelProgressMap);
+        // Guard: only run once per level session (prevents React Strict Mode double-fire)
+        if (get().hasRecordedCurrentLevel) return;
+        set({ hasRecordedCurrentLevel: true });
+
         const { currentLevelId, finalStarsCalculated, dynamicLevels } = get();
+
+        // ensureLevelProgressMap converts plain objects (from AsyncStorage rehydration) to a Map
+        // We must read wasAlreadyCompleted from it BEFORE completeLevelWithStars mutates it
+        const levelProgressMap = ensureLevelProgressMap(get().levelProgressMap);
+
+        // Read BEFORE completeLevelWithStars mutates isCompleted to true
+        const wasAlreadyCompleted = levelProgressMap.get(currentLevelId)?.isCompleted ?? false;
 
         const result = completeLevelWithStars(
           levelProgressMap,
@@ -522,9 +538,19 @@ export const useGameStore = create<GameStore>()(
           finalStarsCalculated
         );
 
+        let earned = 0;
+        if (wasAlreadyCompleted) {
+          earned = 5;
+        } else {
+          if (finalStarsCalculated === 1) earned = 10;
+          else if (finalStarsCalculated === 2) earned = 15;
+          else if (finalStarsCalculated >= 3) earned = 25;
+        }
+
         set((state) => ({ 
           starsEarnedThisLevel: finalStarsCalculated,
-          coins: state.coins + 25 
+          coinsEarnedThisLevel: earned,
+          coins: state.coins + earned 
         }));
 
         // Persist updated progress (includes newly unlocked levels from checkLevelUnlocks)
