@@ -40,6 +40,8 @@ import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
 import { registerUserProfile } from '../utils/userRegistration';
+import { adManager } from '../utils/ads';
+import { AdBanner } from '../components/AdBanner';
 
 type MultiplayerStep = 'setup' | 'lobby' | 'game' | 'results';
 
@@ -509,6 +511,12 @@ export function MultiplayerFriendsScreen() {
     if (step !== 'lobby') return;
 
     const tick = () => {
+      if (adManager.isAdShowing()) {
+        if (roomCreatedAtRef.current !== null) {
+          roomCreatedAtRef.current += 1000;
+        }
+        return;
+      }
       const created = roomCreatedAtRef.current || Date.now();
       const elapsed = Math.floor((Date.now() - created) / 1000);
       const remaining = Math.max(0, 120 - elapsed);
@@ -550,11 +558,16 @@ export function MultiplayerFriendsScreen() {
     const initialCount = Math.max(0, Math.ceil((gameStartsAt - Date.now()) / 1000));
     setCountdown(initialCount);
 
+    let targetTime = gameStartsAt;
     countdownIntervalRef.current = setInterval(() => {
+      if (adManager.isAdShowing()) {
+        targetTime += 100;
+        return;
+      }
       const now = Date.now();
-      const remainingSeconds = Math.ceil((gameStartsAt - now) / 1000);
+      const remainingSeconds = Math.ceil((targetTime - now) / 1000);
 
-      if (now >= gameStartsAt || remainingSeconds <= 0) {
+      if (now >= targetTime || remainingSeconds <= 0) {
         if (countdownIntervalRef.current) {
           clearInterval(countdownIntervalRef.current);
           countdownIntervalRef.current = null;
@@ -867,7 +880,9 @@ export function MultiplayerFriendsScreen() {
         );
 
         setRematchStates({});
-        setStep('results');
+        adManager.showInterstitial(() => {
+          setStep('results');
+        });
       });
 
       channel.bind('rematch_states', (data: any) => {
@@ -1027,31 +1042,34 @@ export function MultiplayerFriendsScreen() {
   };
 
   const handleLeaveRoom = useCallback(async () => {
-    try {
-      await apiPost('/api/leave-room', {
-        name: playerName.trim(),
-        roomCode: roomCode.trim().toUpperCase()
-      });
-    } catch (err) {
+    const cleanName = playerName.trim();
+    const cleanCode = roomCode.trim().toUpperCase();
+    void apiPost('/api/leave-room', {
+      name: cleanName,
+      roomCode: cleanCode
+    }).catch((err) => {
       console.warn('leave-room API call failed/ignored:', err);
-    }
-    disconnectPusher();
-    gameStartedAtRef.current = null;
-    boardRef.current = null;
-    arrowOwnersRef.current = {};
-    confirmedClearsRef.current = {};
-    scoresRef.current = {};
-    unconfirmedTapsRef.current = {};
-    setStep('setup');
-    setRoomCode('');
-    setPlayers([]);
-    setLevel(null);
-    setBoard(null);
-    setLocalPlayerTimes({});
-    setArrowOwners({});
-    setConfirmedClears({});
-    setMatchResults([]);
-    setMatchWinner('');
+    });
+
+    adManager.showInterstitial(() => {
+      disconnectPusher();
+      gameStartedAtRef.current = null;
+      boardRef.current = null;
+      arrowOwnersRef.current = {};
+      confirmedClearsRef.current = {};
+      scoresRef.current = {};
+      unconfirmedTapsRef.current = {};
+      setStep('setup');
+      setRoomCode('');
+      setPlayers([]);
+      setLevel(null);
+      setBoard(null);
+      setLocalPlayerTimes({});
+      setArrowOwners({});
+      setConfirmedClears({});
+      setMatchResults([]);
+      setMatchWinner('');
+    });
   }, [playerName, roomCode, disconnectPusher, apiPost]);
 
   useEffect(() => {
@@ -1068,6 +1086,7 @@ export function MultiplayerFriendsScreen() {
     setRematchTimerVal(10);
 
     const interval = setInterval(() => {
+      if (adManager.isAdShowing()) return;
       setRematchTimerVal((prev) => {
         if (prev === null) return null;
         if (prev <= 1) {
@@ -1081,6 +1100,21 @@ export function MultiplayerFriendsScreen() {
 
     return () => clearInterval(interval);
   }, [step, matchResults.length, rematchStates, playerName, requestingRematch, handleLeaveRoom]);
+
+  // Shift gameStartedAtRef during ads (e.g. App Open Ads) to not count ad playback time
+  useEffect(() => {
+    if (step !== 'game' || localMatchEnded) return;
+
+    const interval = setInterval(() => {
+      if (adManager.isAdShowing()) {
+        if (gameStartedAtRef.current !== null) {
+          gameStartedAtRef.current += 100;
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [step, localMatchEnded]);
 
   const recordMyCompletionTime = useCallback((): number | null => {
     const elapsedMs = getElapsedMs(gameStartedAtRef.current);
@@ -1299,7 +1333,11 @@ export function MultiplayerFriendsScreen() {
           <Pressable
             accessibilityRole="button"
             style={styles.backBtn}
-            onPress={() => navigation.replace('Home')}
+            onPress={() => {
+              adManager.showInterstitial(() => {
+                navigation.replace('Home');
+              });
+            }}
           >
             <Text style={styles.backBtnText}>← Return to Menu</Text>
           </Pressable>
@@ -1766,6 +1804,7 @@ export function MultiplayerFriendsScreen() {
           </View>
         </View>
       )}
+      <AdBanner />
     </SafeAreaView>
   );
 }

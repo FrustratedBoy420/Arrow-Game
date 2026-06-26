@@ -84,6 +84,7 @@ class AdManager {
 
     this.isFullScreenAdShowing = true;
     console.log('📺 Presenting App Open Ad...');
+    useGameStore.getState().pauseGame();
 
     try {
       const unsubscribeClosed = this.appOpenAd.addAdEventListener(AdEventType.CLOSED, () => {
@@ -92,6 +93,9 @@ class AdManager {
         this.appOpenAd = null;
         this.isFullScreenAdShowing = false;
         this.lastAdDismissedTime = Date.now();
+        useGameStore.getState().resumeGame();
+        // Preload the next one immediately in background
+        this.preloadAppOpenAd();
       });
 
       this.appOpenAd.show().catch((err: any) => {
@@ -99,12 +103,76 @@ class AdManager {
         this.appOpenAd = null;
         this.isFullScreenAdShowing = false;
         this.lastAdDismissedTime = Date.now();
+        useGameStore.getState().resumeGame();
+        // Preload next ad immediately
+        this.preloadAppOpenAd();
       });
     } catch (error) {
       console.warn('❌ Exception while showing App Open Ad:', error);
       this.appOpenAd = null;
       this.isFullScreenAdShowing = false;
       this.lastAdDismissedTime = Date.now();
+      useGameStore.getState().resumeGame();
+      this.preloadAppOpenAd();
+    }
+  }
+
+
+
+  preloadAppOpenAd() {
+    if (!isAdMobAvailable) return;
+
+    const adsConfig = useGameStore.getState().adsConfig;
+    if (!adsConfig || !adsConfig.showAds || !adsConfig.showAppOpen) {
+      this.appOpenAd = null;
+      return;
+    }
+
+    if (this.isAppOpenAdLoading || (this.appOpenAd && this.appOpenAd.loaded)) {
+      return;
+    }
+
+    this.isAppOpenAdLoading = true;
+    console.log('🔄 Preloading App Open Ad in background...');
+
+    try {
+      const appOpenAdUnitId = (__DEV__ || adsConfig.useTestAds)
+        ? TestIds.APP_OPEN
+        : Platform.OS === 'android'
+          ? adsConfig.androidAppOpen
+          : adsConfig.iosAppOpen;
+
+      if (!appOpenAdUnitId) {
+        this.isAppOpenAdLoading = false;
+        return;
+      }
+
+      const appOpenAd = AppOpenAdClass.createForAdRequest(appOpenAdUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const unsubscribeLoaded = appOpenAd.addAdEventListener(AdEventType.LOADED, () => {
+        console.log('✅ App Open Ad Preloaded');
+        this.isAppOpenAdLoading = false;
+        this.appOpenAd = appOpenAd;
+        unsubscribeLoaded();
+        unsubscribeError();
+      });
+
+      const unsubscribeError = appOpenAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
+        console.warn('❌ App Open Ad failed to preload:', error);
+        this.isAppOpenAdLoading = false;
+        this.appOpenAd = null;
+        unsubscribeLoaded();
+        unsubscribeError();
+        // Retry preloading after 30 seconds
+        setTimeout(() => this.preloadAppOpenAd(), 30000);
+      });
+
+      appOpenAd.load();
+    } catch (error) {
+      console.warn('❌ Exception while preloading App Open Ad:', error);
+      this.isAppOpenAdLoading = false;
     }
   }
 
@@ -133,7 +201,7 @@ class AdManager {
     console.log('🔄 Loading App Open Ad...');
 
     try {
-      const appOpenAdUnitId = __DEV__
+      const appOpenAdUnitId = (__DEV__ || adsConfig.useTestAds)
         ? TestIds.APP_OPEN
         : Platform.OS === 'android'
           ? adsConfig.androidAppOpen
@@ -152,6 +220,8 @@ class AdManager {
         console.log('✅ App Open Ad Loaded');
         this.isAppOpenAdLoading = false;
         this.appOpenAd = appOpenAd;
+        unsubscribeLoaded();
+        unsubscribeError();
 
         // Safety check: Do not auto-show if user is playing
         const state = useGameStore.getState();
@@ -170,6 +240,8 @@ class AdManager {
         console.warn('❌ App Open Ad failed to load:', error);
         this.isAppOpenAdLoading = false;
         this.appOpenAd = null;
+        unsubscribeLoaded();
+        unsubscribeError();
       });
 
       appOpenAd.load();
@@ -178,6 +250,7 @@ class AdManager {
       this.isAppOpenAdLoading = false;
     }
   }
+
 
   loadInterstitial() {
     if (!isAdMobAvailable) return;
@@ -199,11 +272,12 @@ class AdManager {
 
     try {
       // Dynamic selection of unitId: Google Test IDs in dev, backend real IDs in preview/release
-      const interstitialAdUnitId = __DEV__
+      const interstitialAdUnitId = (__DEV__ || adsConfig.useTestAds)
         ? TestIds.INTERSTITIAL
         : Platform.OS === 'android'
           ? adsConfig.androidInterstitial
           : adsConfig.iosInterstitial;
+
 
       // Create a new instance
       const interstitial = InterstitialAdClass.createForAdRequest(interstitialAdUnitId, {
@@ -248,6 +322,7 @@ class AdManager {
     if (this.interstitial && this.interstitial.loaded) {
       console.log('📺 Showing Interstitial Ad...');
       this.isFullScreenAdShowing = true;
+      useGameStore.getState().pauseGame();
       
       try {
         const unsubscribeDismissed = this.interstitial.addAdEventListener(
@@ -258,6 +333,7 @@ class AdManager {
             this.interstitial = null;
             this.isFullScreenAdShowing = false;
             this.lastAdDismissedTime = Date.now();
+            useGameStore.getState().resumeGame();
             onClose();
             // Preload the next ad
             this.loadInterstitial();
@@ -269,6 +345,7 @@ class AdManager {
           this.interstitial = null;
           this.isFullScreenAdShowing = false;
           this.lastAdDismissedTime = Date.now();
+          useGameStore.getState().resumeGame();
           onClose();
           this.loadInterstitial();
         });
@@ -277,6 +354,7 @@ class AdManager {
         this.interstitial = null;
         this.isFullScreenAdShowing = false;
         this.lastAdDismissedTime = Date.now();
+        useGameStore.getState().resumeGame();
         onClose();
         this.loadInterstitial();
       }
@@ -286,6 +364,7 @@ class AdManager {
       this.loadInterstitial();
     }
   }
+
 
   loadRewarded() {
     if (!isAdMobAvailable) return;
@@ -304,11 +383,12 @@ class AdManager {
     console.log('🔄 Loading Rewarded Ad...');
 
     try {
-      const rewardedAdUnitId = __DEV__
+      const rewardedAdUnitId = (__DEV__ || adsConfig.useTestAds)
         ? TestIds.REWARDED
         : Platform.OS === 'android'
           ? adsConfig.androidRewarded
           : adsConfig.iosRewarded;
+
 
       if (!rewardedAdUnitId) {
         this.isRewardedAdLoading = false;
@@ -356,6 +436,7 @@ class AdManager {
     if (this.rewarded && this.rewarded.loaded) {
       console.log('📺 Showing Rewarded Ad...');
       this.isFullScreenAdShowing = true;
+      useGameStore.getState().pauseGame();
       let earned = false;
 
       try {
@@ -376,6 +457,7 @@ class AdManager {
             this.rewarded = null;
             this.isFullScreenAdShowing = false;
             this.lastAdDismissedTime = Date.now();
+            useGameStore.getState().resumeGame();
             
             if (earned) {
               onRewardEarned();
@@ -393,6 +475,7 @@ class AdManager {
           this.rewarded = null;
           this.isFullScreenAdShowing = false;
           this.lastAdDismissedTime = Date.now();
+          useGameStore.getState().resumeGame();
           onClose();
           this.loadRewarded();
         });
@@ -401,6 +484,7 @@ class AdManager {
         this.rewarded = null;
         this.isFullScreenAdShowing = false;
         this.lastAdDismissedTime = Date.now();
+        useGameStore.getState().resumeGame();
         onClose();
         this.loadRewarded();
       }
@@ -410,10 +494,16 @@ class AdManager {
     }
   }
 
+
   isRewardedAdReady(): boolean {
     return isAdMobAvailable && this.isInitialized && !!this.rewarded && this.rewarded.loaded;
   }
+
+  isAdShowing(): boolean {
+    return this.isFullScreenAdShowing;
+  }
 }
+
 
 export const adManager = new AdManager();
 

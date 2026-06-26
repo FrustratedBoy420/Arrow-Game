@@ -13,6 +13,8 @@ import Animated, {
 import { AmbientBackground } from '../components/AmbientBackground';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
+import { AdBanner } from '../components/AdBanner';
+
 
 export function MultiplayerModeSelectScreen() {
   const navigation = useNavigation<AppNavigation>();
@@ -118,7 +120,9 @@ export function MultiplayerModeSelectScreen() {
 
         </Animated.View>
       </View>
+      <AdBanner />
     </SafeAreaView>
+
   );
 }
 

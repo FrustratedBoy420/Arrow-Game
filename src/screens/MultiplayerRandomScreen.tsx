@@ -39,6 +39,9 @@ import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
+import { adManager } from '../utils/ads';
+import { AdBanner } from '../components/AdBanner';
+
 
 type MatchState = 'searching' | 'found' | 'playing' | 'results';
 
@@ -336,9 +339,12 @@ export function MultiplayerRandomScreen() {
   const handleGameOver = useCallback((userWon: boolean) => {
     if (matchStateRef.current !== 'playing') return;
     if (botTimerRef.current) clearTimeout(botTimerRef.current);
-    setMatchState('results');
-    void recordMatchResult(userWon);
+    adManager.showInterstitial(() => {
+      setMatchState('results');
+      void recordMatchResult(userWon);
+    });
   }, []);
+
 
   useEffect(() => {
     if (matchState === 'playing') {
@@ -500,7 +506,9 @@ export function MultiplayerRandomScreen() {
     setRematchTimerVal(10);
 
     const interval = setInterval(() => {
+      if (adManager.isAdShowing()) return;
       setRematchTimerVal((prev) => {
+
         if (prev === null) return null;
         if (prev <= 1) {
           clearInterval(interval);
@@ -770,10 +778,15 @@ export function MultiplayerRandomScreen() {
         <Pressable
           accessibilityRole="button"
           style={styles.resultsLeaveBtn}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            adManager.showInterstitial(() => {
+              navigation.goBack();
+            });
+          }}
         >
           <Text style={styles.resultsLeaveBtnText}>← Exit Arena</Text>
         </Pressable>
+
       </View>
     );
   };
@@ -807,11 +820,18 @@ export function MultiplayerRandomScreen() {
         <ExitConfirmModal
           visible={exitModalVisible}
           onClose={() => setExitModalVisible(false)}
-          onConfirm={() => { setExitModalVisible(false); navigation.goBack(); }}
+          onConfirm={() => {
+            setExitModalVisible(false);
+            adManager.showInterstitial(() => {
+              navigation.goBack();
+            });
+          }}
           title="Cancel Search"
           description="Are you sure you want to stop searching for a match?"
         />
+        <AdBanner />
       </SafeAreaView>
+
     );
   }
 
@@ -832,11 +852,18 @@ export function MultiplayerRandomScreen() {
         <ExitConfirmModal
           visible={exitModalVisible}
           onClose={() => setExitModalVisible(false)}
-          onConfirm={() => { setExitModalVisible(false); navigation.goBack(); }}
+          onConfirm={() => {
+            setExitModalVisible(false);
+            adManager.showInterstitial(() => {
+              navigation.goBack();
+            });
+          }}
           title="Leave Match"
           description="Are you sure you want to leave?"
         />
+        <AdBanner />
       </SafeAreaView>
+
     );
   }
 
@@ -939,7 +966,9 @@ export function MultiplayerRandomScreen() {
           title="Forfeit Match"
           description="Are you sure you want to resign? You will lose this match."
         />
+        <AdBanner />
       </SafeAreaView>
+
     );
   }
 
@@ -973,8 +1002,10 @@ export function MultiplayerRandomScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <AmbientBackground />
+      <AdBanner />
     </SafeAreaView>
   );
+
 }
 
 const styles = StyleSheet.create({

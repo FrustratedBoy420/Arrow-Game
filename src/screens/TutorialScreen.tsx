@@ -12,6 +12,8 @@ import { getLevel, LOADING_LEVEL } from '../levels/levels';
 import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
+import { AdBanner } from '../components/AdBanner';
+
 
 // TutorialScreen is always Level 1 — resolved lazily so we don't crash
 // when level.json is empty (levels come from DB on first fetch).
@@ -56,7 +58,9 @@ export function TutorialScreen() {
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
       />
+      <AdBanner />
     </SafeAreaView>
+
   );
 }
 

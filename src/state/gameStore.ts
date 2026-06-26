@@ -57,7 +57,9 @@ type GameStore = {
     iosInterstitial: string;
     iosAppOpen: string;
     iosRewarded: string;
+    useTestAds?: boolean;
   };
+
   resetAllProgress: () => void;
   // Level Management System Integration
   levelProgressMap: Map<number, LevelProgress>;
@@ -136,7 +138,9 @@ export const useGameStore = create<GameStore>()(
         iosInterstitial: 'ca-app-pub-3940256099942544/4411468910',
         iosAppOpen: 'ca-app-pub-3940256099942544/9257395921',
         iosRewarded: 'ca-app-pub-3940256099942544/5224354917',
+        useTestAds: false,
       },
+
       levelProgressMap: initialLevelMap,
       starsEarnedThisLevel: 0,
       hasRecordedCurrentLevel: false,

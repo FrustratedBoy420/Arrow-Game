@@ -12,6 +12,8 @@ import {
 import { theme } from '../theme/theme';
 import { AmbientBackground } from '../components/AmbientBackground';
 import { useGameStore } from '../state/gameStore';
+import { AdBanner } from '../components/AdBanner';
+
 
 type PrivacyPolicyModalProps = {
   visible: boolean;
@@ -152,7 +154,9 @@ export function TermsScreen({ onAccept, onReject }: TermsScreenProps) {
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
       />
+      <AdBanner />
     </SafeAreaView>
+
   );
 }
 

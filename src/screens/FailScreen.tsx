@@ -12,6 +12,8 @@ import { audioManager } from '../utils/audio';
 import { theme } from '../theme/theme';
 import { adManager } from '../utils/ads';
 import type { AppNavigation } from '../types/navigation';
+import { AdBanner } from '../components/AdBanner';
+
 
 export function FailScreen() {
   const navigation = useNavigation<AppNavigation>();
@@ -74,7 +76,9 @@ export function FailScreen() {
           navigation.replace('Gameplay');
         }}
       />
+      <AdBanner />
     </SafeAreaView>
+
   );
 }
 

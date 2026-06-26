@@ -24,6 +24,8 @@ import { audioManager } from '../utils/audio';
 import { theme } from '../theme/theme';
 import { adManager } from '../utils/ads';
 import type { AppNavigation } from '../types/navigation';
+import { AdBanner } from '../components/AdBanner';
+
 
 export function VictoryScreen() {
   const navigation = useNavigation<AppNavigation>();
@@ -187,7 +189,9 @@ export function VictoryScreen() {
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
       />
+      <AdBanner />
     </SafeAreaView>
+
   );
 }
 

@@ -25,6 +25,8 @@ import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
 import { adManager } from '../utils/ads';
+import { AdBanner } from '../components/AdBanner';
+
 
 type BlockedArrowEntry = { arrow: ArrowNode; blocker: ArrowNode | null };
 
@@ -279,6 +281,8 @@ export function GameplayScreen() {
         onRestart={retry}
         hintDisabled={false}
       />
+      <AdBanner />
+
       <SettingsModal
         visible={settingsVisible}
         onClose={() => {

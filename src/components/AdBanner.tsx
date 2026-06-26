@@ -28,11 +28,12 @@ export function AdBanner() {
   }
 
   // Dynamic selection of unitId: Google Test IDs in dev, backend real IDs in preview/release
-  const bannerAdUnitId = __DEV__
+  const bannerAdUnitId = (__DEV__ || adsConfig.useTestAds)
     ? TestIds.BANNER
     : Platform.OS === 'android'
       ? adsConfig.androidBanner
       : adsConfig.iosBanner;
+
 
   return (
     <View style={styles.container}>
