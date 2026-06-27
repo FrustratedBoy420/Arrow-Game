@@ -70,7 +70,6 @@ type TermsScreenProps = {
   onAccept: () => void;
   onReject: () => void;
 };
-
 export function TermsScreen({ onAccept, onReject }: TermsScreenProps) {
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -94,44 +93,29 @@ export function TermsScreen({ onAccept, onReject }: TermsScreenProps) {
       <AmbientBackground />
       
       <View style={styles.content}>
-        {/* Decorative arrow matching HomeScreen */}
-        <View style={styles.arrowDeco}>
-          <Text style={styles.arrowIcon}>➤</Text>
-        </View>
-
-        <Text style={styles.title}>ArrowVerse{'\n'}Multiplayer</Text>
-        <Text style={styles.subtitle}>Think · Tap · Escape</Text>
-
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Terms & Consent</Text>
           <Text style={styles.cardText}>
-            We only use an anonymous System ID to save your level progress. No personal data is ever collected or tracked.
+            We use an anonymous System ID to save your progress. By continuing, you agree to our{' '}
+            <Text style={styles.linkTextInline} onPress={() => setModalVisible(true)}>
+              Privacy Policy
+            </Text>{' '}
+            and{' '}
+            <Text style={styles.linkTextInline} onPress={openDetailedTerms}>
+              Terms & Conditions
+            </Text>
+            .
           </Text>
 
-          <View style={styles.linksRow}>
-            <Pressable
-              style={styles.linkButton}
-              onPress={() => setModalVisible(true)}
-            >
-              <Text style={styles.linkText}>Privacy Policy</Text>
+          <View style={styles.buttonRow}>
+            <Pressable style={styles.declineBtnSmall} onPress={onReject}>
+              <Text style={styles.declineBtnTextSmall}>Decline</Text>
             </Pressable>
-            <Text style={styles.linkDivider}>|</Text>
-            <Pressable
-              style={styles.linkButton}
-              onPress={openDetailedTerms}
-            >
-              <Text style={styles.linkText}>Terms & Conditions</Text>
+            <Pressable style={styles.acceptBtnSmall} onPress={onAccept}>
+              <Text style={styles.acceptBtnTextSmall}>Accept</Text>
             </Pressable>
           </View>
         </View>
-
-        <Pressable style={styles.acceptBtn} onPress={onAccept}>
-          <Text style={styles.acceptBtnText}>Accept & Play</Text>
-        </Pressable>
-
-        <Pressable style={styles.declineBtn} onPress={onReject}>
-          <Text style={styles.declineBtnText}>Decline & Exit</Text>
-        </Pressable>
       </View>
 
       <PrivacyPolicyModal
@@ -140,7 +124,6 @@ export function TermsScreen({ onAccept, onReject }: TermsScreenProps) {
       />
       <AdBanner />
     </SafeAreaView>
-
   );
 }
 
@@ -155,101 +138,69 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
   },
-  arrowDeco: {
-    marginBottom: 10,
-  },
-  arrowIcon: {
-    fontSize: 48,
-    color: theme.colors.arrowStroke,
-    opacity: 0.6,
-  },
-  title: {
-    fontSize: 42,
-    fontWeight: '900',
-    color: theme.colors.arrowStroke,
-    textAlign: 'center',
-    lineHeight: 46,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: theme.colors.textMuted,
-    textAlign: 'center',
-    marginTop: 8,
-    fontWeight: '600',
-    letterSpacing: 2,
-    marginBottom: 20,
-  },
   card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 20,
-    padding: 20,
+    padding: 24,
     width: '100%',
-    maxWidth: 340,
+    maxWidth: 320,
     alignItems: 'center',
     ...theme.shadows.md,
-    marginBottom: 24,
   },
   cardTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: theme.colors.textPrimary,
     marginBottom: 12,
+    textAlign: 'center',
   },
   cardText: {
-    fontSize: 15,
+    fontSize: 14,
     color: theme.colors.textMuted,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  linksRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 8
-  },
-  linkDivider: {
-    color: theme.colors.textMuted,
+  linkTextInline: {
     fontSize: 14,
-    opacity: 0.5
-  },
-  linkButton: {
-    paddingVertical: 6,
-  },
-  linkText: {
-    fontSize: 15,
     color: theme.colors.textPrimary,
     textDecorationLine: 'underline',
     fontWeight: '700',
   },
-  acceptBtn: {
-    backgroundColor: theme.colors.arrowStroke,
-    width: 250,
-    paddingVertical: 16,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...theme.shadows.md,
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 16,
+    gap: 12,
   },
-  acceptBtnText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  declineBtn: {
-    marginTop: 12,
-    width: 250,
-    paddingVertical: 14,
-    borderRadius: 30,
+  declineBtnSmall: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#D32F2F',
     backgroundColor: 'transparent',
   },
-  declineBtnText: {
+  declineBtnTextSmall: {
     color: '#D32F2F',
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  acceptBtnSmall: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.arrowStroke,
+    ...theme.shadows.sm,
+  },
+  acceptBtnTextSmall: {
+    color: 'white',
+    fontSize: 14,
     fontWeight: '700',
   },
   // Modal styles

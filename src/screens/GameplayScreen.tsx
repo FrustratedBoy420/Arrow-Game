@@ -18,6 +18,7 @@ import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
 import { SettingsModal } from '../components/SettingsModal';
 import { StarRatingDisplay } from '../components/StarRatingDisplay';
 import { ExitConfirmModal } from '../components/ExitConfirmModal';
+import { CustomAlertModal } from '../components/CustomAlertModal';
 import { findBlockingArrow, isFrontClear } from '../game/engine';
 import type { ArrowNode } from '../game/types';
 import { useGameStore } from '../state/gameStore';
@@ -50,6 +51,13 @@ export function GameplayScreen() {
   const [exitingArrows, setExitingArrows] = useState<ArrowNode[]>([]);
   const [blockedArrows, setBlockedArrows] = useState<BlockedArrowEntry[]>([]);
   const [lastTap, setLastTap] = useState<{ x: number; y: number; timestamp: number } | undefined>(undefined);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertDescription, setAlertDescription] = useState('');
+  const [alertConfirmText, setAlertConfirmText] = useState('OK');
+  const [alertCancelText, setAlertCancelText] = useState('Cancel');
+  const [alertOnConfirm, setAlertOnConfirm] = useState<(() => void) | undefined>(undefined);
+  const [alertIconName, setAlertIconName] = useState<any>('information-circle-outline');
   const pendingNav = useRef<'Victory' | 'Fail' | null>(null);
   const boardScale = useSharedValue(1);
   const boardOpacity = useSharedValue(1);
@@ -185,7 +193,12 @@ export function GameplayScreen() {
     const currentBoard = useGameStore.getState().board;
     const hintArrow = currentBoard.arrows.find((a) => isFrontClear(a, currentBoard));
     if (!hintArrow) {
-      Alert.alert('No Hint', 'No valid move right now. Try Undo!');
+      setAlertTitle('No Hint');
+      setAlertDescription('No valid move right now. Try Undo!');
+      setAlertConfirmText('OK');
+      setAlertOnConfirm(undefined);
+      setAlertIconName('alert-circle-outline');
+      setAlertVisible(true);
       return;
     }
 
@@ -202,32 +215,30 @@ export function GameplayScreen() {
 
     if (state.hintUsedThisLevel && !isAdminUser) {
       if (!adManager.isRewardedAdReady()) {
-        Alert.alert(
-          'Ad Loading',
-          'The reward video is still loading. Please try again in a few seconds.',
-          [{ text: 'OK' }]
-        );
+        setAlertTitle('Ad Loading');
+        setAlertDescription('The reward video is still loading. Please try again in a few seconds.');
+        setAlertConfirmText('OK');
+        setAlertOnConfirm(undefined);
+        setAlertIconName('hourglass-outline');
+        setAlertVisible(true);
         return;
       }
 
-      Alert.alert(
-        'Get Another Hint',
-        'Would you like to watch a short video to get another hint for this level?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Watch Ad',
-            onPress: () => {
-              adManager.showRewarded(
-                () => {
-                  triggerHint(true);
-                },
-                () => {}
-              );
-            }
-          }
-        ]
-      );
+      setAlertTitle('Get Another Hint');
+      setAlertDescription('Would you like to watch a short video to get another hint for this level?');
+      setAlertConfirmText('Watch Ad');
+      setAlertCancelText('Cancel');
+      setAlertIconName('play-circle-outline');
+      setAlertOnConfirm(() => () => {
+        setAlertVisible(false);
+        adManager.showRewarded(
+          () => {
+            triggerHint(true);
+          },
+          () => {}
+        );
+      });
+      setAlertVisible(true);
       return;
     }
 
@@ -307,6 +318,16 @@ export function GameplayScreen() {
         }}
         title="Exit Level"
         description="Are you sure you want to exit? Your progress in this level will be lost."
+      />
+      <CustomAlertModal
+        visible={alertVisible}
+        onClose={() => setAlertVisible(false)}
+        title={alertTitle}
+        description={alertDescription}
+        confirmText={alertConfirmText}
+        cancelText={alertCancelText}
+        onConfirm={alertOnConfirm}
+        iconName={alertIconName}
       />
     </SafeAreaView>
   );

@@ -242,22 +242,6 @@ export function HomeScreen() {
           </View>
         </View>
 
-        {/* Network / Fetching status badge */}
-        {(!isConnected || !dynamicLevels || dynamicLevels.length === 0) && (
-          <View style={[
-            styles.statusBadge,
-            styles.statusBadgeOffline
-          ]}>
-            <View style={[
-              styles.statusDot,
-              styles.statusDotOffline
-            ]} />
-            <Text style={styles.statusText}>
-              Offline Mode
-            </Text>
-          </View>
-        )}
-
         {/* Gear settings button */}
         <Pressable
           style={styles.settingsBtn}
