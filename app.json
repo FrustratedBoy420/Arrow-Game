@@ -29,6 +29,16 @@
     ],
     "android": {
       "package": "com.app.arrow_verse",
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.VIBRATE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "com.google.android.gms.permission.AD_ID"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#F6F1E8"
@@ -42,9 +52,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "0c562cb9-3a12-4ac0-b75f-f385d23a5255"
+        "projectId": "7b5fe8bb-09c9-4011-9587-a35a9f544234"
       }
     },
-    "owner": "mridul_jaiswal_420"
+    "owner": "kazal-tech"
   }
 }
