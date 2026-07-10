@@ -35,13 +35,15 @@ export async function registerUserProfile() {
     }
 
     const profileName = await AsyncStorage.getItem('user_profile_name') || 'Guest';
+    const highestUnlockedLevel = useGameStore.getState().highestUnlockedLevel;
 
-    // 1. Send profile registration to backend (systemId, name, os, osVersion)
+    // 1. Send profile registration to backend (systemId, name, os, osVersion, highestUnlockedLevel)
     const payload = {
       systemId,
       name: profileName,
       os: Platform.OS,
       osVersion: String(Platform.Version),
+      highestUnlockedLevel,
     };
 
     console.log('📡 Registering user profile:', payload);

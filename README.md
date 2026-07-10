@@ -83,8 +83,8 @@ This project uses Expo public environment variables. Anything prefixed with `EXP
 
 ```env
 EXPO_PUBLIC_APP_NAME=ArrowVerse-Multiplayer
-EXPO_PUBLIC_APP_SLUG=arrowverse-multiplayer
-EXPO_PUBLIC_APP_VERSION=0.1.0
+EXPO_PUBLIC_APP_SLUG=arrow-escape
+EXPO_PUBLIC_APP_VERSION=0.3.2
 EXPO_PUBLIC_APP_SCHEME=arrowversemultiplayer
 EXPO_PUBLIC_ENABLE_ANALYTICS=false
 EXPO_PUBLIC_ENABLE_HAPTICS=true

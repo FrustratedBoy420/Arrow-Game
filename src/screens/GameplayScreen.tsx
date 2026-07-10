@@ -110,6 +110,14 @@ export function GameplayScreen() {
     }, [])
   );
 
+  // Track active gameplay for ad blocking
+  useEffect(() => {
+    useGameStore.setState({ isGameplayActive: true });
+    return () => {
+      useGameStore.setState({ isGameplayActive: false });
+    };
+  }, []);
+
   // Clear animation queues on level change (retry / next level).
   useEffect(() => {
     setExitingArrows([]);

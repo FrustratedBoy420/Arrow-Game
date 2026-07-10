@@ -82,6 +82,9 @@ export default function App() {
           // Register user profile asynchronously to prevent blocking app startup
           void registerUserProfile();
         }
+
+        // Fetch latest game config on startup to ensure we have the newest version config and avoid deadlock
+        await useGameStore.getState().fetchGameConfig();
       } catch (e) {
         console.warn(e);
       } finally {

@@ -47,8 +47,8 @@ export function FailScreen() {
       </View>
       <View style={styles.content}>
         <Text style={styles.icon}>✖</Text>
-        <Text style={styles.title}>Out of Moves</Text>
-        <Text style={styles.copy}>No more clear paths available. Rethink your strategy and try again!</Text>
+        <Text style={styles.title}>Out of Lives</Text>
+        <Text style={styles.copy}>You ran out of lives! Avoid tapping blocked arrows and try again.</Text>
         
         <Pressable
           accessibilityRole="button"

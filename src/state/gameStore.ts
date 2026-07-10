@@ -94,6 +94,7 @@ type GameStore = {
   resumeGame: () => void;
   isMultiplayerActive: boolean;
   setIsMultiplayerActive: (active: boolean) => void;
+  isGameplayActive: boolean;
 };
 
 // Use LOADING_LEVEL stub — real levels come from the DB on first fetch
@@ -177,6 +178,7 @@ export const useGameStore = create<GameStore>()(
       },
       isMultiplayerActive: false,
       setIsMultiplayerActive: (active) => set({ isMultiplayerActive: active }),
+      isGameplayActive: false,
 
       resetAllProgress: () => {
         const freshMap = require('../systems/levelManagement').initializeLevelMap();
@@ -571,10 +573,19 @@ export const useGameStore = create<GameStore>()(
           else if (finalStarsCalculated >= 3) earned = 25;
         }
 
+        // Calculate highest unlocked level from levelProgressMap
+        let maxUnlocked = 1;
+        for (const [lvlId, progress] of levelProgressMap.entries()) {
+          if (!progress.isLocked && lvlId > maxUnlocked) {
+            maxUnlocked = lvlId;
+          }
+        }
+
         set((state) => ({ 
           starsEarnedThisLevel: finalStarsCalculated,
           coinsEarnedThisLevel: earned,
-          coins: state.coins + earned 
+          coins: state.coins + earned,
+          highestUnlockedLevel: Math.max(state.highestUnlockedLevel, maxUnlocked)
         }));
 
         // Persist updated progress (includes newly unlocked levels from checkLevelUnlocks)
@@ -582,6 +593,11 @@ export const useGameStore = create<GameStore>()(
 
         // Force re-render by replacing the map reference
         set({ levelProgressMap: new Map(levelProgressMap) });
+
+        // Sync progress to backend
+        import('../utils/userRegistration').then(({ registerUserProfile }) => {
+          registerUserProfile();
+        }).catch((err) => console.log('Error syncing user profile:', err));
 
         // If all currently available levels are completed, fetch the next batch from DB
         const activeLevels = dynamicLevels || [];
