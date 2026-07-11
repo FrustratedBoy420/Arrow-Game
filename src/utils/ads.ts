@@ -137,7 +137,7 @@ class AdManager {
     console.log('🔄 Preloading App Open Ad in background...');
 
     try {
-      const appOpenAdUnitId = (__DEV__ || adsConfig.useTestAds)
+      const appOpenAdUnitId = adsConfig.useTestAds
         ? TestIds.APP_OPEN
         : Platform.OS === 'android'
           ? adsConfig.androidAppOpen
@@ -202,7 +202,7 @@ class AdManager {
     console.log('🔄 Loading App Open Ad...');
 
     try {
-      const appOpenAdUnitId = (__DEV__ || adsConfig.useTestAds)
+      const appOpenAdUnitId = adsConfig.useTestAds
         ? TestIds.APP_OPEN
         : Platform.OS === 'android'
           ? adsConfig.androidAppOpen
@@ -273,7 +273,7 @@ class AdManager {
 
     try {
       // Dynamic selection of unitId: Google Test IDs in dev, backend real IDs in preview/release
-      const interstitialAdUnitId = (__DEV__ || adsConfig.useTestAds)
+      const interstitialAdUnitId = adsConfig.useTestAds
         ? TestIds.INTERSTITIAL
         : Platform.OS === 'android'
           ? adsConfig.androidInterstitial
@@ -384,7 +384,7 @@ class AdManager {
     console.log('🔄 Loading Rewarded Ad...');
 
     try {
-      const rewardedAdUnitId = (__DEV__ || adsConfig.useTestAds)
+      const rewardedAdUnitId = adsConfig.useTestAds
         ? TestIds.REWARDED
         : Platform.OS === 'android'
           ? adsConfig.androidRewarded
