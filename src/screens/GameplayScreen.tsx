@@ -221,7 +221,8 @@ export function GameplayScreen() {
       }
     };
 
-    if (state.hintUsedThisLevel && !isAdminUser) {
+    const isRewardedAdEnabled = adManager.isRewardedAdEnabled();
+    if (state.hintUsedThisLevel && !isAdminUser && isRewardedAdEnabled) {
       if (!adManager.isRewardedAdReady()) {
         setAlertTitle('Ad Loading');
         setAlertDescription('The reward video is still loading. Please try again in a few seconds.');
@@ -250,7 +251,7 @@ export function GameplayScreen() {
       return;
     }
 
-    triggerHint(false);
+    triggerHint(state.hintUsedThisLevel);
   }, [useHint]);
 
   return (

@@ -500,6 +500,12 @@ class AdManager {
     return isAdMobAvailable && this.isInitialized && !!this.rewarded && this.rewarded.loaded;
   }
 
+  isRewardedAdEnabled(): boolean {
+    if (!isAdMobAvailable) return false;
+    const adsConfig = useGameStore.getState().adsConfig;
+    return !!(adsConfig && adsConfig.showAds && adsConfig.showRewarded);
+  }
+
   isAdShowing(): boolean {
     return this.isFullScreenAdShowing;
   }
