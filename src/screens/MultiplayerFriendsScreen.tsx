@@ -889,6 +889,23 @@ export function MultiplayerFriendsScreen() {
           }))
         );
 
+        // Record battle history
+        const me = playerNameRef.current.trim().toLowerCase();
+        const winner = String(data.winner || '').trim().toLowerCase();
+        const outcome = winner === me ? 'WIN' : (winner ? 'LOSS' : 'DRAW');
+        const opponent = data.players?.find((p: any) => p.name.toLowerCase() !== me)?.name || 'Challenger';
+        const totalArrows = levelRef.current?.arrows?.length || 10;
+        const durationSec = Math.round((Date.now() - (gameStartedAtRef.current || Date.now())) / 1000);
+
+        useGameStore.getState().recordMultiplayerBattle({
+          opponentName: opponent,
+          roomCode: roomCodeRef.current || 'MP-FRIENDS',
+          outcome,
+          arrowsCleared: scoresRef.current[playerNameRef.current] || Math.floor(totalArrows / 2),
+          totalArrows,
+          durationSeconds: durationSec
+        });
+
         setRematchStates({});
         adManager.showInterstitial(() => {
           setStep('results');

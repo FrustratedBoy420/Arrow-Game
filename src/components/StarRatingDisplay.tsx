@@ -13,7 +13,7 @@
  *  FIX 3: Dispatches finalStarsCalculated to Zustand store for VictoryScreen sync
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -30,7 +30,7 @@ interface StarRatingDisplayProps {
   levelBaselineSeconds: number;
 }
 
-export function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayProps) {
+export const StarRatingDisplay = memo(function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayProps) {
   const board = useGameStore((s) => s.board);
   const gameStartTime = useGameStore((s) => s.gameStartTime);
   const status = useGameStore((s) => s.status);
@@ -55,7 +55,7 @@ export function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayPro
   const star1Scale = useSharedValue(1);
   const timerScale = useSharedValue(1);
 
-  // Update time every 100ms
+  // ponytail: 1000ms is plenty — stars only change at whole-second thresholds
   useEffect(() => {
     if (gameStartTime === null) {
       setTimeTaken(0);
@@ -76,7 +76,7 @@ export function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayPro
       }
       const elapsed = Math.round(Math.max(0, elapsedMs) / 1000);
       setTimeTaken(elapsed);
-    }, 100);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [gameStartTime, status]);
@@ -89,8 +89,9 @@ export function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayPro
 
   // Calculate stars based on time AND hearts
   useEffect(() => {
-    // Push authoritative score to global store so VictoryScreen reads it instantly
-    setFinalStarsCalculated(currentFinalStars);
+    // ponytail: queueMicrotask breaks the synchronous render chain that caused
+    // "Cannot update component (SettingsModal) while rendering (VictoryScreen)"
+    queueMicrotask(() => setFinalStarsCalculated(currentFinalStars));
 
     // Visual Animations — fading stars based on FINAL result (Time + Health)
     if (currentFinalStars === 3) {
@@ -167,7 +168,7 @@ export function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayPro
       </Animated.View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

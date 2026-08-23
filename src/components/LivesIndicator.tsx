@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 
 import { theme } from '../theme/theme';
 
@@ -8,7 +8,7 @@ type Props = {
   livesLeft: number;
 };
 
-export function LivesIndicator({ livesLeft }: Props) {
+export const LivesIndicator = memo(function LivesIndicator({ livesLeft }: Props) {
   const prevLives = useRef(livesLeft);
   const scale = useSharedValue(1);
   const shakeX = useSharedValue(0);
@@ -42,14 +42,14 @@ export function LivesIndicator({ livesLeft }: Props) {
 
   return (
     <Animated.View style={animStyle} accessibilityLabel={`${livesLeft} lives left`}>
-      {Array.from({ length: 3 }, (_, index) => (
+      {Array.from({ length: Math.max(3, livesLeft) }, (_, index) => (
         <Text key={index} style={[styles.drop, index >= livesLeft && styles.empty]}>
           {index < livesLeft ? '❤' : '♡'}
         </Text>
       ))}
     </Animated.View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

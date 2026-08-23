@@ -32,8 +32,11 @@ import { ZoomableBoardViewport } from '../components/ZoomableBoardViewport';
 import { CustomAlertModal } from '../components/CustomAlertModal';
 
 import { createInitialBoard, findBlockingArrow, resolveTap, isFrontClear } from '../game/engine';
-import { calculateNextMoveDelay, recordMatchResult, shouldBotMissMove } from '../game/botEngine';
+import { calculateNextMoveDelay, shouldBotMissMove } from '../game/botEngine';
 import { getRandomBotName } from '../game/botNames';
+import type { BotProfile } from '../game/apex/types';
+import { loadProfile, saveProfile, processMatchResult, prepareMatch } from '../game/apex/playerExperienceService';
+import { calculatePuzzleDifficulty } from '../game/apex/puzzleSelector';
 import type { ArrowNode, BoardState, LevelDefinition } from '../game/types';
 import { useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
@@ -74,12 +77,14 @@ export function MultiplayerRandomScreen() {
   }, []);
   const [playerName, setPlayerName] = useState('You');
   const [userResigned, setUserResigned] = useState(false);
-  const [rematchRequestedByMe, setRematchRequestedByMe] = useState(false);
-  const [rematchStatus, setRematchStatus] = useState<'idle' | 'waiting' | 'accepted' | 'declined'>('idle');
-  const [rematchDeclinedAlert, setRematchDeclinedAlert] = useState(false);
   const [dbLevels, setDbLevels] = useState<LevelDefinition[]>([]);
-  const [rematchTimerVal, setRematchTimerVal] = useState<number | null>(null);
-  const [rematchRequestedByOpponent, setRematchRequestedByOpponent] = useState(false);
+
+  // ─── APEX State ─────────────────────────────────────────────────────
+  const apexProfileRef = useRef<import('../game/apex/types').PlayerExperienceProfile | null>(null);
+  const activeBotRef = useRef<BotProfile | null>(null);
+  const matchStartTimeRef = useRef(0);
+  const mistakesRef = useRef(0);
+  const wasTrailingRef = useRef(false);
 
   useEffect(() => {
     const loadProfileName = async () => {
@@ -114,8 +119,15 @@ export function MultiplayerRandomScreen() {
       }
     };
 
+    // Load APEX profile
+    const loadApex = async () => {
+      apexProfileRef.current = await loadProfile();
+      console.log(`🧠 APEX loaded: skill=${apexProfileRef.current.skillRating}, state=${apexProfileRef.current.experienceState}`);
+    };
+
     void loadProfileName();
     void loadDbLevels();
+    void loadApex();
   }, []);
 
   // ─── Game State ──────────────────────────────────────────────────
@@ -128,6 +140,12 @@ export function MultiplayerRandomScreen() {
   const [oppScore, setOppScore] = useState(0);
   const [opponentArrowsLeft, setOpponentArrowsLeft] = useState(0);
   const [totalArrows, setTotalArrows] = useState(0);
+
+  // ─── Emote Reaction System ─────────────────────────────────────────
+  const [myActiveEmote, setMyActiveEmote] = useState<string | null>(null);
+  const [oppActiveEmote, setOppActiveEmote] = useState<string | null>(null);
+  const myEmoteTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const oppEmoteTimerRef = useRef<NodeJS.Timeout | null>(null);
   // ─── Animated Values (ALL declared unconditionally at top level) ──
   const boardScale = useSharedValue(1);
   const boardOpacity = useSharedValue(1);
@@ -169,7 +187,6 @@ export function MultiplayerRandomScreen() {
 
   // ─── Bot logic refs ───────────────────────────────────────────────
   const botTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const botRematchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const boardRef = useRef<BoardState | null>(board);
   const opponentArrowsLeftRef = useRef(opponentArrowsLeft);
   const levelRef = useRef<LevelDefinition | null>(level);
@@ -207,9 +224,10 @@ export function MultiplayerRandomScreen() {
     const msgInterval = setInterval(() => {
       msgIndex = (msgIndex + 1) % SEARCHING_MESSAGES.length;
       setSearchingMessage(SEARCHING_MESSAGES[msgIndex]);
-    }, 2000);
+    }, 1500);
 
-    const searchTime = Math.random() * 2000 + 1500;
+    // Snappy search time: 0.6s to 1.2s
+    const searchTime = Math.random() * 600 + 600;
     const searchTimer = setTimeout(() => {
       const name = getRandomBotName() ?? 'Opponent';
       setOpponent({ name });
@@ -227,9 +245,9 @@ export function MultiplayerRandomScreen() {
     if (matchState !== 'found') return;
 
     matchFoundScale.value = withSpring(1, { damping: 12, stiffness: 200 });
-    matchFoundOpacity.value = withTiming(1, { duration: 300 });
+    matchFoundOpacity.value = withTiming(1, { duration: 250 });
 
-    const timer = setTimeout(() => startGame(), 1000);
+    const timer = setTimeout(() => startGame(), 500);
     return () => clearTimeout(timer);
   }, [matchState]);
 
@@ -239,13 +257,30 @@ export function MultiplayerRandomScreen() {
       navigation.goBack();
       return;
     }
-    const randLevel = levelsToUse[Math.floor(Math.random() * levelsToUse.length)];
+
+    // APEX: select bot + puzzle adaptively based on player profile
+    let randLevel: LevelDefinition | undefined;
+    if (apexProfileRef.current && levelsToUse.length > 0) {
+      const match = prepareMatch(apexProfileRef.current, levelsToUse);
+      randLevel = match.level;
+      activeBotRef.current = match.bot;
+      console.log(`🧠 APEX match: bot=${match.bot.tier}(${match.bot.skill}), puzzle=${match.puzzleDifficulty}`);
+    } else {
+      randLevel = levelsToUse[Math.floor(Math.random() * levelsToUse.length)];
+      activeBotRef.current = null;
+    }
+
     if (!randLevel) {
       navigation.goBack();
       return;
     }
     const initialBoard = createInitialBoard(randLevel, 3);
     const total = randLevel.arrows.length;
+
+    // Reset APEX telemetry for this match
+    matchStartTimeRef.current = Date.now();
+    mistakesRef.current = 0;
+    wasTrailingRef.current = false;
 
     unstable_batchedUpdates(() => {
       setLevel(randLevel);
@@ -258,7 +293,6 @@ export function MultiplayerRandomScreen() {
       setBlockedArrows([]);
       userWonRef.current = false;
       setMatchState('playing');
-      setRematchRequestedByOpponent(false);
     });
 
     boardRef.current = initialBoard;
@@ -288,7 +322,8 @@ export function MultiplayerRandomScreen() {
     const delay = calculateNextMoveDelay(
       opponentArrowsLeftRef.current,
       total - myScoreRef.current,
-      total
+      total,
+      activeBotRef.current ?? undefined
     );
 
     botTimerRef.current = setTimeout(() => {
@@ -297,7 +332,7 @@ export function MultiplayerRandomScreen() {
       const liveBoard = boardRef.current;
       if (!liveBoard || !levelRef.current || liveBoard.arrows.length === 0) return;
 
-      if (shouldBotMissMove()) {
+      if (shouldBotMissMove(activeBotRef.current ?? undefined)) {
         scheduleNextBotMove();
         return;
       }
@@ -336,6 +371,10 @@ export function MultiplayerRandomScreen() {
       const newOppScore = (levelRef.current?.arrows.length ?? 0) - newOppLeft;
       oppScoreRef.current = newOppScore;
       setOppScore(newOppScore);
+
+      // APEX comeback detection: if bot leads by 2+, mark trailing
+      if (newOppScore > myScoreRef.current + 1) wasTrailingRef.current = true;
+
       oppScaleAnim.value = withSequence(
         withTiming(1.3, { duration: 100 }),
         withSpring(1, { damping: 10, stiffness: 300 })
@@ -350,8 +389,69 @@ export function MultiplayerRandomScreen() {
     if (botTimerRef.current) clearTimeout(botTimerRef.current);
     adManager.showInterstitial(() => {
       setMatchState('results');
-      void recordMatchResult(userWon);
+
+      // APEX: process match result and update player profile
+      const matchDurationMs = Date.now() - matchStartTimeRef.current;
+      const durationSeconds = Math.round(matchDurationMs / 1000);
+      if (apexProfileRef.current && levelRef.current) {
+        const updated = processMatchResult(apexProfileRef.current, {
+          playerScore: myScoreRef.current,
+          botScore: oppScoreRef.current,
+          arrowsTotal: totalArrows || levelRef.current.arrows.length,
+          matchDurationMs,
+          mistakes: mistakesRef.current,
+          wasComeback: wasTrailingRef.current && userWon,
+          botSkill: activeBotRef.current?.skill ?? 50,
+          puzzleDifficulty: calculatePuzzleDifficulty(levelRef.current),
+          levelId: levelRef.current.id,
+        });
+        apexProfileRef.current = updated;
+        void saveProfile(updated);
+        console.log(`🧠 APEX post-match: frustration=${updated.frustrationScore}, confidence=${updated.confidenceScore}, skill=${updated.skillRating}, state=${updated.experienceState}`);
+      }
+
+      // Record battle history in store
+      useGameStore.getState().recordMultiplayerBattle({
+        opponentName: opponent?.name || 'Tactician Opponent',
+        roomCode: 'QUICK-1V1',
+        outcome: userWon ? 'WIN' : 'LOSS',
+        arrowsCleared: myScoreRef.current,
+        totalArrows: totalArrows || 10,
+        durationSeconds
+      });
     });
+  }, [opponent?.name, totalArrows]);
+
+  const handleSendEmote = useCallback((emoji: string) => {
+    if (myEmoteTimerRef.current) clearTimeout(myEmoteTimerRef.current);
+    setMyActiveEmote(emoji);
+    myEmoteTimerRef.current = setTimeout(() => {
+      setMyActiveEmote(null);
+    }, 2200);
+
+    // Bot Situational Reaction FSM (75% probability)
+    if (Math.random() < 0.75) {
+      if (oppEmoteTimerRef.current) clearTimeout(oppEmoteTimerRef.current);
+      const responses: Record<string, string[]> = {
+        '🔥': ['⚡', '😱', '🔥'],
+        '😅': ['😎', '👍', '😅'],
+        '🎯': ['👀', '🎯', '⚡'],
+        '👑': ['💪', '🔥', '👑'],
+        '💥': ['😱', '💥', '🔥']
+      };
+      const botOptions = responses[emoji] || ['👍', '🔥'];
+      const botPick = botOptions[Math.floor(Math.random() * botOptions.length)] || '🔥';
+
+      const delay = Math.random() * 600 + 400;
+      setTimeout(() => {
+        if (matchStateRef.current === 'playing') {
+          setOppActiveEmote(botPick);
+          oppEmoteTimerRef.current = setTimeout(() => {
+            setOppActiveEmote(null);
+          }, 2200);
+        }
+      }, delay);
+    }
   }, []);
 
 
@@ -378,158 +478,11 @@ export function MultiplayerRandomScreen() {
     }
   }, [matchState, board?.arrows.length, board?.livesLeft, exitingArrows.length, handleGameOver]);
 
-  const startRematch = useCallback(() => {
-    const levelsToUse = dbLevels.length > 0 ? dbLevels : (dynamicLevels || []);
-    if (levelsToUse.length === 0) {
-      navigation.goBack();
-      return;
-    }
-    const randLevel = levelsToUse[Math.floor(Math.random() * levelsToUse.length)];
-    if (!randLevel) {
-      navigation.goBack();
-      return;
-    }
-    const initialBoard = createInitialBoard(randLevel, 3);
-    const total = randLevel.arrows.length;
-
-    unstable_batchedUpdates(() => {
-      setLevel(randLevel);
-      setBoard(initialBoard);
-      setOpponentArrowsLeft(total);
-      setTotalArrows(total);
-      setMyScore(0);
-      setOppScore(0);
-      setExitingArrows([]);
-      setBlockedArrows([]);
-      setUserResigned(false);
-      userWonRef.current = false;
-      setMatchState('playing');
-      setRematchRequestedByOpponent(false);
-    });
-
-    boardRef.current = initialBoard;
-    myScoreRef.current = 0;
-    oppScoreRef.current = 0;
-    opponentArrowsLeftRef.current = total;
-
-    boardOpacity.value = 0;
-    boardScale.value = 0.94;
-    boardOpacity.value = withTiming(1, { duration: 400, easing: Easing.bezier(0.16, 1, 0.3, 1) });
-    boardScale.value = withSpring(1, { damping: 15, stiffness: 100, mass: 0.8 });
-  }, [dbLevels, dynamicLevels, navigation]);
-
-  const handleRequestRematch = useCallback(() => {
-    if (rematchRequestedByOpponent) {
-      setRematchRequestedByOpponent(false);
-      setRematchRequestedByMe(false);
-      setRematchStatus('idle');
-      startRematch();
-      return;
-    }
-
-    if (rematchRequestedByMe) return;
-
-    setRematchRequestedByMe(true);
-    setRematchStatus('waiting');
-
-    const delay = Math.random() * 1000 + 1500;
-    setTimeout(() => {
-      const accepts = Math.random() < 0.65;
-      if (accepts) {
-        setRematchStatus('accepted');
-        setTimeout(() => {
-          setRematchRequestedByMe(false);
-          setRematchStatus('idle');
-          startRematch();
-        }, 800);
-      } else {
-        setRematchStatus('declined');
-        setRematchDeclinedAlert(true);
-      }
-    }, delay);
-  }, [rematchRequestedByMe, rematchRequestedByOpponent, opponent, startRematch]);
-
   const handleFindNewMatch = useCallback(() => {
     if (botTimerRef.current) clearTimeout(botTimerRef.current);
-    if (botRematchTimerRef.current) {
-      clearTimeout(botRematchTimerRef.current);
-      botRematchTimerRef.current = null;
-    }
-    setRematchRequestedByMe(false);
-    setRematchRequestedByOpponent(false);
-    setRematchStatus('idle');
     setOpponent(null);
     setMatchState('searching');
   }, []);
-
-  // ─── Opponent Rematch Simulation ─────────────────────────────────
-  useEffect(() => {
-    if (matchState !== 'results') {
-      setRematchRequestedByOpponent(false);
-      if (botRematchTimerRef.current) {
-        clearTimeout(botRematchTimerRef.current);
-        botRematchTimerRef.current = null;
-      }
-      return;
-    }
-
-    if (rematchRequestedByMe) {
-      if (botRematchTimerRef.current) {
-        clearTimeout(botRematchTimerRef.current);
-        botRematchTimerRef.current = null;
-      }
-      return;
-    }
-
-    // Roll for opponent requesting a rematch: 45% probability
-    const willRequestRematch = Math.random() < 0.45;
-
-    if (willRequestRematch) {
-      const delay = Math.random() * 2500 + 2000; // 2.0s to 4.5s
-      botRematchTimerRef.current = setTimeout(() => {
-        if (matchStateRef.current === 'results' && !rematchRequestedByMe) {
-          setRematchRequestedByOpponent(true);
-        }
-      }, delay);
-    }
-
-    return () => {
-      if (botRematchTimerRef.current) {
-        clearTimeout(botRematchTimerRef.current);
-        botRematchTimerRef.current = null;
-      }
-    };
-  }, [matchState, rematchRequestedByMe]);
-
-
-  useEffect(() => {
-    if (matchState !== 'results') {
-      setRematchTimerVal(null);
-      return;
-    }
-    if (rematchRequestedByMe) {
-      setRematchTimerVal(null);
-      return;
-    }
-
-    setRematchTimerVal(10);
-
-    const interval = setInterval(() => {
-      if (adManager.isAdShowing()) return;
-      setRematchTimerVal((prev) => {
-
-        if (prev === null) return null;
-        if (prev <= 1) {
-          clearInterval(interval);
-          handleFindNewMatch();
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [matchState, rematchRequestedByMe, handleFindNewMatch]);
 
   // ─── Back Button ──────────────────────────────────────────────────
   useFocusEffect(
@@ -588,6 +541,7 @@ export function MultiplayerRandomScreen() {
       const nextBoard = result.board;
       boardRef.current = nextBoard;
       setBoard(nextBoard);
+      mistakesRef.current += 1; // APEX telemetry
       void playWrongFeedback(true);
     }
   }, []);
@@ -615,7 +569,7 @@ export function MultiplayerRandomScreen() {
     setLastTap({ x, y, timestamp: Date.now() });
     const currentBoard = boardRef.current;
     if (!currentBoard) return;
-    const arrow = findArrowAtPoint(currentBoard.arrows, x, y, cellSizeRef.current);
+    const arrow = findArrowAtPoint(currentBoard.arrows, x, y, cellSizeRef.current, currentBoard);
     if (arrow) handleArrowPress(arrow.id);
   }, [handleArrowPress]);
 
@@ -743,45 +697,15 @@ export function MultiplayerRandomScreen() {
           })}
         </View>
 
-        <View style={styles.rematchCard}>
-          {rematchRequestedByOpponent && (
-            <View style={styles.rematchTipBox}>
-              <Text style={styles.rematchTipText}>⚡ {opponent?.name ?? 'Opponent'} wants a rematch!</Text>
-            </View>
-          )}
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.rematchBtn,
-              rematchRequestedByMe ? styles.rematchBtnWaiting : styles.rematchBtnActive,
-              pressed && styles.btnPressed
-            ]}
-            onPress={handleRequestRematch}
-            disabled={rematchRequestedByMe}
-          >
-            <Text style={styles.rematchBtnText}>
-              {rematchRequestedByMe
-                ? rematchStatus === 'waiting'
-                  ? '⏳ Waiting for opponent…'
-                  : 'Sending…'
-                : rematchRequestedByOpponent
-                ? '🤝 Accept Rematch'
-                : rematchTimerVal !== null
-                ? `⚔️ Request Rematch (${rematchTimerVal}s)`
-                : '⚔️ Request Rematch'}
-            </Text>
-          </Pressable>
-        </View>
-
         <Pressable
           accessibilityRole="button"
           style={({ pressed }) => [
-            styles.findNewMatchBtn,
+            styles.playNextBtn,
             pressed && styles.btnPressed
           ]}
           onPress={handleFindNewMatch}
         >
-          <Text style={styles.findNewMatchBtnText}>🔄 Find New Match</Text>
+          <Text style={styles.playNextBtnText}>🔄 Play Next Match</Text>
         </Pressable>
 
         <Pressable
@@ -885,6 +809,11 @@ export function MultiplayerRandomScreen() {
         <View style={[styles.scoreboardContainer, { marginTop: (insets.top > 0 ? insets.top : 24) + 4 }]}>
           {/* Me */}
           <View style={[styles.scoreCard, isLeading && styles.scoreCardActive]}>
+            {myActiveEmote && (
+              <View style={styles.emoteBubbleLeft}>
+                <Text style={styles.emoteBubbleText}>{myActiveEmote}</Text>
+              </View>
+            )}
             <Text style={styles.scorePlayerName} numberOfLines={1}>
               {playerName} {isLeading && '👑'}
             </Text>
@@ -902,6 +831,11 @@ export function MultiplayerRandomScreen() {
 
           {/* Opponent */}
           <View style={[styles.scoreCard, isTrailing && styles.scoreCardActiveOpponent]}>
+            {oppActiveEmote && (
+              <View style={styles.emoteBubbleRight}>
+                <Text style={styles.emoteBubbleText}>{oppActiveEmote}</Text>
+              </View>
+            )}
             <Text style={[styles.scorePlayerName, { textAlign: 'right' }]} numberOfLines={1}>
               {isTrailing && '👑 '}{opponent?.name ?? 'Opponent'}
             </Text>
@@ -953,6 +887,24 @@ export function MultiplayerRandomScreen() {
           </ZoomableBoardViewport>
         </View>
 
+        {/* ── Quick Reaction Emotes Bar ── */}
+        <View style={styles.emoteBarContainer}>
+          <Text style={styles.emoteBarLabel}>Emotes</Text>
+          <View style={styles.emoteButtonsRow}>
+            {['🔥', '😅', '🎯', '👑', '💥'].map((emoji) => (
+              <Pressable
+                key={emoji}
+                style={styles.emoteBtn}
+                onPress={() => handleSendEmote(emoji)}
+                accessibilityRole="button"
+                accessibilityLabel={`Send ${emoji} emote`}
+              >
+                <Text style={styles.emoteBtnText}>{emoji}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
         {/* ── Battle Controls ── */}
         <View style={styles.battleControls}>
           <Pressable
@@ -989,20 +941,6 @@ export function MultiplayerRandomScreen() {
           <Text style={styles.lobbyTitle}>⚔️ Arena Lobby</Text>
         </View>
         {renderResults()}
-        
-        <CustomAlertModal
-          visible={rematchDeclinedAlert}
-          title="Rematch Request Declined"
-          description={`${opponent?.name ?? 'Opponent'} has left the arena.`}
-          buttonText="FIND NEW MATCH"
-          onClose={() => {
-            setRematchDeclinedAlert(false);
-            setRematchRequestedByMe(false);
-            setRematchStatus('idle');
-            setOpponent(null);
-            setMatchState('searching');
-          }}
-        />
       </SafeAreaView>
     );
   }
@@ -1264,6 +1202,65 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     overflow: 'visible',
   },
+  emoteBubbleLeft: {
+    position: 'absolute',
+    top: -24,
+    left: 8,
+    backgroundColor: '#FFF',
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#FFD54F',
+    ...theme.shadows.md,
+    zIndex: 10
+  },
+  emoteBubbleRight: {
+    position: 'absolute',
+    top: -24,
+    right: 8,
+    backgroundColor: '#FFF',
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#FFD54F',
+    ...theme.shadows.md,
+    zIndex: 10
+  },
+  emoteBubbleText: {
+    fontSize: 18
+  },
+  emoteBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    gap: 8,
+    marginBottom: 4
+  },
+  emoteBarLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: theme.colors.textMuted
+  },
+  emoteButtonsRow: {
+    flexDirection: 'row',
+    gap: 8
+  },
+  emoteBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(106, 68, 40, 0.15)',
+    ...theme.shadows.sm
+  },
+  emoteBtnText: {
+    fontSize: 16
+  },
   battleControls: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -1415,62 +1412,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
-  rematchCard: {
-    width: '100%',
-    alignItems: 'center',
-    marginTop: 22,
-    gap: 10,
-  },
-  rematchTipBox: {
-    backgroundColor: 'rgba(201, 162, 39, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(201, 162, 39, 0.35)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    width: '100%',
-    alignItems: 'center',
-  },
-  rematchTipText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#A0700A',
-  },
-  rematchBtn: {
-    width: '100%',
-    paddingVertical: 18,
-    borderRadius: theme.radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...theme.shadows.md,
-  },
-  rematchBtnActive: {
-    backgroundColor: theme.colors.arrowStroke,
-  },
-  rematchBtnWaiting: {
-    backgroundColor: '#B0BEC5',
-  },
-  rematchBtnText: {
-    color: '#FFF',
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  findNewMatchBtn: {
+  playNextBtn: {
     width: '100%',
     paddingVertical: 16,
     borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.arrowStroke,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
-    borderWidth: 2,
-    borderColor: theme.colors.arrowStroke,
-    backgroundColor: 'transparent',
+    marginTop: 20,
+    ...theme.shadows.md,
   },
-  findNewMatchBtnText: {
-    color: theme.colors.arrowStroke,
-    fontSize: 16,
-    fontWeight: '800',
+  playNextBtnText: {
+    color: '#FFF',
+    fontSize: 17,
+    fontWeight: '900',
     letterSpacing: 0.5,
   },
   resultsLeaveBtn: {

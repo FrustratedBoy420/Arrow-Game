@@ -23,6 +23,10 @@ import { MultiplayerRandomScreen } from './src/screens/MultiplayerRandomScreen';
 import { TutorialScreen } from './src/screens/TutorialScreen';
 import { VictoryScreen } from './src/screens/VictoryScreen';
 import { TermsScreen } from './src/screens/TermsScreen';
+import { ShopScreen } from './src/screens/ShopScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
+import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
+import { AchievementToast } from './src/components/AchievementToast';
 import { theme } from './src/theme/theme';
 
 import { useGameStore } from './src/state/gameStore';
@@ -36,6 +40,9 @@ export type RootStackParamList = {
   LevelSelect: undefined;
   Victory: undefined;
   Fail: undefined;
+  Shop: undefined;
+  Profile: undefined;
+  Leaderboard: undefined;
   MultiplayerModeSelect: undefined;
   MultiplayerFriends: { roomCode?: string } | undefined;
   MultiplayerRandom: undefined;
@@ -171,11 +178,15 @@ export default function App() {
             <Stack.Screen name="Gameplay" component={GameplayScreen} />
             <Stack.Screen name="Victory" component={VictoryScreen} />
             <Stack.Screen name="Fail" component={FailScreen} />
+            <Stack.Screen name="Shop" component={ShopScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
             <Stack.Screen name="MultiplayerModeSelect" component={MultiplayerModeSelectScreen} />
             <Stack.Screen name="MultiplayerFriends" component={MultiplayerFriendsScreen} />
             <Stack.Screen name="MultiplayerRandom" component={MultiplayerRandomScreen} />
           </Stack.Navigator>
         </NavigationContainer>
+        <AchievementToast />
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

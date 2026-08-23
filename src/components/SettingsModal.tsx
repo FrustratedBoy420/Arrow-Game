@@ -15,8 +15,15 @@ type Props = {
 };
 
 export function SettingsModal({ visible, onClose, onRestart }: Props) {
-  const { soundEnabled, hapticsEnabled, musicEnabled, toggleSound, toggleHaptics, toggleMusic } = useGameStore();
+  const soundEnabled = useGameStore((s) => s.soundEnabled);
+  const hapticsEnabled = useGameStore((s) => s.hapticsEnabled);
+  const musicEnabled = useGameStore((s) => s.musicEnabled);
+  const toggleSound = useGameStore((s) => s.toggleSound);
+  const toggleHaptics = useGameStore((s) => s.toggleHaptics);
+  const toggleMusic = useGameStore((s) => s.toggleMusic);
   const [privacyVisible, setPrivacyVisible] = useState(false);
+
+  if (!visible && !privacyVisible) return null;
 
   const handleDeleteAccount = () => {
     Alert.alert(

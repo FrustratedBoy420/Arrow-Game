@@ -320,6 +320,14 @@ class AdManager {
       return;
     }
 
+    // FTUE Shield: No interstitial ads in early onboarding levels (Level 1-10)
+    const currentLevelId = useGameStore.getState().currentLevelId;
+    if (currentLevelId <= 10) {
+      console.log(`🛡️ FTUE Shield: Skipping interstitial ad for Level ${currentLevelId}.`);
+      onClose();
+      return;
+    }
+
     if (this.interstitial && this.interstitial.loaded) {
       console.log('📺 Showing Interstitial Ad...');
       this.isFullScreenAdShowing = true;

@@ -1,4 +1,4 @@
-import { ReactNode, useCallback } from 'react';
+import { ReactNode, useCallback, useEffect } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -84,15 +84,35 @@ export function ZoomableBoardViewport({
     viewportH.value = height;
 
     if (isFirstLayout) {
-      // Scale down slightly (multiply by 0.85) to ensure the board is initially zoomed out with comfortable padding.
-      const fitScaleX = boardWidth > 0 ? (width * 0.85) / boardWidth : 1;
-      const fitScaleY = boardHeight > 0 ? (height * 0.85) / boardHeight : 1;
+      const fitScaleX = boardWidth > 0 ? (width * 0.95) / boardWidth : 1;
+      const fitScaleY = boardHeight > 0 ? (height * 0.95) / boardHeight : 1;
       const fitScale = Math.min(1.0, fitScaleX, fitScaleY);
 
       scale.value = fitScale;
       savedScale.value = fitScale;
+      translateX.value = 0;
+      translateY.value = 0;
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
     }
-  }, [boardWidth, boardHeight, scale, savedScale, viewportH, viewportW]);
+  }, [boardWidth, boardHeight, scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY, viewportH, viewportW]);
+
+  useEffect(() => {
+    const vw = viewportW.value;
+    const vh = viewportH.value;
+    if (vw <= 0 || vh <= 0 || boardWidth <= 0 || boardHeight <= 0) return;
+
+    const fitScaleX = (vw * 0.95) / boardWidth;
+    const fitScaleY = (vh * 0.95) / boardHeight;
+    const fitScale = Math.min(1.0, fitScaleX, fitScaleY);
+
+    scale.value = fitScale;
+    savedScale.value = fitScale;
+    translateX.value = 0;
+    translateY.value = 0;
+    savedTranslateX.value = 0;
+    savedTranslateY.value = 0;
+  }, [boardWidth, boardHeight, scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY, viewportW, viewportH]);
 
   const applyClampedTranslation = () => {
     'worklet';

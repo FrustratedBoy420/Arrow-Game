@@ -35,15 +35,24 @@ export async function registerUserProfile() {
     }
 
     const profileName = await AsyncStorage.getItem('user_profile_name') || 'Guest';
-    const highestUnlockedLevel = useGameStore.getState().highestUnlockedLevel;
+    const state = useGameStore.getState();
+    const highestUnlockedLevel = state.highestUnlockedLevel;
+    const { getTotalStarsEarned } = await import('../systems/levelManagement');
+    const { ensureLevelProgressMap } = await import('../systems/levelManagementStore');
+    const totalStars = getTotalStarsEarned(ensureLevelProgressMap(state.levelProgressMap));
+    const playerTrophies = state.playerTrophies || 1000;
+    const selectedAvatarId = state.selectedAvatarId || 'archer_boy';
 
-    // 1. Send profile registration to backend (systemId, name, os, osVersion, highestUnlockedLevel)
+    // 1. Send profile registration to backend
     const payload = {
       systemId,
       name: profileName,
       os: Platform.OS,
       osVersion: String(Platform.Version),
       highestUnlockedLevel,
+      totalStars,
+      playerTrophies,
+      selectedAvatarId
     };
 
     console.log('📡 Registering user profile:', payload);
@@ -68,12 +77,13 @@ export async function registerUserProfile() {
         iconsConfig: {
           ...state.iconsConfig,
           unlockAllLevels: allLevelsUnlocked
-        }
+        },
+        ...(allLevelsUnlocked ? { coins: 999999 } : {})
       }));
 
       if (allLevelsUnlocked) {
         // Admin: always fetch ALL levels from DB — initial 20-batch is not enough
-        console.log('👑 Admin access detected — fetching all levels from DB...');
+        console.log('👑 Admin access detected — unlocked unlimited coins & all levels!');
         useGameStore.getState().fetchAllLevelsForAdmin();
       }
     } else {

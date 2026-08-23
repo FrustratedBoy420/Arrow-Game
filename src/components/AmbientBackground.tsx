@@ -1,7 +1,9 @@
 import { BlurMask, Canvas, Circle, LinearGradient, Rect, vec } from '@shopify/react-native-skia';
+import { memo } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 
-export function AmbientBackground() {
+// ponytail: memo — pure static gradient, zero props, never needs re-render
+export const AmbientBackground = memo(function AmbientBackground() {
   const { width, height } = useWindowDimensions();
 
   return (
@@ -30,4 +32,4 @@ export function AmbientBackground() {
       </Circle>
     </Canvas>
   );
-}
+});

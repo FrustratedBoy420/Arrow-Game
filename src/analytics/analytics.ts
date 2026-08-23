@@ -10,7 +10,7 @@ export type AnalyticsEventName =
   | 'stars_earned';
 
 export function trackEvent(name: AnalyticsEventName, payload: AnalyticsPayload = {}) {
-  if (__DEV__) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
     console.log('[analytics]', name, payload);
   }
 }

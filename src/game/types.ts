@@ -27,10 +27,11 @@ export type BoardState = {
   arrows: ArrowNode[];
   livesLeft: number;
   removedIds: string[];
+  blockedAttemptIds?: string[];
 };
 
 export type TapResult =
-  | { type: 'REMOVED'; arrowId: string; board: BoardState }
+  | { type: 'REMOVED'; arrowId: string; board: BoardState; autoRemovedArrows?: ArrowNode[] }
   | { type: 'BLOCKED'; arrowId: string; livesLeft: number; board: BoardState };
 
 export type GameStatus = 'playing' | 'won' | 'failed';

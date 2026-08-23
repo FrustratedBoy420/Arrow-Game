@@ -1,4 +1,4 @@
-import { Canvas, Circle, Group, Path, Skia } from '@shopify/react-native-skia';
+import { Canvas, Circle, Group, Path, Skia, BlurMask } from '@shopify/react-native-skia';
 import { useEffect, useMemo, memo, useState, useCallback, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
@@ -13,9 +13,11 @@ import Animated, {
   withTiming
 } from 'react-native-reanimated';
 
-import { getArrowCells, getArrowHead, getExitDirection, getCollisionDistance } from '../game/engine';
+import { getArrowCells, getArrowHead, getExitDirection, getCollisionDistance, isFrontClear } from '../game/engine';
 import type { ArrowNode, BoardState, Direction, LevelDefinition } from '../game/types';
 import { theme } from '../theme/theme';
+import { useGameStore } from '../state/gameStore';
+import { getSkinById, type ArrowSkin } from '../config/skins';
 
 type BlockedArrowEntry = { arrow: ArrowNode; blocker: ArrowNode | null };
 
@@ -41,19 +43,19 @@ type Props = {
 
 const arrowHeadSize = 12;
 
-/** Target slide speed — scales duration by path length so all arrows feel snappy but smooth. */
-const EXIT_SPEED_PX_PER_SEC = 1200;
-const EXIT_DURATION_MIN_MS = 200;
-const EXIT_DURATION_MAX_MS = 800;
+/** Target slide speed — scales duration by path length so all arrows feel snappy and responsive. */
+const EXIT_SPEED_PX_PER_SEC = 2400;
+const EXIT_DURATION_MIN_MS = 120;
+const EXIT_DURATION_MAX_MS = 320;
 
 const CANVAS_PADDING = 500;
 
 /** How far the blocked arrow slides forward before snapping back (fraction of a cell). */
-const BLOCKED_SLIDE_CELLS = 0.55;
+const BLOCKED_SLIDE_CELLS = 0.45;
 /** Duration (ms) for the forward slide on a blocked arrow. */
-const BLOCKED_FORWARD_MS = 160;
+const BLOCKED_FORWARD_MS = 80;
 /** Duration (ms) for the snap-back on a blocked arrow. */
-const BLOCKED_BACK_MS = 200;
+const BLOCKED_BACK_MS = 120;
 
 function computeExitDurationMs(totalPathLengthPx: number): number {
   if (totalPathLengthPx <= 0) return EXIT_DURATION_MIN_MS;
@@ -80,6 +82,9 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
   enableTouch = true,
   lastTap
 }: Props) {
+  const activeSkinId = useGameStore((s) => s.activeSkinId);
+  const activeSkin = useMemo(() => getSkinById(activeSkinId), [activeSkinId]);
+
   const [localTaps, setLocalTaps] = useState<{ id: number; x: number; y: number }[]>([]);
   const [localFlashingArrows, setLocalFlashingArrows] = useState<ArrowNode[]>([]);
 
@@ -191,6 +196,11 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
     });
   }, [exitingArrows]);
 
+  const blockedAttemptIdSet = useMemo(
+    () => new Set(board.blockedAttemptIds || []),
+    [board.blockedAttemptIds]
+  );
+
   return (
     <View style={[styles.container, { width, height }]}>
       {/* A single unified canvas that covers the board + padding to avoid mounting delays & GL blinks */}
@@ -228,7 +238,7 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
                 <Path
                   key={id}
                   path={path}
-                  color={theme.colors.arrowStroke}
+                  color={activeSkin.strokeColor}
                   style="stroke"
                   strokeCap="round"
                   strokeJoin="round"
@@ -287,6 +297,7 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
               boardWidth={width}
               boardHeight={height}
               onDone={onExitDone}
+              activeSkin={activeSkin}
             />
           ))}
         </Canvas>
@@ -297,7 +308,7 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
           style={StyleSheet.absoluteFill}
           onPress={(event) => {
             const { locationX, locationY } = event.nativeEvent;
-            const arrow = findArrowAtPoint(board.arrows, locationX, locationY, cellSize);
+            const arrow = findArrowAtPoint(board.arrows, locationX, locationY, cellSize, board);
             if (arrow) {
               setLocalTaps((prev) => [...prev, { id: Date.now(), x: locationX, y: locationY }]);
               onArrowPress(arrow.id);
@@ -321,10 +332,10 @@ export const PuzzleBoardCanvas = memo(function PuzzleBoardCanvas({
 });
 
 // ---------------------------------------------------------------------------
-// ExitingArrow — slides the removed arrow off the grid.
+// ExitingArrow — slides the removed arrow off the grid with radiant skin trails.
 // ---------------------------------------------------------------------------
 const ExitingArrow = memo(function ExitingArrow({
-  arrow, cellSize, strokeWidth: sw, boardWidth, boardHeight, onDone
+  arrow, cellSize, strokeWidth: sw, boardWidth, boardHeight, onDone, activeSkin
 }: {
   arrow: ArrowNode;
   cellSize: number;
@@ -332,6 +343,7 @@ const ExitingArrow = memo(function ExitingArrow({
   boardWidth: number;
   boardHeight: number;
   onDone: (arrowId: string) => void;
+  activeSkin?: ArrowSkin;
 }) {
   const animProgress = useSharedValue(0);
   const calledRef = useRef(false);
@@ -487,11 +499,45 @@ const ExitingArrow = memo(function ExitingArrow({
     ];
   });
 
-  const pathColor = arrow.color || theme.colors.arrowStroke;
+    const pathColor = arrow.color || activeSkin?.strokeColor || theme.colors.arrowStroke;
+  const isSpecialSkin = activeSkin && activeSkin.id !== 'classic';
+  const glowColor = activeSkin?.glowColor || activeSkin?.strokeColor;
 
   return (
     <>
-      {/* Draw the moving shaft segment */}
+      {/* 1. Luminous particle aura trail behind exiting arrow */}
+      {isSpecialSkin && glowColor && (
+        <>
+          <Path
+            path={trackPath}
+            start={startVal}
+            end={endVal}
+            color={glowColor}
+            style="stroke"
+            strokeCap="round"
+            strokeJoin="round"
+            strokeWidth={sw * 1.8}
+            opacity={0.65}
+          >
+            <BlurMask blur={6} style="normal" />
+          </Path>
+          <Group transform={headTransform}>
+            <Path
+              path={headPath}
+              color={glowColor}
+              style="stroke"
+              strokeCap="round"
+              strokeJoin="round"
+              strokeWidth={sw * 1.8}
+              opacity={0.65}
+            >
+              <BlurMask blur={6} style="normal" />
+            </Path>
+          </Group>
+        </>
+      )}
+
+      {/* 2. Main moving shaft segment */}
       <Path
         path={trackPath}
         start={startVal}
@@ -502,7 +548,7 @@ const ExitingArrow = memo(function ExitingArrow({
         strokeJoin="round"
         strokeWidth={sw}
       />
-      {/* Draw the moving arrowhead */}
+      {/* 3. Main moving arrowhead */}
       <Group transform={headTransform}>
         <Path
           path={headPath}
@@ -927,53 +973,67 @@ function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: n
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-export function findArrowAtPoint(arrows: ArrowNode[], x: number, y: number, cellSize: number) {
-  // 1. Priority 1: Direct Cell Hit. If tap falls inside a cell's boundary (<= 0.5 * cellSize) of any arrow, select it immediately.
-  for (const arrow of arrows) {
-    const cells = getArrowCells(arrow);
-    for (const cell of cells) {
-      const c = centerOf(cell, cellSize);
-      if (Math.hypot(c.x - x, c.y - y) <= cellSize * 0.5) {
-        return arrow;
-      }
-    }
-  }
+export function findArrowAtPoint(
+  arrows: ArrowNode[],
+  x: number,
+  y: number,
+  cellSize: number,
+  board?: BoardState
+): ArrowNode | null {
+  if (!arrows || arrows.length === 0) return null;
 
-  // 2. Priority 2: Proximity selection. Calculate shortest distance to arrow polyline segments within 1.2 * cellSize slop.
-  let closestArrow: ArrowNode | null = null;
-  let minDistance = Infinity;
   const maxDistance = cellSize * 1.2;
+  let bestCandidate: ArrowNode | null = null;
+  let minEffectiveDist = Infinity;
 
   for (const arrow of arrows) {
     const cells = getArrowCells(arrow);
     if (cells.length === 0) continue;
 
-    let arrowDist = Infinity;
     const points = cells.map((cell) => centerOf(cell, cellSize));
+    let rawDist = Infinity;
 
-    const firstPt = points[0];
-    if (points.length === 1 && firstPt) {
-      arrowDist = Math.hypot(firstPt.x - x, firstPt.y - y);
-    } else {
+    for (const pt of points) {
+      const d = Math.hypot(pt.x - x, pt.y - y);
+      if (d < rawDist) rawDist = d;
+    }
+
+    if (points.length > 1) {
       for (let i = 0; i < points.length - 1; i++) {
         const ptA = points[i];
         const ptB = points[i + 1];
         if (ptA && ptB) {
           const d = distanceToSegment(x, y, ptA.x, ptA.y, ptB.x, ptB.y);
-          if (d < arrowDist) {
-            arrowDist = d;
-          }
+          if (d < rawDist) rawDist = d;
         }
       }
     }
 
-    if (arrowDist < minDistance && arrowDist <= maxDistance) {
-      minDistance = arrowDist;
-      closestArrow = arrow;
+    if (rawDist > maxDistance) continue;
+
+    let isClear = false;
+    if (board) {
+      isClear = isFrontClear(arrow, board);
+    } else {
+      const tempBoard: BoardState = {
+        level: { id: 0, title: '', difficulty: 'Easy', gridSize: { columns: 100, rows: 100 }, arrows },
+        arrows,
+        livesLeft: 3,
+        removedIds: []
+      };
+      isClear = isFrontClear(arrow, tempBoard);
+    }
+
+    // ponytail: 30% distance discount for clear/playable arrows prioritizes intended moves on crowded grids
+    const effectiveDist = isClear ? rawDist * 0.70 : rawDist;
+
+    if (effectiveDist < minEffectiveDist) {
+      minEffectiveDist = effectiveDist;
+      bestCandidate = arrow;
     }
   }
 
-  return closestArrow;
+  return bestCandidate;
 }
 
 const styles = StyleSheet.create({

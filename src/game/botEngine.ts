@@ -1,157 +1,107 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getRandomBotName } from './botNames';
+import type { BotProfile } from './apex/types';
+import { APEX_CONFIG } from './apex/config';
 
+// ─── Legacy storage key (kept for backward compat during transition) ──
 const MATCH_HISTORY_KEY = 'bot_match_history_v1';
-const MAX_HISTORY = 8;
 
-// Base timings (ms)
-const BASE_MIN_DELAY = 600;
-const BASE_MAX_DELAY = 1500;
-
-type MatchHistory = {
-  results: boolean[];
-};
-
-let consecutiveUserLosses = 0;
-let consecutiveUserWins = 0;
-let historyLoaded = false;
-
-function syncStreaksFromHistory(results: boolean[]) {
-  consecutiveUserWins = 0;
-  consecutiveUserLosses = 0;
-
-  for (let i = results.length - 1; i >= 0; i--) {
-    if (results[i]) {
-      if (consecutiveUserLosses > 0) break;
-      consecutiveUserWins++;
-    } else {
-      if (consecutiveUserWins > 0) break;
-      consecutiveUserLosses++;
-    }
-  }
-}
-
-async function ensureHistoryLoaded() {
-  if (historyLoaded) return;
-  try {
-    const raw = await AsyncStorage.getItem(MATCH_HISTORY_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as MatchHistory;
-      if (Array.isArray(parsed.results)) {
-        syncStreaksFromHistory(parsed.results);
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to load bot match history', e);
-  } finally {
-    historyLoaded = true;
-  }
-}
-
+// ponytail: legacy recordMatchResult kept for MultiplayerFriendsScreen
+// which still uses the old system. APEX replaces this for Random mode.
 export async function recordMatchResult(userWon: boolean) {
-  await ensureHistoryLoaded();
-
-  if (userWon) {
-    consecutiveUserWins++;
-    consecutiveUserLosses = 0;
-  } else {
-    consecutiveUserLosses++;
-    consecutiveUserWins = 0;
-  }
-
   try {
     const raw = await AsyncStorage.getItem(MATCH_HISTORY_KEY);
-    const parsed: MatchHistory = raw ? JSON.parse(raw) : { results: [] };
+    const parsed = raw ? JSON.parse(raw) : { results: [] };
     const results = Array.isArray(parsed.results) ? parsed.results : [];
     results.push(userWon);
-    const trimmed = results.slice(-MAX_HISTORY);
+    const trimmed = results.slice(-8);
     await AsyncStorage.setItem(MATCH_HISTORY_KEY, JSON.stringify({ results: trimmed }));
   } catch (e) {
     console.warn('Failed to save bot match history', e);
   }
 }
 
-export async function resetBotSession() {
-  consecutiveUserLosses = 0;
-  consecutiveUserWins = 0;
-  historyLoaded = true;
-  try {
-    await AsyncStorage.removeItem(MATCH_HISTORY_KEY);
-  } catch (e) {
-    console.warn('Failed to reset bot session', e);
-  }
+export function getFakeOpponentProfile() {
+  return { name: getRandomBotName() };
 }
 
-export function getFakeOpponentProfile() {
-  return {
-    name: getRandomBotName(),
-  };
-}
+// ─── APEX-Powered Bot Behavior ──────────────────────────────────────
 
 /**
- * Returns true when the bot should skip this scoring opportunity (human-like miss).
+ * Returns true when the bot should skip this move (human-like miss).
+ * Miss rate derived from BotProfile.skill:
+ *   skill=90 (Master)  → ~5% miss
+ *   skill=50 (Beginner) → ~15% miss
+ *   skill=40 (Rookie)   → ~18% miss
  */
-export function shouldBotMissMove(): boolean {
-  let missChance = 0.08;
-
-  if (consecutiveUserLosses >= 2) {
-    missChance += 0.12 + Math.min(consecutiveUserLosses - 2, 2) * 0.05;
-  } else if (consecutiveUserWins >= 1) {
-    missChance -= 0.04;
+export function shouldBotMissMove(botProfile?: BotProfile): boolean {
+  if (!botProfile) {
+    // Legacy fallback — 8% flat
+    return Math.random() < 0.08;
   }
 
-  missChance += (Math.random() - 0.5) * 0.06;
-  missChance = Math.max(0.03, Math.min(0.28, missChance));
+  const baseMiss = APEX_CONFIG.botBaseMissRate + (100 - botProfile.skill) * APEX_CONFIG.botMissSkillFactor;
+  const variance = (Math.random() - 0.5) * 0.04;
+  const missChance = Math.max(0.02, Math.min(0.25, baseMiss + variance));
 
   return Math.random() < missChance;
 }
 
 /**
- * Calculates how long the bot should wait before clearing its next arrow.
- * Factoring in dopamine-driven psychology to keep user engaged.
+ * Calculates how long the bot waits before clearing its next arrow.
+ * Skill-based: stronger bots are faster with less variance.
+ *
+ *   skill=90 → ~480-920ms (fast, precise)
+ *   skill=50 → ~800-1500ms (moderate)
+ *   skill=40 → ~880-1640ms (slow, inconsistent)
  */
 export function calculateNextMoveDelay(
   botArrowsLeft: number,
   userArrowsLeft: number,
-  totalArrows: number
+  totalArrows: number,
+  botProfile?: BotProfile
 ): number {
-  let minDelay = BASE_MIN_DELAY;
-  let maxDelay = BASE_MAX_DELAY;
+  // ── Skill-based base timing ──
+  const skill = botProfile?.skill ?? 55;
+  const skillFactor = (100 - skill) / 100;
+  let minDelay = 400 + skillFactor * 800;
+  let maxDelay = 800 + skillFactor * 1400;
 
+  // ── Natural variance from bot personality ──
+  const variance = botProfile?.variance ?? 0.10;
+  const varianceRange = (maxDelay - minDelay) * variance;
+  minDelay += (Math.random() - 0.5) * varianceRange;
+  maxDelay += (Math.random() - 0.5) * varianceRange;
+
+  // ── Position-based adjustments (subtle, NOT rubber-banding) ──
   const botProgress = totalArrows - botArrowsLeft;
   const userProgress = totalArrows - userArrowsLeft;
 
-  if (consecutiveUserLosses >= 2) {
-    minDelay += 700 + Math.min(consecutiveUserLosses, 4) * 120;
-    maxDelay += 1200 + Math.min(consecutiveUserLosses, 4) * 200;
-  } else if (consecutiveUserWins >= 1) {
-    const winPressure = Math.min(consecutiveUserWins, 3);
-    minDelay -= 120 + winPressure * 60;
-    maxDelay -= 220 + winPressure * 80;
-  }
-
   if (botProgress > userProgress + 3) {
-    minDelay += 400 + Math.random() * 200;
-    maxDelay += 800 + Math.random() * 300;
+    // Bot is far ahead — natural slight hesitation on harder remaining arrows
+    minDelay += 200;
+    maxDelay += 350;
   } else if (userProgress > botProgress + 2) {
-    minDelay -= 120 + Math.random() * 80;
-    maxDelay -= 250 + Math.random() * 100;
+    // Player ahead — bot tries a bit harder (mild, not teleporting)
+    minDelay -= 80;
+    maxDelay -= 150;
   }
 
-  if (Math.random() < 0.18) {
-    minDelay += 600 + Math.random() * 900;
-    maxDelay += 900 + Math.random() * 1200;
+  // ── Human-like hesitation (thinking pause) ──
+  if (Math.random() < APEX_CONFIG.botHesitationChance) {
+    minDelay += 500 + Math.random() * 800;
+    maxDelay += 800 + Math.random() * 1000;
   }
 
+  // ── Endgame tension — last 3 arrows feel intense ──
   if (botArrowsLeft <= 3 && userArrowsLeft <= 3) {
-    minDelay += 250 + Math.random() * 200;
-    maxDelay += 500 + Math.random() * 350;
+    minDelay += 200;
+    maxDelay += 400;
   }
 
-  minDelay = Math.max(minDelay, 350);
-  maxDelay = Math.max(maxDelay, minDelay + 250);
+  // ── Floor and ceiling ──
+  minDelay = Math.max(350, minDelay);
+  maxDelay = Math.max(minDelay + 200, maxDelay);
 
-  return Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+  return Math.floor(Math.random() * (maxDelay - minDelay)) + minDelay;
 }
-
-void ensureHistoryLoaded();

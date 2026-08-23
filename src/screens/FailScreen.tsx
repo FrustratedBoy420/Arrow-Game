@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
@@ -19,17 +19,59 @@ export function FailScreen() {
   const navigation = useNavigation<AppNavigation>();
   const insets = useSafeAreaInsets();
   const retry = useGameStore((state) => state.retry);
+  const continueWithLife = useGameStore((state) => state.continueWithLife);
+  const resetWinStreak = useGameStore((state) => state.resetWinStreak);
+
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [isAdLoading, setIsAdLoading] = useState(false);
 
   const btnScale = useSharedValue(1);
+  const continueBtnScale = useSharedValue(1);
 
   useEffect(() => {
     audioManager.playSound('outOfMove');
-  }, []);
+    resetWinStreak();
+  }, [resetWinStreak]);
 
   const buttonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: btnScale.value }]
   }));
+
+  const continueButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: continueBtnScale.value }]
+  }));
+
+  const handleContinueWithAd = () => {
+    if (isAdLoading) return;
+
+    if (!adManager.isRewardedAdReady()) {
+      setIsAdLoading(true);
+      adManager.loadRewarded();
+      setTimeout(() => {
+        setIsAdLoading(false);
+        if (adManager.isRewardedAdReady()) {
+          playRewardedContinue();
+        } else {
+          Alert.alert('Ad Loading', 'The reward video is loading. Please try again in 2 seconds.');
+        }
+      }, 1500);
+      return;
+    }
+
+    playRewardedContinue();
+  };
+
+  const playRewardedContinue = () => {
+    adManager.showRewarded(
+      () => {
+        continueWithLife();
+        navigation.replace('Gameplay');
+      },
+      () => {
+        Alert.alert('Ad Failed', 'Could not load rewarded video. You can try restarting the level.');
+      }
+    );
+  };
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -46,10 +88,29 @@ export function FailScreen() {
         </Pressable>
       </View>
       <View style={styles.content}>
-        <Text style={styles.icon}>✖</Text>
+        <Text style={styles.icon}>💔</Text>
         <Text style={styles.title}>Out of Lives</Text>
-        <Text style={styles.copy}>You ran out of lives! Avoid tapping blocked arrows and try again.</Text>
+        <Text style={styles.copy}>You ran out of lives! Tap blocked arrows carefully to avoid losing hearts.</Text>
+
+        {/* 🎬 Rewarded Ad Continue Button */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Continue level with extra life"
+          onPressIn={() => {
+            continueBtnScale.value = withSpring(0.94, { damping: 10, stiffness: 350 });
+          }}
+          onPressOut={() => {
+            continueBtnScale.value = withSpring(1, { damping: 10, stiffness: 350 });
+          }}
+          onPress={handleContinueWithAd}
+          style={styles.continueContainer}
+        >
+          <Animated.View style={[styles.continueButton, continueButtonStyle]}>
+            <Text style={styles.continueButtonText}>🎬 Continue (+1 ❤️ Life)</Text>
+          </Animated.View>
+        </Pressable>
         
+        {/* Restart Button */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Retry level"
@@ -63,7 +124,7 @@ export function FailScreen() {
           }}
         >
           <Animated.View style={[styles.button, buttonStyle]}>
-            <Text style={styles.buttonText}>Try Again</Text>
+            <Text style={styles.buttonText}>Restart Level</Text>
           </Animated.View>
         </Pressable>
       </View>
@@ -78,7 +139,6 @@ export function FailScreen() {
       />
       <AdBanner />
     </SafeAreaView>
-
   );
 }
 
@@ -145,5 +205,26 @@ const styles = StyleSheet.create({
     color: theme.colors.arrowStroke,
     fontSize: 18,
     fontWeight: '800'
+  },
+  continueContainer: {
+    marginBottom: 16,
+    width: '100%',
+    alignItems: 'center'
+  },
+  continueButton: {
+    alignItems: 'center',
+    backgroundColor: '#E53935',
+    borderColor: '#C62828',
+    borderRadius: 30,
+    borderWidth: 2,
+    minWidth: 220,
+    paddingHorizontal: 28,
+    paddingVertical: 16,
+    ...theme.shadows.lg
+  },
+  continueButtonText: {
+    color: theme.colors.white,
+    fontSize: 18,
+    fontWeight: '900'
   }
 });

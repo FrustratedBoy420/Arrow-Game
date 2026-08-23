@@ -2,7 +2,7 @@
   "expo": {
     "name": "ArrowVerse-Multiplayer",
     "slug": "arrow-escape",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "scheme": "arrowversemultiplayer",
     "userInterfaceStyle": "light",
@@ -50,11 +50,11 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
+    "owner": "kazal-tech",
     "extra": {
       "eas": {
-        "projectId": "0c562cb9-3a12-4ac0-b75f-f385d23a5255"
+        "projectId": "7b5fe8bb-09c9-4011-9587-a35a9f544234"
       }
-    },
-    "owner": "mridul_jaiswal_420"
+    }
   }
 }

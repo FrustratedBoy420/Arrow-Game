@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState, useCallback } from 'react';
-import { BackHandler, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNetInfo } from '@react-native-community/netinfo';
 import Animated, {
@@ -28,6 +28,9 @@ import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 import { registerUserProfile } from '../utils/userRegistration';
 import { ProfileNameModal } from '../components/ProfileNameModal';
+import { SpinWheelModal } from '../components/SpinWheelModal';
+import { DailyRewardModal } from '../components/DailyRewardModal';
+import { DailyChallengeCard } from '../components/DailyChallengeCard';
 import { AdBanner } from '../components/AdBanner';
 
 export function HomeScreen() {
@@ -38,6 +41,7 @@ export function HomeScreen() {
   const fetchGameConfig = useGameStore((s) => s.fetchGameConfig);
   const levelProgressMap = useGameStore((s) => s.levelProgressMap);
   const coins = useGameStore((s) => s.coins);
+  const lastDailyClaimDate = useGameStore((s) => s.lastDailyClaimDate);
 
   const isFetchingConfig = useGameStore((s) => s.isFetchingConfig);
   const dynamicLevels = useGameStore((s) => s.dynamicLevels);
@@ -52,9 +56,22 @@ export function HomeScreen() {
   const [hasDismissedUpdate, setHasDismissedUpdate] = useState(false);
   const [exitModalVisible, setExitModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [spinModalVisible, setSpinModalVisible] = useState(false);
+  const [dailyModalVisible, setDailyModalVisible] = useState(false);
   const [isNameLoaded, setIsNameLoaded] = useState(false);
   const [hasName, setHasName] = useState(false);
   const [profileName, setProfileName] = useState('');
+
+  // Auto-prompt daily rewards if not claimed today
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0]!;
+    if (lastDailyClaimDate !== today) {
+      const timer = setTimeout(() => {
+        setDailyModalVisible(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [lastDailyClaimDate]);
 
   useEffect(() => {
     if (
@@ -253,72 +270,169 @@ export function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* ── Content ── */}
-      <View style={styles.content}>
-        <Animated.View style={[styles.arrowDeco, arrowStyle]}>
-          <Text style={styles.arrowIcon}>{iconsConfig?.homeArrow || '➤'}</Text>
-        </Animated.View>
+      {/* ── Scrollable Content Area ── */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: (insets.bottom > 0 ? insets.bottom : 16) + 64 }
+        ]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* ── Hero Brand Section ── */}
+        <View style={styles.heroSection}>
+          <Animated.View style={[styles.arrowDeco, arrowStyle]}>
+            <Text style={styles.arrowIcon}>{iconsConfig?.homeArrow || '➤'}</Text>
+          </Animated.View>
 
-        <Animated.View style={titleStyle}>
-          <Text style={styles.title}>Arrow{'\n'}Verse</Text>
-          <Text style={styles.subtitle}>Think · Tap · Escape</Text>
-        </Animated.View>
+          <Animated.View style={[titleStyle, styles.titleWrapper]}>
+            <Text style={styles.title}>
+              Arrow<Text style={styles.titleAccent}>Verse</Text>
+            </Text>
+            <View style={styles.taglinePill}>
+              <Text style={styles.subtitle}>THINK · TAP · ESCAPE</Text>
+            </View>
+          </Animated.View>
+        </View>
 
-        <Animated.View style={[btnStyle, { width: '100%', alignItems: 'center' }]}>
-          {/* Start Now */}
+        {/* ── Main Action Hub ── */}
+        <Animated.View style={[btnStyle, styles.actionHub]}>
+          {/* Primary CTA: Play Now */}
           <Pressable
-            style={{ width: '100%', alignItems: 'center' }}
+            style={styles.primaryPlayTouch}
             onPressIn={() => {
-              startScale.value = withSpring(0.94, { damping: 10, stiffness: 350 });
+              startScale.value = withSpring(0.96, { damping: 12, stiffness: 350 });
             }}
             onPressOut={() => {
-              startScale.value = withSpring(1, { damping: 10, stiffness: 350 });
+              startScale.value = withSpring(1, { damping: 12, stiffness: 350 });
             }}
             onPress={() =>
               navigation.replace(hasSeenTutorial ? 'Gameplay' : 'Tutorial')
             }
           >
-            <Animated.View style={[styles.btn, startAnimStyle]}>
-              <Text style={styles.btnText}>Start Now</Text>
-              <Text style={styles.btnArrow}>→</Text>
+            <Animated.View style={[styles.primaryPlayBtn, startAnimStyle]}>
+              <View style={styles.playIconWrap}>
+                <Text style={styles.playIconText}>▶</Text>
+              </View>
+              <View style={styles.playTextWrap}>
+                <Text style={styles.primaryPlayTitle}>PLAY NOW</Text>
+                <Text style={styles.primaryPlaySubtitle}>
+                  {hasSeenTutorial ? 'Continue Journey' : 'Start Tutorial'}
+                </Text>
+              </View>
+              <Text style={styles.primaryPlayArrow}>→</Text>
             </Animated.View>
           </Pressable>
 
-          {/* Level Select */}
-          <Pressable
-            style={{ width: '100%', alignItems: 'center' }}
-            onPressIn={() => {
-              selectScale.value = withSpring(0.94, { damping: 10, stiffness: 350 });
-            }}
-            onPressOut={() => {
-              selectScale.value = withSpring(1, { damping: 10, stiffness: 350 });
-            }}
-            onPress={() => navigation.navigate('LevelSelect')}
-          >
-            <Animated.View style={[styles.btn, styles.levelSelectBtn, selectAnimStyle]}>
-              <Text style={[styles.btnText, styles.levelSelectText]}>Level Select</Text>
-            </Animated.View>
-          </Pressable>
+          {/* 2-Column Mode Grid: Level Select + Multiplayer */}
+          <View style={styles.modeGridRow}>
+            {/* Level Select */}
+            <Pressable
+              style={styles.modeGridItem}
+              onPressIn={() => {
+                selectScale.value = withSpring(0.95, { damping: 12, stiffness: 350 });
+              }}
+              onPressOut={() => {
+                selectScale.value = withSpring(1, { damping: 12, stiffness: 350 });
+              }}
+              onPress={() => navigation.navigate('LevelSelect')}
+            >
+              <Animated.View style={[styles.modeCard, styles.levelSelectCard, selectAnimStyle]}>
+                <Text style={styles.modeCardIcon}>🗺️</Text>
+                <Text style={styles.modeCardTitle}>Levels</Text>
+                <Text style={styles.modeCardSub}>{totalStars} ⭐ Earned</Text>
+              </Animated.View>
+            </Pressable>
 
-          {/* Multiplayer */}
-          <Pressable
-            style={{ width: '100%', alignItems: 'center' }}
-            onPressIn={() => {
-              multiScale.value = withSpring(0.94, { damping: 10, stiffness: 350 });
-            }}
-            onPressOut={() => {
-              multiScale.value = withSpring(1, { damping: 10, stiffness: 350 });
-            }}
-            onPress={() => navigation.navigate('MultiplayerModeSelect')}
-          >
-            <Animated.View style={[styles.btn, styles.multiplayerBtn, multiAnimStyle]}>
-              <Text style={[styles.btnText, styles.multiplayerText]}>
-                ⚔️ Multiplayer Mode ⚔️
-              </Text>
-            </Animated.View>
-          </Pressable>
+            {/* Multiplayer Arena */}
+            <Pressable
+              style={styles.modeGridItem}
+              onPressIn={() => {
+                multiScale.value = withSpring(0.95, { damping: 12, stiffness: 350 });
+              }}
+              onPressOut={() => {
+                multiScale.value = withSpring(1, { damping: 12, stiffness: 350 });
+              }}
+              onPress={() => navigation.navigate('MultiplayerModeSelect')}
+            >
+              <Animated.View style={[styles.modeCard, styles.multiplayerCard, multiAnimStyle]}>
+                <Text style={styles.modeCardIcon}>⚔️</Text>
+                <Text style={[styles.modeCardTitle, styles.multiplayerTitle]}>1v1 Arena</Text>
+                <Text style={[styles.modeCardSub, styles.multiplayerSub]}>Live Battles</Text>
+              </Animated.View>
+            </Pressable>
+          </View>
+
+          {/* ── Daily Challenge World Puzzle Card ── */}
+          <View style={styles.dailyChallengeWrap}>
+            <DailyChallengeCard />
+          </View>
+
+          {/* ── Quick Actions Grid (Dock) ── */}
+          <View style={styles.dockContainer}>
+            <Pressable
+              style={styles.dockItem}
+              onPress={() => navigation.navigate('Profile')}
+              accessibilityRole="button"
+              accessibilityLabel="Profile"
+            >
+              <View style={styles.dockIconBox}>
+                <Text style={styles.dockIcon}>👤</Text>
+              </View>
+              <Text style={styles.dockLabel}>Profile</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.dockItem}
+              onPress={() => navigation.navigate('Shop')}
+              accessibilityRole="button"
+              accessibilityLabel="Shop"
+            >
+              <View style={styles.dockIconBox}>
+                <Text style={styles.dockIcon}>🛍️</Text>
+              </View>
+              <Text style={styles.dockLabel}>Shop</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.dockItem}
+              onPress={() => navigation.navigate('Leaderboard')}
+              accessibilityRole="button"
+              accessibilityLabel="Leaderboards"
+            >
+              <View style={styles.dockIconBox}>
+                <Text style={styles.dockIcon}>🏆</Text>
+              </View>
+              <Text style={styles.dockLabel}>Ranks</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.dockItem}
+              onPress={() => setSpinModalVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Lucky Spin"
+            >
+              <View style={[styles.dockIconBox, styles.dockIconHighlight]}>
+                <Text style={styles.dockIcon}>🎡</Text>
+              </View>
+              <Text style={styles.dockLabel}>Spin</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.dockItem}
+              onPress={() => setDailyModalVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Daily Gifts"
+            >
+              <View style={[styles.dockIconBox, styles.dockIconHighlight]}>
+                <Text style={styles.dockIcon}>📅</Text>
+              </View>
+              <Text style={styles.dockLabel}>Daily</Text>
+            </Pressable>
+          </View>
         </Animated.View>
-      </View>
+      </ScrollView>
 
       <SettingsModal
         visible={settingsVisible}
@@ -348,6 +462,16 @@ export function HomeScreen() {
         onSubmit={handleProfileSubmit}
       />
 
+      <SpinWheelModal
+        visible={spinModalVisible}
+        onClose={() => setSpinModalVisible(false)}
+      />
+
+      <DailyRewardModal
+        visible={dailyModalVisible}
+        onClose={() => setDailyModalVisible(false)}
+      />
+
       <AdBanner />
     </SafeAreaView>
   );
@@ -361,170 +485,294 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
+    zIndex: 10
   },
 
   profileBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 22,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(106, 68, 40, 0.1)',
     ...theme.shadows.sm
   },
   profileEmoji: {
-    fontSize: 18,
-    marginRight: 6
+    fontSize: 16,
+    marginRight: 5
   },
   profileNameText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '800',
     color: theme.colors.arrowStroke,
-    maxWidth: 70
+    maxWidth: 75
   },
   starCounter: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 213, 79, 0.3)',
     ...theme.shadows.sm
   },
   starEmoji: {
-    fontSize: 18,
-    marginRight: 6
+    fontSize: 15,
+    marginRight: 4
   },
   starText: {
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '800',
     color: theme.colors.arrowStroke
   },
   starMax: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
     color: theme.colors.textMuted
   },
   coinCounter: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 213, 79, 0.3)',
     ...theme.shadows.sm
   },
   coinEmoji: {
-    fontSize: 18,
-    marginRight: 6
+    fontSize: 15,
+    marginRight: 4
   },
   coinText: {
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '800',
     color: theme.colors.arrowStroke
   },
 
   settingsBtn: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderRadius: 22,
-    ...theme.shadows.sm
-  },
-
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 20,
     borderWidth: 1,
+    borderColor: 'rgba(106, 68, 40, 0.1)',
     ...theme.shadows.sm
   },
-  statusBadgeOffline: {
-    borderColor: 'rgba(211, 47, 47, 0.25)',
+
+  scrollView: {
+    flex: 1
   },
-  statusBadgeFetching: {
-    borderColor: 'rgba(25, 118, 210, 0.25)',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6
-  },
-  statusDotOffline: {
-    backgroundColor: '#D32F2F',
-  },
-  statusDotFetching: {
-    backgroundColor: '#1976D2',
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: theme.colors.arrowStroke
+  scrollContent: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8
   },
 
-  content: {
-    flex: 1,
-    justifyContent: 'center',
+  // ── Hero Section ──
+  heroSection: {
     alignItems: 'center',
-    paddingHorizontal: 32,
-    marginTop: -40
+    marginTop: 4,
+    marginBottom: 16
   },
-  arrowDeco: { marginBottom: 20 },
+  arrowDeco: {
+    marginBottom: 4
+  },
   arrowIcon: {
-    fontSize: 64,
+    fontSize: 42,
     color: theme.colors.arrowStroke,
-    opacity: 0.7
+    opacity: 0.85
+  },
+  titleWrapper: {
+    alignItems: 'center'
   },
   title: {
-    fontSize: 52,
+    fontSize: 38,
     fontWeight: '900',
     color: theme.colors.arrowStroke,
     textAlign: 'center',
-    lineHeight: 58
+    letterSpacing: -0.5,
+    lineHeight: 42
+  },
+  titleAccent: {
+    color: '#D87A36'
+  },
+  taglinePill: {
+    backgroundColor: 'rgba(106, 68, 40, 0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(106, 68, 40, 0.12)'
   },
   subtitle: {
-    fontSize: 18,
-    color: theme.colors.textMuted,
-    textAlign: 'center',
-    marginTop: 10,
-    fontWeight: '600',
-    letterSpacing: 2
+    fontSize: 11,
+    color: theme.colors.arrowStroke,
+    fontWeight: '800',
+    letterSpacing: 1.5
   },
 
-  btn: {
+  // ── Action Hub ──
+  actionHub: {
+    width: '100%',
+    maxWidth: 380,
+    alignItems: 'center'
+  },
+
+  // ── Primary Play Button ──
+  primaryPlayTouch: {
+    width: '100%',
+    marginBottom: 12
+  },
+  primaryPlayBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: theme.colors.arrowStroke,
-    width: 250,
-    paddingVertical: 18,
-    borderRadius: 30,
-    marginTop: 36,
-    gap: 12,
-    ...theme.shadows.md
-  },
-  btnText: { color: '#FFF', fontSize: 20, fontWeight: '800' },
-  btnArrow: { color: '#FFF', fontSize: 22, fontWeight: '800' },
-
-  levelSelectBtn: {
-    backgroundColor: '#FFF',
-    marginTop: 16,
-    ...theme.shadows.md
-  },
-  levelSelectText: { color: theme.colors.arrowStroke },
-
-  multiplayerBtn: {
-    backgroundColor: '#6A4428',
+    borderRadius: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     borderWidth: 2,
-    borderColor: '#FFD54F',
-    marginTop: 16,
-    ...theme.shadows.lg
+    borderColor: '#E8A76B',
+    ...theme.shadows.md
   },
-  multiplayerText: { color: '#FFD54F', fontWeight: '800' }
+  playIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#E8A76B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14
+  },
+  playIconText: {
+    color: '#3B2314',
+    fontSize: 18,
+    marginLeft: 2,
+    fontWeight: '900'
+  },
+  playTextWrap: {
+    flex: 1
+  },
+  primaryPlayTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 1
+  },
+  primaryPlaySubtitle: {
+    color: '#E8C5A8',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 1
+  },
+  primaryPlayArrow: {
+    color: '#E8A76B',
+    fontSize: 24,
+    fontWeight: '900',
+    marginLeft: 8
+  },
+
+  // ── 2-Column Mode Grid ──
+  modeGridRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginBottom: 12
+  },
+  modeGridItem: {
+    flex: 1
+  },
+  modeCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(106, 68, 40, 0.12)',
+    ...theme.shadows.sm
+  },
+  levelSelectCard: {
+    backgroundColor: '#FFFFFF'
+  },
+  multiplayerCard: {
+    backgroundColor: '#3E2723',
+    borderColor: '#FFD54F'
+  },
+  modeCardIcon: {
+    fontSize: 26,
+    marginBottom: 4
+  },
+  modeCardTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: theme.colors.arrowStroke
+  },
+  modeCardSub: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textMuted,
+    marginTop: 2
+  },
+  multiplayerTitle: {
+    color: '#FFD54F'
+  },
+  multiplayerSub: {
+    color: '#FFE082'
+  },
+
+  // ── Daily Challenge Container ──
+  dailyChallengeWrap: {
+    width: '100%',
+    marginBottom: 14
+  },
+
+  // ── Quick Actions Dock ──
+  dockContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderRadius: 22,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(106, 68, 40, 0.1)',
+    ...theme.shadows.sm
+  },
+  dockItem: {
+    flex: 1,
+    alignItems: 'center'
+  },
+  dockIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(240, 235, 227, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(106, 68, 40, 0.08)'
+  },
+  dockIconHighlight: {
+    backgroundColor: 'rgba(255, 248, 225, 0.9)',
+    borderColor: 'rgba(255, 213, 79, 0.4)'
+  },
+  dockIcon: {
+    fontSize: 20
+  },
+  dockLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: theme.colors.arrowStroke
+  }
 });

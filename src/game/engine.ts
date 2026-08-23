@@ -12,7 +12,8 @@ export function createInitialBoard(level: LevelDefinition, livesLeft = 3): Board
     level,
     arrows: level.arrows,
     livesLeft,
-    removedIds: []
+    removedIds: [],
+    blockedAttemptIds: []
   };
 }
 
@@ -138,37 +139,56 @@ export function getCollisionDistance(arrow: ArrowNode, board: BoardState): numbe
   return steps;
 }
 
-export function resolveTap(arrowId: string, board: BoardState): TapResult {
+/**
+ * Process auto-exits — disabled so arrows only exit when tapped.
+ */
+export function processAutoExits(board: BoardState): {
+  board: BoardState;
+  autoRemovedArrows: ArrowNode[];
+} {
+  // ponytail: arrows only exit on explicit player tap, not automatically
+  return { board, autoRemovedArrows: [] };
+}
+
+export function resolveTap(
+  arrowId: string,
+  board: BoardState,
+  lastBlockedTap?: { arrowId: string; timestamp: number }
+): TapResult {
   const arrow = board.arrows.find((candidate) => candidate.id === arrowId);
+  const now = Date.now();
+  // ponytail: 350ms cooldown prevents rapid accidental double-taps on blocked arrows from wiping multiple lives
+  const isRapidDuplicateTap =
+    lastBlockedTap &&
+    lastBlockedTap.arrowId === arrowId &&
+    now - lastBlockedTap.timestamp < 350;
 
-  if (!arrow) {
-    return {
-      type: 'BLOCKED',
-      arrowId,
-      livesLeft: Math.max(0, board.livesLeft - 1),
-      board: { ...board, livesLeft: Math.max(0, board.livesLeft - 1) }
-    };
-  }
+  if (!arrow || !isFrontClear(arrow, board)) {
+    const livesLeft = isRapidDuplicateTap
+      ? board.livesLeft
+      : Math.max(0, board.livesLeft - 1);
 
-  if (!isFrontClear(arrow, board)) {
-    const livesLeft = Math.max(0, board.livesLeft - 1);
+    const newBoard = { ...board, livesLeft };
 
     return {
       type: 'BLOCKED',
       arrowId,
       livesLeft,
-      board: { ...board, livesLeft }
+      board: newBoard
     };
   }
+
+  const baseBoard: BoardState = {
+    ...board,
+    arrows: board.arrows.filter((candidate) => candidate.id !== arrowId),
+    removedIds: [...board.removedIds, arrowId]
+  };
 
   return {
     type: 'REMOVED',
     arrowId,
-    board: {
-      ...board,
-      arrows: board.arrows.filter((candidate) => candidate.id !== arrowId),
-      removedIds: [...board.removedIds, arrowId]
-    }
+    board: baseBoard,
+    autoRemovedArrows: []
   };
 }
 

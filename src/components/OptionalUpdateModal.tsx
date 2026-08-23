@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 
 import { theme } from '../theme/theme';
+import { useGameStore } from '../state/gameStore';
 
 interface OptionalUpdateModalProps {
   visible: boolean;
@@ -13,7 +14,8 @@ interface OptionalUpdateModalProps {
 
 export function OptionalUpdateModal({ visible, latestVersion, onClose }: OptionalUpdateModalProps) {
   const handleUpdatePress = async () => {
-    const url = 'https://play.google.com/store/apps/details?id=com.app.arrow_verse';
+    const versionConfig = useGameStore.getState().versionConfig;
+    const url = versionConfig?.updateUrl || 'https://play.google.com/store/apps/details?id=com.app.arrow_verse&pli=1';
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {

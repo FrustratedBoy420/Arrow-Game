@@ -5,6 +5,7 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 import { AmbientBackground } from './AmbientBackground';
 import { theme } from '../theme/theme';
+import { useGameStore } from '../state/gameStore';
 
 interface ForcedUpdateScreenProps {
   currentVersion: string;
@@ -14,7 +15,8 @@ interface ForcedUpdateScreenProps {
 export function ForcedUpdateScreen({ currentVersion, requiredVersion }: ForcedUpdateScreenProps) {
   const handleUpdatePress = async () => {
     // Open a store link or fallback website
-    const url = 'https://play.google.com/store/apps/details?id=com.app.arrow_verse';
+    const versionConfig = useGameStore.getState().versionConfig;
+    const url = versionConfig?.updateUrl || 'https://play.google.com/store/apps/details?id=com.app.arrow_verse&pli=1';
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {

@@ -242,18 +242,13 @@ class AudioManager {
   }
 
   async playSound(
-    name: 'correct' | 'wrong' | 'victory' | 'outOfMove'
+    name: 'correct' | 'wrong' | 'victory' | 'outOfMove',
+    playbackRate: number = 1.0
   ) {
-    const soundEnabled =
-      useGameStore.getState().soundEnabled;
-
-    if (!soundEnabled) {
-      console.log('Sound disabled');
-      return;
-    }
+    const soundEnabled = useGameStore.getState().soundEnabled;
+    if (!soundEnabled) return;
 
     if (!this.isInitialized) {
-      console.log('Initializing audio manager...');
       await this.init();
     }
 
@@ -261,7 +256,6 @@ class AudioManager {
 
     // If the sound effect is still loading in the background, wait for it
     if (!sound && this.effectsLoadingPromises[name]) {
-      console.log(`Sound effect '${name}' is still loading, waiting...`);
       sound = (await this.effectsLoadingPromises[name]) || undefined;
     }
 
@@ -278,10 +272,15 @@ class AudioManager {
         return;
       }
 
+      // ponytail: setRateAsync with shouldCorrectPitch = false allows audio pitch to rise
+      // naturally with combo speed, creating the addictive musical progression.
+      const rateToUse = Math.max(0.5, Math.min(2.0, playbackRate));
+      if (rateToUse !== 1.0 || (status as any).rate !== 1.0) {
+        await sound.setRateAsync(rateToUse, false);
+      }
+
       // Restart sound cleanly using replayAsync to minimize bridge overhead
       await sound.replayAsync();
-
-      console.log(`Played sound: ${name}`);
     } catch (e: any) {
       console.warn(`⚠️ Failed to play sound: ${name}`, e?.message || e);
     }

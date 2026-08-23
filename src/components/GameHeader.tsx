@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Difficulty } from '../game/types';
 import { theme } from '../theme/theme';
 import GearIcon from './GearIcon';
+import { useGameStore } from '../state/gameStore';
 
 type Props = {
   title: string;
@@ -16,7 +17,7 @@ type Props = {
   onSettings?: () => void;
 };
 
-export function GameHeader({
+export const GameHeader = memo(function GameHeader({
   title,
   difficulty,
   arrowsLeft,
@@ -27,6 +28,7 @@ export function GameHeader({
 }: Props) {
   const insets = useSafeAreaInsets();
   const safeTop = insets.top > 0 ? insets.top : 24;
+  const winStreak = useGameStore((s) => s.winStreak);
 
   return (
     <View style={[styles.container, { paddingTop: safeTop, minHeight: 56 + safeTop }]}>
@@ -44,9 +46,16 @@ export function GameHeader({
         ) : null}
       </View>
 
-      {/* Center: title + arrow count */}
+      {/* Center: title + arrow count + streak badge */}
       <View style={styles.center}>
-        <Text style={styles.title}>{title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{title}</Text>
+          {winStreak >= 2 && (
+            <View style={styles.streakBadge}>
+              <Text style={styles.streakText}>🔥 {winStreak}</Text>
+            </View>
+          )}
+        </View>
         {arrowsLeft !== undefined && totalArrows !== undefined && (
           <Text style={styles.arrowCount}>
             {arrowsLeft} / {totalArrows} arrows left
@@ -67,7 +76,7 @@ export function GameHeader({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -95,6 +104,26 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 28,
     textAlign: 'center'
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8
+  },
+  streakBadge: {
+    backgroundColor: '#FFF3E0',
+    borderColor: '#FFB74D',
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    ...theme.shadows.sm
+  },
+  streakText: {
+    color: '#E65100',
+    fontSize: 13,
+    fontWeight: '900'
   },
   arrowCount: {
     color: theme.colors.textMuted,

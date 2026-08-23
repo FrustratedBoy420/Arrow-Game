@@ -27,6 +27,7 @@ import type { AppNavigation } from '../types/navigation';
 import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
 import { adManager } from '../utils/ads';
 import { AdBanner } from '../components/AdBanner';
+import { ComboPopup } from '../components/ComboPopup';
 
 
 type BlockedArrowEntry = { arrow: ArrowNode; blocker: ArrowNode | null };
@@ -58,6 +59,11 @@ export function GameplayScreen() {
   const [alertCancelText, setAlertCancelText] = useState('Cancel');
   const [alertOnConfirm, setAlertOnConfirm] = useState<(() => void) | undefined>(undefined);
   const [alertIconName, setAlertIconName] = useState<any>('information-circle-outline');
+  const [combo, setCombo] = useState(0);
+  const [comboBonusCoins, setComboBonusCoins] = useState(0);
+  const lastCorrectTapTimeRef = useRef<number>(0);
+  const comboRef = useRef<number>(0);
+
   const pendingNav = useRef<'Victory' | 'Fail' | null>(null);
   const boardScale = useSharedValue(1);
   const boardOpacity = useSharedValue(1);
@@ -163,12 +169,51 @@ export function GameplayScreen() {
       const result = tapArrow(arrowId);
 
       if (result === 'REMOVED' && arrow) {
+        const now = Date.now();
+        const delta = now - lastCorrectTapTimeRef.current;
+        lastCorrectTapTimeRef.current = now;
+
+        const nextCombo = delta <= 1800 ? (comboRef.current || 0) + 1 : 1;
+        comboRef.current = nextCombo;
+        setCombo(nextCombo);
+
+        let bonus = 0;
+        if (nextCombo === 3) bonus = 2;
+        else if (nextCombo === 4) bonus = 5;
+        else if (nextCombo >= 5) bonus = 10;
+        setComboBonusCoins(bonus);
+
+        if (bonus > 0) {
+          useGameStore.setState((s) => ({ coins: s.coins + bonus }));
+        }
+
+        const boardAfter = useGameStore.getState().board;
+        const blockedSetBefore = new Set(boardBefore.blockedAttemptIds || []);
+
+        const removedArrowIds = new Set(
+          boardBefore.arrows
+            .filter((a) => !boardAfter.arrows.some((remaining) => remaining.id === a.id))
+            .map((a) => a.id)
+        );
+        const exitingToTrigger = boardBefore.arrows
+          .filter((a) => removedArrowIds.has(a.id))
+          .map((a) => ({
+            ...a,
+            color: blockedSetBefore.has(a.id) ? '#EF5350' : '#43A047'
+          }));
+
         setExitingArrows((prev) => {
-          if (prev.some((a) => a.id === arrow.id)) return prev;
-          return [...prev, { ...arrow, color: '#43A047' }];
+          const existingIds = new Set(prev.map((a) => a.id));
+          const toAdd = exitingToTrigger.filter((a) => !existingIds.has(a.id));
+          return [...prev, ...toAdd];
         });
-        void playCorrectFeedback();
+        void playCorrectFeedback(hapticsEnabled, nextCombo);
       } else if (result === 'BLOCKED' && arrow) {
+        // Reset combo on mistake
+        comboRef.current = 0;
+        setCombo(0);
+        setComboBonusCoins(0);
+
         // Find which arrow is physically blocking, then start the red-slide animation.
         const blocker = findBlockingArrow(arrow, boardBefore) ?? null;
         setBlockedArrows((prev) => {
@@ -188,7 +233,7 @@ export function GameplayScreen() {
 
       setLastTap({ x, y, timestamp: Date.now() });
       const currentBoard = useGameStore.getState().board;
-      const arrow = findArrowAtPoint(currentBoard.arrows, x, y, cellSize);
+      const arrow = findArrowAtPoint(currentBoard.arrows, x, y, cellSize, currentBoard);
       if (arrow) handleArrowPress(arrow.id);
     },
     [cellSize, handleArrowPress]
@@ -222,7 +267,9 @@ export function GameplayScreen() {
     };
 
     const isRewardedAdEnabled = adManager.isRewardedAdEnabled();
-    if (state.hintUsedThisLevel && !isAdminUser && isRewardedAdEnabled) {
+    const hasExtraHints = (state.inventory?.extraHints ?? 0) > 0;
+
+    if (state.hintUsedThisLevel && !isAdminUser && !hasExtraHints && isRewardedAdEnabled) {
       if (!adManager.isRewardedAdReady()) {
         setAlertTitle('Ad Loading');
         setAlertDescription('The reward video is still loading. Please try again in a few seconds.');
@@ -234,7 +281,7 @@ export function GameplayScreen() {
       }
 
       setAlertTitle('Get Another Hint');
-      setAlertDescription('Would you like to watch a short video to get another hint for this level?');
+      setAlertDescription('You used your free hint for this level. Watch a video or buy hints in the Shop?');
       setAlertConfirmText('Watch Ad');
       setAlertCancelText('Cancel');
       setAlertIconName('play-circle-outline');
@@ -273,6 +320,7 @@ export function GameplayScreen() {
       />
       <LivesIndicator livesLeft={board.livesLeft} />
       <StarRatingDisplay levelBaselineSeconds={board.level.arrows.length} />
+      <ComboPopup combo={combo} bonusCoins={comboBonusCoins} onDone={() => setCombo(0)} />
       <View style={styles.boardStage}>
         <ZoomableBoardViewport
           key={currentLevelId}

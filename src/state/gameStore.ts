@@ -7,7 +7,9 @@ import { createInitialBoard, findHintArrow, isBoardWon, resolveTap } from '../ga
 import type { BoardState, GameStatus, LevelDefinition } from '../game/types';
 import { getLevel, getNextLevelId, LOADING_LEVEL, setDynamicLevels } from '../levels/levels';
 import { completeLevelWithStars, ensureLevelProgressMap, isLevelLocked, loadLevelProgress, saveLevelProgress } from '../systems/levelManagementStore';
-import { checkLevelUnlocks, type LevelProgress, initializeLevelMap } from '../systems/levelManagement';
+import { initializeLevelMap, checkLevelUnlocks, type LevelProgress } from '../systems/levelManagement';
+import { ARROW_SKINS, getSkinById, type BoosterItem, type DailyRewardDay, DAILY_REWARDS, type SpinSlice } from '../config/skins';
+import { ACHIEVEMENTS_CATALOG, type Achievement, type MatchRecord } from '../config/achievements';
 
 /** Number of levels to load on first fetch */
 const INITIAL_LEVEL_BATCH = 20;
@@ -24,7 +26,38 @@ type GameStore = {
   hapticsEnabled: boolean;
   musicEnabled: boolean;
   coins: number;
+  winStreak: number;
+  bestWinStreak: number;
+  activeSkinId: string;
+  ownedSkins: string[];
+  inventory: {
+    extraHints: number;
+    extraUndos: number;
+    extraLives: number;
+  };
+  dailyStreakDay: number;
+  lastDailyClaimDate: string | null;
+  lastFreeSpinDate: string | null;
+  lastFreeSpinTimestamp: number | null;
+  // Phase 3 State
+  unlockedAchievements: string[];
+  claimedAchievements: string[];
+  totalArrowsCleared: number;
+  totalFlawlessWins: number;
+  fastestClearSeconds: number | null;
+  selectedAvatarId: string;
+  playerTrophies: number;
+  multiplayerHistory: MatchRecord[];
+  activeAchievementToast: Achievement | null;
+  // Phase 4 State
+  dailyPuzzleState: {
+    lastCompletedDate: string | null;
+    currentStreak: number;
+    bestTimeSeconds: number | null;
+    isDailyActive: boolean;
+  };
   lastHintArrowId: string | null;
+  lastBlockedTap: { arrowId: string; timestamp: number } | null;
   hintUsedThisLevel: boolean;
   dynamicLevels: LevelDefinition[] | null;
   musicUrls: {
@@ -42,6 +75,7 @@ type GameStore = {
     latest: string;
     critical: string;
     termsUrl?: string;
+    updateUrl?: string;
   } | null;
   adsConfig: {
     showAds: boolean;
@@ -76,6 +110,15 @@ type GameStore = {
   nextLevel: () => void;
   undo: () => void;
   useHint: (force?: boolean) => string | null;
+  doubleCoinsEarned: () => void;
+  continueWithLife: () => void;
+  resetWinStreak: () => void;
+  buySkin: (skinId: string) => { success: boolean; message?: string };
+  equipSkin: (skinId: string) => void;
+  buyBooster: (item: BoosterItem) => { success: boolean; message?: string };
+  consumeBooster: (type: 'extraHints' | 'extraUndos' | 'extraLives') => boolean;
+  claimDailyReward: () => { success: boolean; reward?: DailyRewardDay };
+  claimSpinReward: (slice: SpinSlice) => void;
   toggleSound: () => void;
   toggleHaptics: () => void;
   toggleMusic: () => void;
@@ -95,6 +138,17 @@ type GameStore = {
   isMultiplayerActive: boolean;
   setIsMultiplayerActive: (active: boolean) => void;
   isGameplayActive: boolean;
+  // Phase 3 Actions
+  setPlayerAvatar: (avatarId: string) => void;
+  checkAndUnlockAchievements: () => Achievement[];
+  claimAchievementReward: (achievementId: string) => { success: boolean; coinsAwarded: number };
+  dismissAchievementToast: () => void;
+  recordMultiplayerBattle: (record: Omit<MatchRecord, 'id' | 'timestamp' | 'trophyDelta'>) => void;
+  // Phase 4 Actions
+  startDailyChallenge: (level: LevelDefinition) => void;
+  recordDailyChallengeCompletion: (timeTaken: number) => { coinsAwarded: number; trophiesAwarded: number };
+  fetchDailyPuzzle: (serverUrl?: string) => Promise<any>;
+  fetchLeaderboard: (category: 'stars' | 'trophies', serverUrl?: string) => Promise<any>;
 };
 
 // Use LOADING_LEVEL stub — real levels come from the DB on first fetch
@@ -112,8 +166,39 @@ export const useGameStore = create<GameStore>()(
       hapticsEnabled: true,
       musicEnabled: true,
       coins: 0,
+      winStreak: 0,
+      bestWinStreak: 0,
+      activeSkinId: 'classic',
+      ownedSkins: ['classic'],
+      inventory: {
+        extraHints: 0,
+        extraUndos: 0,
+        extraLives: 0
+      },
+      dailyStreakDay: 1,
+      lastDailyClaimDate: null,
+      lastFreeSpinDate: null,
+      lastFreeSpinTimestamp: null,
+      // Phase 3 Initial State
+      unlockedAchievements: [],
+      claimedAchievements: [],
+      totalArrowsCleared: 0,
+      totalFlawlessWins: 0,
+      fastestClearSeconds: null,
+      selectedAvatarId: 'archer_boy',
+      playerTrophies: 1000,
+      multiplayerHistory: [],
+      activeAchievementToast: null,
+      // Phase 4 Initial State
+      dailyPuzzleState: {
+        lastCompletedDate: null,
+        currentStreak: 0,
+        bestTimeSeconds: null,
+        isDailyActive: false
+      },
       coinsEarnedThisLevel: 0,
       lastHintArrowId: null,
+      lastBlockedTap: null,
       hintUsedThisLevel: false,
       dynamicLevels: null,
       musicUrls: {
@@ -211,11 +296,24 @@ export const useGameStore = create<GameStore>()(
         }
 
         trackEvent('level_start', { levelId: level.id, difficulty: level.difficulty });
+        
+        const { inventory, iconsConfig } = get();
+        const isAdmin = !!iconsConfig?.unlockAllLevels;
+        let startingLives = 3;
+        const nextInv = { ...inventory };
+        if (inventory.extraLives > 0) {
+          startingLives = 4;
+          nextInv.extraLives -= 1;
+        }
+
         set({
-          board: createInitialBoard(level),
+          board: createInitialBoard(level, startingLives),
           currentLevelId: level.id,
+          inventory: nextInv,
+          ...(isAdmin ? { coins: 999999 } : {}),
           status: 'playing',
           lastHintArrowId: null,
+          lastBlockedTap: null,
           hintUsedThisLevel: false,
           levelStartTime: Date.now(),
           gameStartTime: null,
@@ -233,25 +331,46 @@ export const useGameStore = create<GameStore>()(
       },
 
       tapArrow: (arrowId) => {
-        const { gameStartTime } = get();
+        const { gameStartTime, lastBlockedTap, currentLevelId, dailyPuzzleState } = get();
         if (gameStartTime === null) {
           set({ gameStartTime: Date.now() });
         }
 
-        const result = resolveTap(arrowId, get().board);
-        const nextStatus: GameStatus = isBoardWon(result.board)
+        const result = resolveTap(arrowId, get().board, lastBlockedTap ?? undefined);
+
+        // ponytail: FTUE God-Mode Shield for Levels 1-3 (normal campaign only, not daily puzzle)
+        // Wrong taps trigger visual/haptic feedback but do NOT deduct lives, preventing early churn.
+        const isGodMode = currentLevelId <= 3 && !dailyPuzzleState?.isDailyActive;
+        const effectiveBoard = isGodMode && result.type === 'BLOCKED'
+          ? { ...result.board, livesLeft: 3 }
+          : result.board;
+
+        const nextStatus: GameStatus = isBoardWon(effectiveBoard)
           ? 'won'
-          : result.board.livesLeft <= 0
+          : effectiveBoard.livesLeft <= 0
             ? 'failed'
             : 'playing';
 
         if (result.type === 'REMOVED') {
           trackEvent('move_correct', { levelId: get().currentLevelId, arrowId });
+          set((state) => ({
+            board: effectiveBoard,
+            status: nextStatus,
+            lastHintArrowId: null,
+            lastBlockedTap: null,
+            totalArrowsCleared: (state.totalArrowsCleared || 0) + 1
+          }));
         } else {
           trackEvent('move_wrong', {
             levelId: get().currentLevelId,
             arrowId,
-            livesLeft: result.livesLeft
+            livesLeft: effectiveBoard.livesLeft
+          });
+          set({
+            board: effectiveBoard,
+            status: nextStatus,
+            lastHintArrowId: null,
+            lastBlockedTap: { arrowId, timestamp: Date.now() }
           });
         }
 
@@ -263,7 +382,6 @@ export const useGameStore = create<GameStore>()(
           trackEvent('level_failed', { levelId: get().currentLevelId });
         }
 
-        set({ board: result.board, status: nextStatus, lastHintArrowId: null });
         return result.type;
       },
 
@@ -302,9 +420,21 @@ export const useGameStore = create<GameStore>()(
       },
 
       useHint: (force = false) => {
-        const { board, status, gameStartTime, hintUsedThisLevel, iconsConfig } = get();
+        const { board, status, gameStartTime, hintUsedThisLevel, iconsConfig, inventory } = get();
         const isAdmin = !!iconsConfig?.unlockAllLevels;
-        if (status !== 'playing' || (hintUsedThisLevel && !isAdmin && !force)) return null;
+
+        let canUse = false;
+        let consumedBooster = false;
+        if (status === 'playing') {
+          if (!hintUsedThisLevel || isAdmin || force) {
+            canUse = true;
+          } else if (inventory.extraHints > 0) {
+            canUse = true;
+            consumedBooster = true;
+          }
+        }
+
+        if (!canUse) return null;
 
         if (gameStartTime === null) {
           set({ gameStartTime: Date.now() });
@@ -322,14 +452,363 @@ export const useGameStore = create<GameStore>()(
           trackEvent('level_complete', { levelId: get().currentLevelId });
         }
 
+        const nextInv = { ...inventory };
+        if (consumedBooster) {
+          nextInv.extraHints = Math.max(0, nextInv.extraHints - 1);
+        }
+
         set({
           board: result.board,
           status: nextStatus,
+          inventory: nextInv,
           lastHintArrowId: hintArrow.id,
           hintUsedThisLevel: isAdmin ? false : true
         });
 
         return hintArrow.id;
+      },
+
+      doubleCoinsEarned: () => {
+        const { coinsEarnedThisLevel } = get();
+        if (coinsEarnedThisLevel > 0) {
+          set((state) => ({
+            coins: state.coins + coinsEarnedThisLevel,
+            coinsEarnedThisLevel: state.coinsEarnedThisLevel * 2
+          }));
+        }
+      },
+
+      continueWithLife: () => {
+        const { board } = get();
+        set({
+          board: { ...board, livesLeft: 1 },
+          status: 'playing',
+          hasRecordedCurrentLevel: false
+        });
+      },
+
+      resetWinStreak: () => {
+        set({ winStreak: 0 });
+      },
+
+      buySkin: (skinId: string) => {
+        const { coins, ownedSkins, highestUnlockedLevel, iconsConfig } = get();
+        const isAdmin = !!iconsConfig?.unlockAllLevels;
+        const skin = getSkinById(skinId);
+        if (!skin) return { success: false, message: 'Skin not found' };
+        if (ownedSkins.includes(skinId)) {
+          set({ activeSkinId: skinId });
+          return { success: true, message: 'Equipped!' };
+        }
+        if (isAdmin) {
+          set({
+            coins: 999999,
+            ownedSkins: Array.from(new Set([...ownedSkins, skinId])),
+            activeSkinId: skinId
+          });
+          return { success: true, message: 'Admin: Unlocked & equipped!' };
+        }
+        if (skin.unlockLevelReq && highestUnlockedLevel < skin.unlockLevelReq) {
+          return { success: false, message: `Reach Level ${skin.unlockLevelReq} to unlock!` };
+        }
+        if (coins < skin.price) {
+          return { success: false, message: `Need ${skin.price - coins} more coins!` };
+        }
+        set({
+          coins: coins - skin.price,
+          ownedSkins: [...ownedSkins, skinId],
+          activeSkinId: skinId
+        });
+        return { success: true, message: 'Purchased and equipped!' };
+      },
+
+      equipSkin: (skinId: string) => {
+        const { ownedSkins } = get();
+        if (ownedSkins.includes(skinId)) {
+          set({ activeSkinId: skinId });
+        }
+      },
+
+      buyBooster: (item: BoosterItem) => {
+        const { coins, inventory, iconsConfig } = get();
+        const isAdmin = !!iconsConfig?.unlockAllLevels;
+        if (!isAdmin && coins < item.price) {
+          return { success: false, message: `Need ${item.price - coins} more coins!` };
+        }
+        const nextInv = { ...inventory };
+        if (item.id === 'extra_hints') nextInv.extraHints += item.amount;
+        else if (item.id === 'extra_undos') nextInv.extraUndos += item.amount;
+        else if (item.id === 'extra_lives') nextInv.extraLives += item.amount;
+
+        set({
+          coins: isAdmin ? 999999 : coins - item.price,
+          inventory: nextInv
+        });
+        return { success: true, message: `Purchased ${item.name}!` };
+      },
+
+      consumeBooster: (type: 'extraHints' | 'extraUndos' | 'extraLives') => {
+        const { inventory } = get();
+        if (inventory[type] <= 0) return false;
+        set({
+          inventory: {
+            ...inventory,
+            [type]: inventory[type] - 1
+          }
+        });
+        return true;
+      },
+
+      claimDailyReward: () => {
+        const { lastDailyClaimDate, dailyStreakDay, coins, inventory } = get();
+        const today = new Date().toISOString().split('T')[0]!;
+
+        if (lastDailyClaimDate === today) {
+          return { success: false };
+        }
+
+        let nextDay = 1;
+        if (lastDailyClaimDate) {
+          const lastDate = new Date(lastDailyClaimDate);
+          const currentDate = new Date(today);
+          const diffTime = currentDate.getTime() - lastDate.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+          if (diffDays === 1) {
+            // Consecutive login day
+            nextDay = dailyStreakDay >= 7 ? 1 : dailyStreakDay + 1;
+          } else {
+            // Missed day -> reset to Day 1
+            nextDay = 1;
+          }
+        }
+
+        const reward = DAILY_REWARDS.find((r) => r.day === nextDay) || DAILY_REWARDS[0]!;
+        const nextInv = { ...inventory };
+        if (reward.hints) nextInv.extraHints += reward.hints;
+        if (reward.lives) nextInv.extraLives += reward.lives;
+
+        set({
+          coins: coins + reward.coins,
+          inventory: nextInv,
+          dailyStreakDay: nextDay,
+          lastDailyClaimDate: today
+        });
+
+        return { success: true, reward };
+      },
+
+      claimSpinReward: (slice: SpinSlice) => {
+        const { coins, inventory, iconsConfig } = get();
+        const isAdmin = !!iconsConfig?.unlockAllLevels;
+        const now = Date.now();
+        const today = new Date().toISOString().split('T')[0]!;
+        const nextInv = { ...inventory };
+
+        let addedCoins = 0;
+        if (slice.type === 'coins') addedCoins = slice.amount;
+        else if (slice.type === 'hints') nextInv.extraHints += slice.amount;
+        else if (slice.type === 'lives') nextInv.extraLives += slice.amount;
+
+        set({
+          coins: isAdmin ? 999999 : coins + addedCoins,
+          inventory: nextInv,
+          lastFreeSpinTimestamp: now,
+          lastFreeSpinDate: today
+        });
+
+        get().checkAndUnlockAchievements();
+      },
+
+      setPlayerAvatar: (avatarId: string) => {
+        set({ selectedAvatarId: avatarId });
+      },
+
+      checkAndUnlockAchievements: () => {
+        const state = get();
+        const unlocked = new Set(state.unlockedAchievements || []);
+        const newlyUnlocked: Achievement[] = [];
+
+        const evaluatorState = {
+          levelProgressMap: state.levelProgressMap,
+          highestUnlockedLevel: state.highestUnlockedLevel,
+          bestWinStreak: state.bestWinStreak,
+          winStreak: state.winStreak,
+          totalArrowsCleared: state.totalArrowsCleared || 0,
+          totalFlawlessWins: state.totalFlawlessWins || 0,
+          fastestClearSeconds: state.fastestClearSeconds,
+          ownedSkins: state.ownedSkins,
+          playerTrophies: state.playerTrophies || 1000,
+          multiplayerHistory: state.multiplayerHistory || [],
+          dailyStreakDay: state.dailyStreakDay || 1
+        };
+
+        for (const achievement of ACHIEVEMENTS_CATALOG) {
+          if (!unlocked.has(achievement.id)) {
+            const { isComplete } = achievement.getProgress(evaluatorState);
+            if (isComplete) {
+              unlocked.add(achievement.id);
+              newlyUnlocked.push(achievement);
+            }
+          }
+        }
+
+        if (newlyUnlocked.length > 0) {
+          set({
+            unlockedAchievements: Array.from(unlocked),
+            activeAchievementToast: newlyUnlocked[0]!
+          });
+        }
+
+        return newlyUnlocked;
+      },
+
+      claimAchievementReward: (achievementId: string) => {
+        const { unlockedAchievements, claimedAchievements, coins, iconsConfig } = get();
+        const isAdmin = !!iconsConfig?.unlockAllLevels;
+        const achievement = ACHIEVEMENTS_CATALOG.find((a) => a.id === achievementId);
+
+        if (!achievement) return { success: false, coinsAwarded: 0 };
+        if (!(unlockedAchievements || []).includes(achievementId)) return { success: false, coinsAwarded: 0 };
+        if ((claimedAchievements || []).includes(achievementId)) return { success: false, coinsAwarded: 0 };
+
+        const reward = achievement.rewardCoins;
+        set({
+          coins: isAdmin ? 999999 : coins + reward,
+          claimedAchievements: [...(claimedAchievements || []), achievementId]
+        });
+
+        return { success: true, coinsAwarded: reward };
+      },
+
+      dismissAchievementToast: () => {
+        set({ activeAchievementToast: null });
+      },
+
+      recordMultiplayerBattle: (battleData) => {
+        const { multiplayerHistory, playerTrophies } = get();
+
+        const isWin = battleData.outcome === 'WIN';
+        const trophyDelta = isWin ? 25 : battleData.outcome === 'LOSS' ? -12 : 0;
+        const nextTrophies = Math.max(1000, (playerTrophies || 1000) + trophyDelta);
+
+        const newRecord: MatchRecord = {
+          id: `match_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          timestamp: Date.now(),
+          ...battleData,
+          trophyDelta
+        };
+
+        const updatedHistory = [newRecord, ...(multiplayerHistory || [])].slice(0, 15);
+
+        set({
+          playerTrophies: nextTrophies,
+          multiplayerHistory: updatedHistory
+        });
+
+        get().checkAndUnlockAchievements();
+      },
+
+      startDailyChallenge: (level: LevelDefinition) => {
+        set({
+          board: createInitialBoard(level, 3),
+          currentLevelId: level.id,
+          status: 'playing',
+          lastHintArrowId: null,
+          lastBlockedTap: null,
+          hintUsedThisLevel: false,
+          levelStartTime: Date.now(),
+          gameStartTime: null,
+          finalStarsCalculated: 3,
+          isPaused: false,
+          pausedAt: null,
+          accumulatedPausedTime: 0,
+          hasRecordedCurrentLevel: false,
+          dailyPuzzleState: {
+            ...get().dailyPuzzleState,
+            isDailyActive: true
+          }
+        });
+      },
+
+      recordDailyChallengeCompletion: (timeTaken: number) => {
+        const { dailyPuzzleState, coins, playerTrophies, iconsConfig } = get();
+        const isAdmin = !!iconsConfig?.unlockAllLevels;
+        const today = new Date().toISOString().split('T')[0]!;
+
+        const alreadyDoneToday = dailyPuzzleState?.lastCompletedDate === today;
+        const coinsAwarded = alreadyDoneToday ? 15 : 100;
+        const trophiesAwarded = alreadyDoneToday ? 5 : 25;
+
+        // Calculate streak
+        let nextStreak = dailyPuzzleState?.currentStreak || 0;
+        if (!alreadyDoneToday) {
+          const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]!;
+          if (dailyPuzzleState?.lastCompletedDate === yesterday) {
+            nextStreak += 1;
+          } else {
+            nextStreak = 1;
+          }
+        }
+
+        const prevBest = dailyPuzzleState?.bestTimeSeconds;
+        const nextBest = prevBest !== null && prevBest !== undefined ? Math.min(prevBest, timeTaken) : timeTaken;
+
+        set({
+          coins: isAdmin ? 999999 : coins + coinsAwarded,
+          playerTrophies: (playerTrophies || 1000) + trophiesAwarded,
+          dailyPuzzleState: {
+            lastCompletedDate: today,
+            currentStreak: nextStreak,
+            bestTimeSeconds: nextBest,
+            isDailyActive: false
+          }
+        });
+
+        get().checkAndUnlockAchievements();
+
+        // Sync user profile to backend
+        import('../utils/userRegistration').then(({ registerUserProfile }) => {
+          registerUserProfile();
+        }).catch((err) => console.log('Error syncing user profile:', err));
+
+        return { coinsAwarded, trophiesAwarded };
+      },
+
+      fetchDailyPuzzle: async (serverUrl?: string) => {
+        let baseUrl = serverUrl?.trim() || 'https://arrow-game-be.vercel.app';
+        baseUrl = baseUrl.replace(/\/$/, '');
+        if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+          baseUrl = `https://${baseUrl}`;
+        }
+
+        try {
+          const response = await fetch(`${baseUrl}/api/daily-puzzle`);
+          if (!response.ok) throw new Error(`Status ${response.status}`);
+          return await response.json();
+        } catch (err) {
+          console.warn('⚠️ Failed to fetch daily puzzle:', err);
+          return null;
+        }
+      },
+
+      fetchLeaderboard: async (category: 'stars' | 'trophies', serverUrl?: string) => {
+        let baseUrl = serverUrl?.trim() || 'https://arrow-game-be.vercel.app';
+        baseUrl = baseUrl.replace(/\/$/, '');
+        if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+          baseUrl = `https://${baseUrl}`;
+        }
+
+        try {
+          const systemId = await AsyncStorage.getItem('game_system_id');
+          const url = `${baseUrl}/api/leaderboard?category=${category}&systemId=${encodeURIComponent(systemId || '')}`;
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`Status ${response.status}`);
+          return await response.json();
+        } catch (err) {
+          console.warn('⚠️ Failed to fetch leaderboard:', err);
+          return null;
+        }
       },
 
       toggleSound: () => set((state) => ({ soundEnabled: !state.soundEnabled })),
@@ -573,6 +1052,19 @@ export const useGameStore = create<GameStore>()(
           else if (finalStarsCalculated >= 3) earned = 25;
         }
 
+        // Win streak calculation: perfect completion (0 hearts lost) increments streak, else resets
+        const currentStreak = get().winStreak;
+        let nextStreak = currentStreak;
+        if (heartsLost === 0) {
+          nextStreak = currentStreak + 1;
+        } else {
+          nextStreak = 0;
+        }
+
+        // Streak Multiplier: 1.5x at 3+ streak, 2.0x at 5+ streak
+        const multiplier = nextStreak >= 5 ? 2.0 : nextStreak >= 3 ? 1.5 : 1.0;
+        earned = Math.round(earned * multiplier);
+
         // Calculate highest unlocked level from levelProgressMap
         let maxUnlocked = 1;
         for (const [lvlId, progress] of levelProgressMap.entries()) {
@@ -581,11 +1073,18 @@ export const useGameStore = create<GameStore>()(
           }
         }
 
+        const prevFastest = get().fastestClearSeconds;
+        const nextFastest = prevFastest !== null ? Math.min(prevFastest, timeTaken) : timeTaken;
+
         set((state) => ({ 
           starsEarnedThisLevel: finalStarsCalculated,
           coinsEarnedThisLevel: earned,
           coins: state.coins + earned,
-          highestUnlockedLevel: Math.max(state.highestUnlockedLevel, maxUnlocked)
+          winStreak: nextStreak,
+          bestWinStreak: Math.max(state.bestWinStreak, nextStreak),
+          highestUnlockedLevel: Math.max(state.highestUnlockedLevel, maxUnlocked),
+          fastestClearSeconds: nextFastest,
+          totalFlawlessWins: heartsLost === 0 ? (state.totalFlawlessWins || 0) + 1 : (state.totalFlawlessWins || 0)
         }));
 
         // Persist updated progress (includes newly unlocked levels from checkLevelUnlocks)
@@ -593,6 +1092,9 @@ export const useGameStore = create<GameStore>()(
 
         // Force re-render by replacing the map reference
         set({ levelProgressMap: new Map(levelProgressMap) });
+
+        // Trigger Phase 3 Achievement evaluation
+        get().checkAndUnlockAchievements();
 
         // Sync progress to backend
         import('../utils/userRegistration').then(({ registerUserProfile }) => {
@@ -631,6 +1133,26 @@ export const useGameStore = create<GameStore>()(
         hapticsEnabled: state.hapticsEnabled,
         musicEnabled: state.musicEnabled,
         coins: state.coins,
+        winStreak: state.winStreak,
+        bestWinStreak: state.bestWinStreak,
+        activeSkinId: state.activeSkinId,
+        ownedSkins: state.ownedSkins,
+        inventory: state.inventory,
+        dailyStreakDay: state.dailyStreakDay,
+        lastDailyClaimDate: state.lastDailyClaimDate,
+        lastFreeSpinDate: state.lastFreeSpinDate,
+        lastFreeSpinTimestamp: state.lastFreeSpinTimestamp,
+        // Phase 3 Persistence
+        unlockedAchievements: state.unlockedAchievements,
+        claimedAchievements: state.claimedAchievements,
+        totalArrowsCleared: state.totalArrowsCleared,
+        totalFlawlessWins: state.totalFlawlessWins,
+        fastestClearSeconds: state.fastestClearSeconds,
+        selectedAvatarId: state.selectedAvatarId,
+        playerTrophies: state.playerTrophies,
+        multiplayerHistory: state.multiplayerHistory,
+        // Phase 4 Persistence
+        dailyPuzzleState: state.dailyPuzzleState,
         // Persist the loaded batch so levels survive a background-kill restart
         dynamicLevels: state.dynamicLevels,
         musicUrls: state.musicUrls,
@@ -640,6 +1162,49 @@ export const useGameStore = create<GameStore>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
+          // Fallback defaults for existing users
+          if (!state.ownedSkins || state.ownedSkins.length === 0) {
+            state.ownedSkins = ['classic'];
+          }
+          if (!state.activeSkinId) {
+            state.activeSkinId = 'classic';
+          }
+          if (!state.inventory) {
+            state.inventory = { extraHints: 0, extraUndos: 0, extraLives: 0 };
+          }
+          if (!state.dailyStreakDay) {
+            state.dailyStreakDay = 1;
+          }
+          if (!state.unlockedAchievements) {
+            state.unlockedAchievements = [];
+          }
+          if (!state.claimedAchievements) {
+            state.claimedAchievements = [];
+          }
+          if (typeof state.totalArrowsCleared !== 'number') {
+            state.totalArrowsCleared = 0;
+          }
+          if (typeof state.totalFlawlessWins !== 'number') {
+            state.totalFlawlessWins = 0;
+          }
+          if (!state.selectedAvatarId) {
+            state.selectedAvatarId = 'archer_boy';
+          }
+          if (typeof state.playerTrophies !== 'number') {
+            state.playerTrophies = 1000;
+          }
+          if (!state.multiplayerHistory) {
+            state.multiplayerHistory = [];
+          }
+          if (!state.dailyPuzzleState) {
+            state.dailyPuzzleState = {
+              lastCompletedDate: null,
+              currentStreak: 0,
+              bestTimeSeconds: null,
+              isDailyActive: false
+            };
+          }
+
           // Restore previously cached dynamic levels into the runtime levels array
           if (state.dynamicLevels && state.dynamicLevels.length > 0) {
             setDynamicLevels(state.dynamicLevels);
