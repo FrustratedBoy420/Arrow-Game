@@ -43,10 +43,10 @@ type Props = {
 
 const arrowHeadSize = 12;
 
-/** Target slide speed — scales duration by path length so all arrows feel snappy and responsive. */
-const EXIT_SPEED_PX_PER_SEC = 2400;
-const EXIT_DURATION_MIN_MS = 120;
-const EXIT_DURATION_MAX_MS = 320;
+/** Target slide speed — smooth, clear, and satisfying arrow flight animation. */
+const EXIT_SPEED_PX_PER_SEC = 1000;
+const EXIT_DURATION_MIN_MS = 320;
+const EXIT_DURATION_MAX_MS = 720;
 
 const CANVAS_PADDING = 500;
 
@@ -450,13 +450,13 @@ const ExitingArrow = memo(function ExitingArrow({
 
   useEffect(() => {
     calledRef.current = false;
-    // Exit speed scales with the cell size (e.g. 22.0 cells per second)
-    // so that smaller cells on large levels cross the screen at the same visual rate as large levels.
-    const cellsPerSec = 22.0;
+    // Exit speed scales with the cell size (e.g. 11.0 cells per second)
+    // so that arrows glide gracefully across the screen.
+    const cellsPerSec = 11.0;
     const speedPxPerSec = cellsPerSec * cellSize;
     const ms = Math.round((totalLength / speedPxPerSec) * 1000);
     const duration = Math.min(EXIT_DURATION_MAX_MS, Math.max(EXIT_DURATION_MIN_MS, ms));
-    const moveEasing = Easing.linear;
+    const moveEasing = Easing.out(Easing.cubic);
 
     animProgress.value = 0;
 

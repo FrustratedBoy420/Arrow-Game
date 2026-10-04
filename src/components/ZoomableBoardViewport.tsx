@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useEffect } from 'react';
+import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -75,35 +75,23 @@ export function ZoomableBoardViewport({
   const viewportW = useSharedValue(0);
   const viewportH = useSharedValue(0);
 
+  const [viewportDim, setViewportDim] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     if (width <= 0 || height <= 0) return;
-
-    const isFirstLayout = viewportW.value === 0 || viewportH.value === 0;
     viewportW.value = width;
     viewportH.value = height;
-
-    if (isFirstLayout) {
-      const fitScaleX = boardWidth > 0 ? (width * 0.95) / boardWidth : 1;
-      const fitScaleY = boardHeight > 0 ? (height * 0.95) / boardHeight : 1;
-      const fitScale = Math.min(1.0, fitScaleX, fitScaleY);
-
-      scale.value = fitScale;
-      savedScale.value = fitScale;
-      translateX.value = 0;
-      translateY.value = 0;
-      savedTranslateX.value = 0;
-      savedTranslateY.value = 0;
-    }
-  }, [boardWidth, boardHeight, scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY, viewportH, viewportW]);
+    setViewportDim({ width, height });
+  }, [viewportW, viewportH]);
 
   useEffect(() => {
-    const vw = viewportW.value;
-    const vh = viewportH.value;
+    const vw = viewportDim.width;
+    const vh = viewportDim.height;
     if (vw <= 0 || vh <= 0 || boardWidth <= 0 || boardHeight <= 0) return;
 
-    const fitScaleX = (vw * 0.95) / boardWidth;
-    const fitScaleY = (vh * 0.95) / boardHeight;
+    const fitScaleX = (vw * 0.94) / boardWidth;
+    const fitScaleY = (vh * 0.94) / boardHeight;
     const fitScale = Math.min(1.0, fitScaleX, fitScaleY);
 
     scale.value = fitScale;
@@ -112,7 +100,7 @@ export function ZoomableBoardViewport({
     translateY.value = 0;
     savedTranslateX.value = 0;
     savedTranslateY.value = 0;
-  }, [boardWidth, boardHeight, scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY, viewportW, viewportH]);
+  }, [boardWidth, boardHeight, viewportDim.width, viewportDim.height, scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY]);
 
   const applyClampedTranslation = () => {
     'worklet';

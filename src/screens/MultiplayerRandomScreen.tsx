@@ -553,10 +553,8 @@ export function MultiplayerRandomScreen() {
 
   const columns = currentBoard?.level.gridSize.columns ?? 5;
   const rows = currentBoard?.level.gridSize.rows ?? 5;
-  const referenceCols = Math.min(columns, 10);
-  const referenceRows = Math.min(rows, 10);
-  const sizeFromWidth = maxW / referenceCols;
-  const sizeFromHeight = maxH / referenceRows;
+  const sizeFromWidth = maxW / Math.max(columns, 1);
+  const sizeFromHeight = maxH / Math.max(rows, 1);
   const cellSize = Math.min(sizeFromWidth, sizeFromHeight, 52);
   const boardWidth = cellSize * columns;
   const boardHeight = cellSize * rows;
