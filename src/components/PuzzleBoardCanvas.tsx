@@ -982,7 +982,9 @@ export function findArrowAtPoint(
 ): ArrowNode | null {
   if (!arrows || arrows.length === 0) return null;
 
-  const maxDistance = cellSize * 1.2;
+  // A tap must land on the arrow's own cell strip (web: 34/40-unit stroke ≈ 0.43 cell); 1.2 cells
+  // let a tap on empty space or on a neighbour select the wrong arrow.
+  const maxDistance = cellSize * 0.55;
   let bestCandidate: ArrowNode | null = null;
   let minEffectiveDist = Infinity;
 
@@ -1024,8 +1026,9 @@ export function findArrowAtPoint(
       isClear = isFrontClear(arrow, tempBoard);
     }
 
-    // ponytail: 30% distance discount for clear/playable arrows prioritizes intended moves on crowded grids
-    const effectiveDist = isClear ? rawDist * 0.70 : rawDist;
+    // small tie-breaker for clear arrows when a tap lands between two arrows; a tap squarely on a
+    // blocked arrow still selects that arrow
+    const effectiveDist = isClear ? rawDist * 0.9 : rawDist;
 
     if (effectiveDist < minEffectiveDist) {
       minEffectiveDist = effectiveDist;

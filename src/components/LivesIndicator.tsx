@@ -6,9 +6,11 @@ import { theme } from '../theme/theme';
 
 type Props = {
   livesLeft: number;
+  /** Hearts this run started with (4 with a Shield Life), so a lost shield heart shows as empty. */
+  maxLives?: number;
 };
 
-export const LivesIndicator = memo(function LivesIndicator({ livesLeft }: Props) {
+export const LivesIndicator = memo(function LivesIndicator({ livesLeft, maxLives = 3 }: Props) {
   const prevLives = useRef(livesLeft);
   const scale = useSharedValue(1);
   const shakeX = useSharedValue(0);
@@ -42,7 +44,7 @@ export const LivesIndicator = memo(function LivesIndicator({ livesLeft }: Props)
 
   return (
     <Animated.View style={animStyle} accessibilityLabel={`${livesLeft} lives left`}>
-      {Array.from({ length: Math.max(3, livesLeft) }, (_, index) => (
+      {Array.from({ length: Math.max(maxLives, livesLeft) }, (_, index) => (
         <Text key={index} style={[styles.drop, index >= livesLeft && styles.empty]}>
           {index < livesLeft ? '❤' : '♡'}
         </Text>

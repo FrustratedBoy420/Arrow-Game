@@ -15,6 +15,10 @@ import { ACHIEVEMENTS_CATALOG, type Achievement, type MatchRecord } from '../con
 const INITIAL_LEVEL_BATCH = 20;
 /** Number of levels added per subsequent fetch */
 const NEXT_LEVEL_BATCH = 5;
+/** Coins for a hint once the free hint and hint boosters are used (same as web economy.hintCost). */
+export const HINT_COIN_COST = 15;
+/** Hearts at level start; a Shield Life adds one. */
+const STARTING_LIVES = 3;
 
 type GameStore = {
   board: BoardState;
@@ -59,6 +63,12 @@ type GameStore = {
   lastHintArrowId: string | null;
   lastBlockedTap: { arrowId: string; timestamp: number } | null;
   hintUsedThisLevel: boolean;
+  /** First undo each level is free; later ones spend an Extra Undo booster. */
+  undoUsedThisLevel: boolean;
+  /** Hearts this run started with (3, or 4 with a Shield Life). */
+  maxLives: number;
+  /** Arrows put back by Undo: clearing them again earns no combo coins or lifetime stats. */
+  undoneArrowIds: string[];
   dynamicLevels: LevelDefinition[] | null;
   musicUrls: {
     correct: string | null;
@@ -102,14 +112,19 @@ type GameStore = {
   hasRecordedCurrentLevel: boolean;
   levelStartTime: number;
   gameStartTime: number | null;
+  /** When the run was decided (won / failed); the timer stops here. */
+  levelEndTime: number | null;
   finalStarsCalculated: number;
   startLevel: (levelId: number) => void;
   completeTutorial: () => void;
-  tapArrow: (arrowId: string) => 'REMOVED' | 'BLOCKED';
+  tapArrow: (arrowId: string) => 'REMOVED' | 'BLOCKED' | 'IGNORED';
   retry: () => void;
   nextLevel: () => void;
-  undo: () => void;
-  useHint: (force?: boolean) => string | null;
+  undo: () => 'used' | 'none' | 'empty' | 'blocked';
+  /** `paid`: the player watched an ad or pays HINT_COIN_COST once the free hint is used. */
+  useHint: (paid?: 'ad' | 'coins') => string | null;
+  /** Spend one Extra Life booster for a 4th heart; only before the first tap of a run. */
+  activateShield: () => boolean;
   doubleCoinsEarned: () => void;
   continueWithLife: () => void;
   resetWinStreak: () => void;
@@ -200,6 +215,9 @@ export const useGameStore = create<GameStore>()(
       lastHintArrowId: null,
       lastBlockedTap: null,
       hintUsedThisLevel: false,
+      undoUsedThisLevel: false,
+      maxLives: STARTING_LIVES,
+      undoneArrowIds: [],
       dynamicLevels: null,
       musicUrls: {
         correct: null,
@@ -234,6 +252,7 @@ export const useGameStore = create<GameStore>()(
       hasRecordedCurrentLevel: false,
       levelStartTime: Date.now(),
       gameStartTime: null,
+      levelEndTime: null,
       finalStarsCalculated: 3,
       isFetchingConfig: false,
       isPaused: false,
@@ -297,26 +316,24 @@ export const useGameStore = create<GameStore>()(
 
         trackEvent('level_start', { levelId: level.id, difficulty: level.difficulty });
         
-        const { inventory, iconsConfig } = get();
+        const { iconsConfig } = get();
         const isAdmin = !!iconsConfig?.unlockAllLevels;
-        let startingLives = 3;
-        const nextInv = { ...inventory };
-        if (inventory.extraLives > 0) {
-          startingLives = 4;
-          nextInv.extraLives -= 1;
-        }
 
+        // Shield Life is no longer spent automatically: the player chooses it (activateShield)
         set({
-          board: createInitialBoard(level, startingLives),
+          board: createInitialBoard(level, STARTING_LIVES),
           currentLevelId: level.id,
-          inventory: nextInv,
           ...(isAdmin ? { coins: 999999 } : {}),
           status: 'playing',
           lastHintArrowId: null,
           lastBlockedTap: null,
           hintUsedThisLevel: false,
+          undoUsedThisLevel: false,
+          maxLives: STARTING_LIVES,
+          undoneArrowIds: [],
           levelStartTime: Date.now(),
           gameStartTime: null,
+          levelEndTime: null,
           finalStarsCalculated: 3,
           isPaused: false,
           pausedAt: null,
@@ -331,18 +348,20 @@ export const useGameStore = create<GameStore>()(
       },
 
       tapArrow: (arrowId) => {
-        const { gameStartTime, lastBlockedTap, currentLevelId, dailyPuzzleState } = get();
+        const { gameStartTime, lastBlockedTap, currentLevelId, dailyPuzzleState, status, isPaused, board, undoneArrowIds } = get();
+        // no moves once the run is decided, while paused, or on an arrow that already left
+        if (status !== 'playing' || isPaused || !board.arrows.some((a) => a.id === arrowId)) return 'IGNORED';
         if (gameStartTime === null) {
           set({ gameStartTime: Date.now() });
         }
 
-        const result = resolveTap(arrowId, get().board, lastBlockedTap ?? undefined);
+        const result = resolveTap(arrowId, board, lastBlockedTap ?? undefined);
 
         // ponytail: FTUE God-Mode Shield for Levels 1-3 (normal campaign only, not daily puzzle)
         // Wrong taps trigger visual/haptic feedback but do NOT deduct lives, preventing early churn.
         const isGodMode = currentLevelId <= 3 && !dailyPuzzleState?.isDailyActive;
         const effectiveBoard = isGodMode && result.type === 'BLOCKED'
-          ? { ...result.board, livesLeft: 3 }
+          ? { ...result.board, livesLeft: board.livesLeft }
           : result.board;
 
         const nextStatus: GameStatus = isBoardWon(effectiveBoard)
@@ -351,14 +370,17 @@ export const useGameStore = create<GameStore>()(
             ? 'failed'
             : 'playing';
 
+        const levelEndTime = nextStatus === 'playing' ? null : Date.now();
+
         if (result.type === 'REMOVED') {
           trackEvent('move_correct', { levelId: get().currentLevelId, arrowId });
           set((state) => ({
             board: effectiveBoard,
             status: nextStatus,
+            levelEndTime,
             lastHintArrowId: null,
             lastBlockedTap: null,
-            totalArrowsCleared: (state.totalArrowsCleared || 0) + 1
+            totalArrowsCleared: (state.totalArrowsCleared || 0) + (undoneArrowIds.includes(arrowId) ? 0 : 1)
           }));
         } else {
           trackEvent('move_wrong', {
@@ -369,6 +391,7 @@ export const useGameStore = create<GameStore>()(
           set({
             board: effectiveBoard,
             status: nextStatus,
+            levelEndTime,
             lastHintArrowId: null,
             lastBlockedTap: { arrowId, timestamp: Date.now() }
           });
@@ -401,12 +424,21 @@ export const useGameStore = create<GameStore>()(
       },
 
       undo: () => {
-        const { board } = get();
+        const { board, status, isPaused, undoUsedThisLevel, inventory, iconsConfig, undoneArrowIds } = get();
+        // a won run must stay won: undo after the last arrow would reopen a recorded level
+        if (status !== 'playing' || isPaused) return 'blocked';
         const lastRemovedId = board.removedIds[board.removedIds.length - 1];
-        if (!lastRemovedId) return;
+        if (!lastRemovedId) return 'empty';
 
         const originalArrow = board.level.arrows.find((arrow) => arrow.id === lastRemovedId);
-        if (!originalArrow) return;
+        if (!originalArrow) return 'empty';
+
+        const isAdmin = !!iconsConfig?.unlockAllLevels;
+        const nextInv = { ...inventory };
+        if (undoUsedThisLevel && !isAdmin) {
+          if (nextInv.extraUndos <= 0) return 'none';
+          nextInv.extraUndos -= 1;
+        }
 
         set({
           board: {
@@ -414,34 +446,42 @@ export const useGameStore = create<GameStore>()(
             arrows: [...board.arrows, originalArrow],
             removedIds: board.removedIds.slice(0, -1)
           },
-          status: 'playing',
-          lastHintArrowId: null
+          inventory: nextInv,
+          undoUsedThisLevel: true,
+          undoneArrowIds: [...undoneArrowIds, lastRemovedId],
+          lastHintArrowId: null,
+          lastBlockedTap: null
         });
+        return 'used';
       },
 
-      useHint: (force = false) => {
-        const { board, status, gameStartTime, hintUsedThisLevel, iconsConfig, inventory } = get();
+      useHint: (paid) => {
+        const { board, status, isPaused, gameStartTime, hintUsedThisLevel, iconsConfig, inventory, coins } = get();
         const isAdmin = !!iconsConfig?.unlockAllLevels;
+        if (status !== 'playing' || isPaused) return null;
 
-        let canUse = false;
-        let consumedBooster = false;
-        if (status === 'playing') {
-          if (!hintUsedThisLevel || isAdmin || force) {
-            canUse = true;
-          } else if (inventory.extraHints > 0) {
-            canUse = true;
-            consumedBooster = true;
+        const hintArrow = findHintArrow(board);
+        if (!hintArrow) return null;
+
+        // after the free hint: an ad the player watched, coins, or else a hint booster
+        const nextInv = { ...inventory };
+        let nextCoins = coins;
+        if (hintUsedThisLevel && !isAdmin) {
+          if (paid === 'ad') {
+            /* rewarded video watched */
+          } else if (paid === 'coins') {
+            if (coins < HINT_COIN_COST) return null;
+            nextCoins = coins - HINT_COIN_COST;
+          } else if (nextInv.extraHints > 0) {
+            nextInv.extraHints -= 1;
+          } else {
+            return null;
           }
         }
-
-        if (!canUse) return null;
 
         if (gameStartTime === null) {
           set({ gameStartTime: Date.now() });
         }
-
-        const hintArrow = findHintArrow(board);
-        if (!hintArrow) return null;
 
         const result = resolveTap(hintArrow.id, board);
         if (result.type !== 'REMOVED') return null;
@@ -452,16 +492,13 @@ export const useGameStore = create<GameStore>()(
           trackEvent('level_complete', { levelId: get().currentLevelId });
         }
 
-        const nextInv = { ...inventory };
-        if (consumedBooster) {
-          nextInv.extraHints = Math.max(0, nextInv.extraHints - 1);
-        }
-
         set({
           board: result.board,
           status: nextStatus,
           inventory: nextInv,
+          coins: nextCoins,
           lastHintArrowId: hintArrow.id,
+          levelEndTime: nextStatus === 'won' ? Date.now() : null,
           hintUsedThisLevel: isAdmin ? false : true
         });
 
@@ -479,12 +516,27 @@ export const useGameStore = create<GameStore>()(
       },
 
       continueWithLife: () => {
-        const { board } = get();
+        const { board, status, levelEndTime, accumulatedPausedTime } = get();
+        if (status !== 'failed') return;
         set({
           board: { ...board, livesLeft: 1 },
           status: 'playing',
+          levelEndTime: null,
+          accumulatedPausedTime: accumulatedPausedTime + (levelEndTime !== null ? Date.now() - levelEndTime : 0),
+          lastBlockedTap: null,
           hasRecordedCurrentLevel: false
         });
+      },
+
+      activateShield: () => {
+        const { status, gameStartTime, maxLives, inventory, board } = get();
+        if (status !== 'playing' || gameStartTime !== null || maxLives > STARTING_LIVES || inventory.extraLives <= 0) return false;
+        set({
+          board: { ...board, livesLeft: STARTING_LIVES + 1 },
+          maxLives: STARTING_LIVES + 1,
+          inventory: { ...inventory, extraLives: inventory.extraLives - 1 }
+        });
+        return true;
       },
 
       resetWinStreak: () => {
@@ -711,14 +763,18 @@ export const useGameStore = create<GameStore>()(
 
       startDailyChallenge: (level: LevelDefinition) => {
         set({
-          board: createInitialBoard(level, 3),
+          board: createInitialBoard(level, STARTING_LIVES),
           currentLevelId: level.id,
           status: 'playing',
           lastHintArrowId: null,
           lastBlockedTap: null,
           hintUsedThisLevel: false,
+          undoUsedThisLevel: false,
+          maxLives: STARTING_LIVES,
+          undoneArrowIds: [],
           levelStartTime: Date.now(),
           gameStartTime: null,
+          levelEndTime: null,
           finalStarsCalculated: 3,
           isPaused: false,
           pausedAt: null,
@@ -1223,6 +1279,13 @@ export const useGameStore = create<GameStore>()(
     }
   )
 );
+
+/** Seconds the current run took: pauses and time on the fail screen are excluded; stops at the win. */
+export function runSeconds(state: Pick<GameStore, 'gameStartTime' | 'levelStartTime' | 'levelEndTime' | 'accumulatedPausedTime'>): number {
+  const start = state.gameStartTime ?? state.levelStartTime;
+  const end = state.levelEndTime ?? Date.now();
+  return Math.max(1, Math.round((end - start - (state.accumulatedPausedTime || 0)) / 1000));
+}
 
 export async function initializeLevelProgressMap(): Promise<void> {
   const levelProgressMap = await loadLevelProgress();

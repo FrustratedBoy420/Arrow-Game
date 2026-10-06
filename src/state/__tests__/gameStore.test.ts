@@ -154,6 +154,8 @@ describe('gameStore Phase 4 Eternity & Endgame mechanics', () => {
     // Setup Level 1 board with 1 blocked arrow
     useGameStore.setState({
       currentLevelId: 2,
+      status: 'playing',
+      isPaused: false,
       board: {
         level: {
           id: 2,
@@ -199,5 +201,67 @@ describe('gameStore Phase 4 Eternity & Endgame mechanics', () => {
     expect(state.dailyPuzzleState.currentStreak).toBe(1);
     expect(state.dailyPuzzleState.bestTimeSeconds).toBe(22);
     expect(state.dailyPuzzleState.lastCompletedDate).toBe(new Date().toISOString().split('T')[0]);
+  });
+});
+
+describe('gameStore run rules shared with the web game', () => {
+  const level = {
+    id: 9,
+    title: 'Rules',
+    difficulty: 'Easy' as const,
+    gridSize: { columns: 3, rows: 3 },
+    arrows: [
+      { id: 'free', path: [{ x: 0, y: 2 }, { x: 1, y: 2 }], fullPath: [{ x: 0, y: 2 }, { x: 1, y: 2 }] },
+      { id: 'other', path: [{ x: 0, y: 0 }, { x: 0, y: 1 }], fullPath: [{ x: 0, y: 0 }, { x: 1, y: 0 }] }
+    ]
+  };
+  const fresh = (extra: Record<string, unknown> = {}) =>
+    useGameStore.setState({
+      currentLevelId: 9,
+      status: 'playing',
+      isPaused: false,
+      gameStartTime: null,
+      hintUsedThisLevel: false,
+      undoUsedThisLevel: false,
+      maxLives: 3,
+      undoneArrowIds: [],
+      coins: 0,
+      iconsConfig: { homeArrow: '➤' },
+      inventory: { extraHints: 0, extraUndos: 0, extraLives: 0 },
+      board: { level, arrows: level.arrows, livesLeft: 3, removedIds: [], blockedAttemptIds: [] },
+      ...extra
+    });
+
+  it('ignores taps once the run is won', () => {
+    fresh({ status: 'won' });
+    expect(useGameStore.getState().tapArrow('free')).toBe('IGNORED');
+  });
+
+  it('first undo is free, the next one spends an Extra Undo, then stops', () => {
+    fresh({ inventory: { extraHints: 0, extraUndos: 1, extraLives: 0 } });
+    const s = useGameStore.getState();
+    s.tapArrow('free');
+    expect(useGameStore.getState().undo()).toBe('used');
+    useGameStore.getState().tapArrow('free');
+    expect(useGameStore.getState().undo()).toBe('used');
+    expect(useGameStore.getState().inventory.extraUndos).toBe(0);
+    useGameStore.getState().tapArrow('free');
+    expect(useGameStore.getState().undo()).toBe('none');
+  });
+
+  it('second hint needs a booster or coins and is never free', () => {
+    fresh({ coins: 20 });
+    expect(useGameStore.getState().useHint()).not.toBeNull();
+    expect(useGameStore.getState().useHint()).toBeNull();
+    expect(useGameStore.getState().useHint('coins')).not.toBeNull();
+    expect(useGameStore.getState().coins).toBe(5);
+  });
+
+  it('shield adds a 4th heart only before the first tap', () => {
+    fresh({ inventory: { extraHints: 0, extraUndos: 0, extraLives: 2 } });
+    expect(useGameStore.getState().activateShield()).toBe(true);
+    expect(useGameStore.getState().board.livesLeft).toBe(4);
+    expect(useGameStore.getState().activateShield()).toBe(false);
+    expect(useGameStore.getState().inventory.extraLives).toBe(1);
   });
 });

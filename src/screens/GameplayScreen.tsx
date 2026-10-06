@@ -1,6 +1,7 @@
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, SafeAreaView, StyleSheet, useWindowDimensions, View, BackHandler } from 'react-native';
+import { AppState, StyleSheet, useWindowDimensions, View, BackHandler } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -21,7 +22,7 @@ import { ExitConfirmModal } from '../components/ExitConfirmModal';
 import { CustomAlertModal } from '../components/CustomAlertModal';
 import { findBlockingArrow, isFrontClear } from '../game/engine';
 import type { ArrowNode } from '../game/types';
-import { useGameStore } from '../state/gameStore';
+import { HINT_COIN_COST, useGameStore } from '../state/gameStore';
 import { theme } from '../theme/theme';
 import type { AppNavigation } from '../types/navigation';
 import { playCorrectFeedback, playWrongFeedback } from '../utils/feedback';
@@ -42,10 +43,18 @@ export function GameplayScreen() {
   const hapticsEnabled = useGameStore((s) => s.hapticsEnabled);
   const tapArrow = useGameStore((s) => s.tapArrow);
   const retry = useGameStore((s) => s.retry);
-  const undo = useGameStore((s) => s.undo);
-  const useHint = useGameStore((s) => s.useHint);
-  const hintUsedThisLevel = useGameStore((s) => s.hintUsedThisLevel);
-  const isAdmin = useGameStore((s) => !!s.iconsConfig?.unlockAllLevels);
+  const levelStartTime = useGameStore((s) => s.levelStartTime);
+  const maxLives = useGameStore((s) => s.maxLives);
+  // Shield Life: offered before the first tap, never on the practice levels 1-3 (wrong taps are free there)
+  const canShield = useGameStore(
+    (s) =>
+      s.status === 'playing' &&
+      s.gameStartTime === null &&
+      s.maxLives === 3 &&
+      (s.inventory?.extraLives ?? 0) > 0 &&
+      (s.currentLevelId > 3 || !!s.dailyPuzzleState?.isDailyActive)
+  );
+  const insets = useSafeAreaInsets();
 
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [backModalVisible, setBackModalVisible] = useState(false);
@@ -59,6 +68,7 @@ export function GameplayScreen() {
   const [alertCancelText, setAlertCancelText] = useState('Cancel');
   const [alertOnConfirm, setAlertOnConfirm] = useState<(() => void) | undefined>(undefined);
   const [alertIconName, setAlertIconName] = useState<any>('information-circle-outline');
+  const [alertSecondary, setAlertSecondary] = useState<{ text: string; run: () => void } | null>(null);
   const [combo, setCombo] = useState(0);
   const [comboBonusCoins, setComboBonusCoins] = useState(0);
   const lastCorrectTapTimeRef = useRef<number>(0);
@@ -120,18 +130,50 @@ export function GameplayScreen() {
     };
   }, []);
 
-  // Clear animation queues on level change (retry / next level).
+  // Clear animation queues and the combo on every new run (retry keeps the level id, so key on the start time too).
   useEffect(() => {
     setExitingArrows([]);
     setBlockedArrows([]);
-  }, [currentLevelId]);
+    comboRef.current = 0;
+    lastCorrectTapTimeRef.current = 0;
+    setCombo(0);
+    setComboBonusCoins(0);
+  }, [currentLevelId, levelStartTime]);
 
   useEffect(() => {
     boardOpacity.value = 0;
     boardScale.value = 0.94;
     boardOpacity.value = withTiming(1, { duration: 400, easing: Easing.bezier(0.16, 1, 0.3, 1) });
     boardScale.value = withSpring(1, { damping: 15, stiffness: 100, mass: 0.8 });
-  }, [currentLevelId]);
+  }, [currentLevelId, levelStartTime]);
+
+  // Stop the clock while the app is in the background (the web game does the same for a hidden tab).
+  useEffect(() => {
+    let pausedByBackground = false;
+    const sub = AppState.addEventListener('change', (next) => {
+      const store = useGameStore.getState();
+      if (next !== 'active') {
+        if (!store.isPaused) {
+          store.pauseGame();
+          pausedByBackground = useGameStore.getState().isPaused;
+        }
+      } else if (pausedByBackground) {
+        pausedByBackground = false;
+        store.resumeGame();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  const showInfo = useCallback((title: string, description: string, icon: string) => {
+    setAlertTitle(title);
+    setAlertDescription(description);
+    setAlertConfirmText('OK');
+    setAlertOnConfirm(undefined);
+    setAlertSecondary(null);
+    setAlertIconName(icon);
+    setAlertVisible(true);
+  }, []);
 
   const handleExitDone = useCallback((arrowId: string) => {
     setExitingArrows((prev) => {
@@ -162,6 +204,8 @@ export function GameplayScreen() {
       // Snapshot the board BEFORE the tap so we can find the blocker correctly.
       const boardBefore = useGameStore.getState().board;
       const arrow = boardBefore.arrows.find((a) => a.id === arrowId);
+      // an arrow put back by Undo earns no combo coins when cleared again (no farming)
+      const replayed = useGameStore.getState().undoneArrowIds.includes(arrowId);
       const result = tapArrow(arrowId);
 
       if (result === 'REMOVED' && arrow) {
@@ -174,7 +218,8 @@ export function GameplayScreen() {
         setCombo(nextCombo);
 
         let bonus = 0;
-        if (nextCombo === 3) bonus = 2;
+        if (replayed) bonus = 0;
+        else if (nextCombo === 3) bonus = 2;
         else if (nextCombo === 4) bonus = 5;
         else if (nextCombo >= 5) bonus = 10;
         setComboBonusCoins(bonus);
@@ -237,68 +282,100 @@ export function GameplayScreen() {
 
   const handleHint = useCallback(() => {
     const state = useGameStore.getState();
+    if (state.status !== 'playing' || state.isPaused) return;
     const isAdminUser = !!state.iconsConfig?.unlockAllLevels;
 
-    const currentBoard = useGameStore.getState().board;
+    const currentBoard = state.board;
     const hintArrow = currentBoard.arrows.find((a) => isFrontClear(a, currentBoard));
     if (!hintArrow) {
-      setAlertTitle('No Hint');
-      setAlertDescription('No valid move right now. Try Undo!');
-      setAlertConfirmText('OK');
-      setAlertOnConfirm(undefined);
-      setAlertIconName('alert-circle-outline');
-      setAlertVisible(true);
+      showInfo('No Hint', 'No valid move right now. Try Undo!', 'alert-circle-outline');
       return;
     }
 
-    const triggerHint = (force = false) => {
-      const hintedId = useHint(force);
-      if (hintedId) {
+    const triggerHint = (paid?: 'ad' | 'coins') => {
+      // the board can change while an ad plays: animate the arrow the store actually removed
+      const before = useGameStore.getState().board;
+      const hintedId = useGameStore.getState().useHint(paid);
+      const hinted = hintedId ? before.arrows.find((a) => a.id === hintedId) : undefined;
+      if (hinted) {
         setExitingArrows((prev) => {
-          if (prev.some((a) => a.id === hintArrow.id)) return prev;
-          return [...prev, { ...hintArrow, color: '#43A047' }];
+          if (prev.some((a) => a.id === hinted.id)) return prev;
+          return [...prev, { ...hinted, color: '#43A047' }];
         });
         void playCorrectFeedback();
       }
     };
 
-    const isRewardedAdEnabled = adManager.isRewardedAdEnabled();
-    const hasExtraHints = (state.inventory?.extraHints ?? 0) > 0;
-
-    if (state.hintUsedThisLevel && !isAdminUser && !hasExtraHints && isRewardedAdEnabled) {
-      if (!adManager.isRewardedAdReady()) {
-        setAlertTitle('Ad Loading');
-        setAlertDescription('The reward video is still loading. Please try again in a few seconds.');
-        setAlertConfirmText('OK');
-        setAlertOnConfirm(undefined);
-        setAlertIconName('hourglass-outline');
-        setAlertVisible(true);
-        return;
-      }
-
-      setAlertTitle('Get Another Hint');
-      setAlertDescription('You used your free hint for this level. Watch a video or buy hints in the Shop?');
-      setAlertConfirmText('Watch Ad');
-      setAlertCancelText('Cancel');
-      setAlertIconName('play-circle-outline');
-      setAlertOnConfirm(() => () => {
-        setAlertVisible(false);
-        adManager.showRewarded(
-          () => {
-            triggerHint(true);
-          },
-          () => {}
-        );
-      });
-      setAlertVisible(true);
+    // free hint, or a hint booster: use it straight away
+    if (!state.hintUsedThisLevel || isAdminUser || (state.inventory?.extraHints ?? 0) > 0) {
+      triggerHint();
       return;
     }
 
-    triggerHint(state.hintUsedThisLevel);
-  }, [useHint]);
+    const canPayCoins = state.coins >= HINT_COIN_COST;
+    const adEnabled = adManager.isRewardedAdEnabled();
+    const adReady = adEnabled && adManager.isRewardedAdReady();
+    const watchAd = () => {
+      setAlertVisible(false);
+      adManager.showRewarded(
+        () => triggerHint('ad'),
+        () => {}
+      );
+    };
+
+    if (!canPayCoins && !adReady) {
+      showInfo(
+        adEnabled ? 'Ad Loading' : 'Not Enough Coins',
+        adEnabled
+          ? `The reward video is still loading. Try again in a few seconds, or earn ${HINT_COIN_COST} coins for a hint.`
+          : `A hint costs ${HINT_COIN_COST} coins and you have ${state.coins}. Get hint packs in the Shop.`,
+        adEnabled ? 'hourglass-outline' : 'alert-circle-outline'
+      );
+      return;
+    }
+
+    setAlertTitle('Get Another Hint');
+    setAlertDescription(
+      `You used your free hint for this level. ${canPayCoins ? `Spend ${HINT_COIN_COST} coins (you have ${state.coins})` : 'Watch a short video'}${
+        canPayCoins && adReady ? ' or watch a short video' : ''
+      }?`
+    );
+    setAlertCancelText('Cancel');
+    setAlertIconName(canPayCoins ? 'bulb-outline' : 'play-circle-outline');
+    if (canPayCoins) {
+      setAlertConfirmText(`Use ${HINT_COIN_COST} 🪙`);
+      setAlertOnConfirm(() => () => {
+        setAlertVisible(false);
+        triggerHint('coins');
+      });
+      setAlertSecondary(adReady ? { text: 'Watch Ad', run: watchAd } : null);
+    } else {
+      setAlertConfirmText('Watch Ad');
+      setAlertOnConfirm(() => watchAd);
+      setAlertSecondary(null);
+    }
+    setAlertVisible(true);
+  }, [showInfo]);
+
+  const handleUndo = useCallback(() => {
+    const before = useGameStore.getState().board;
+    const restoredId = before.removedIds[before.removedIds.length - 1];
+    const result = useGameStore.getState().undo();
+    if (result === 'used' && restoredId) {
+      // stop an exit animation still running for the restored arrow so it is not drawn twice
+      setExitingArrows((prev) => prev.filter((a) => a.id !== restoredId));
+      comboRef.current = 0;
+    } else if (result === 'none') {
+      showInfo('No Undos Left', 'Your free undo for this level is used. Get Extra Undos in the Shop.', 'arrow-undo-outline');
+    }
+  }, [showInfo]);
+
+  const handleShield = useCallback(() => {
+    useGameStore.getState().activateShield();
+  }, []);
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
       <AmbientBackground />
       <GameHeader
         title={`Level ${currentLevelId}`}
@@ -314,7 +391,7 @@ export function GameplayScreen() {
           setSettingsVisible(true);
         }}
       />
-      <LivesIndicator livesLeft={board.livesLeft} />
+      <LivesIndicator livesLeft={board.livesLeft} maxLives={maxLives} />
       <StarRatingDisplay levelBaselineSeconds={board.level.arrows.length} />
       <ComboPopup combo={combo} bonusCoins={comboBonusCoins} onDone={() => setCombo(0)} />
       <View style={styles.boardStage}>
@@ -340,9 +417,10 @@ export function GameplayScreen() {
         </ZoomableBoardViewport>
       </View>
       <BottomControls
-        onUndo={undo}
+        onUndo={handleUndo}
         onHint={handleHint}
         onRestart={retry}
+        onShield={canShield ? handleShield : undefined}
         hintDisabled={false}
       />
       <AdBanner />
@@ -381,8 +459,10 @@ export function GameplayScreen() {
         cancelText={alertCancelText}
         onConfirm={alertOnConfirm}
         iconName={alertIconName}
+        secondaryText={alertSecondary?.text}
+        onSecondary={alertSecondary?.run}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

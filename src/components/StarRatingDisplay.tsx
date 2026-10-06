@@ -33,6 +33,7 @@ interface StarRatingDisplayProps {
 export const StarRatingDisplay = memo(function StarRatingDisplay({ levelBaselineSeconds }: StarRatingDisplayProps) {
   const board = useGameStore((s) => s.board);
   const gameStartTime = useGameStore((s) => s.gameStartTime);
+  const maxLives = useGameStore((s) => s.maxLives);
   const status = useGameStore((s) => s.status);
   // FIX 3: Pull setter from global store to sync final stars with VictoryScreen
   const setFinalStarsCalculated = useGameStore((s) => s.setFinalStarsCalculated);
@@ -83,9 +84,9 @@ export const StarRatingDisplay = memo(function StarRatingDisplay({ levelBaseline
 
   // Track hearts lost based on 3 total lives
   useEffect(() => {
-    const lost = Math.max(0, 3 - board.livesLeft);
+    const lost = Math.max(0, maxLives - board.livesLeft);
     setHeartsLost(lost);
-  }, [board.livesLeft]);
+  }, [board.livesLeft, maxLives]);
 
   // Calculate stars based on time AND hearts
   useEffect(() => {

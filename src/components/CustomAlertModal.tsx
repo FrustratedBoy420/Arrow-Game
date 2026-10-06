@@ -15,6 +15,9 @@ interface CustomAlertModalProps {
   onConfirm?: (() => void) | undefined;
   iconName?: keyof typeof Ionicons.glyphMap | undefined;
   buttonText?: string | undefined;
+  /** Optional extra action shown full-width under the main buttons (e.g. "Watch Ad"). */
+  secondaryText?: string | undefined;
+  onSecondary?: (() => void) | undefined;
 }
 
 export function CustomAlertModal({
@@ -26,7 +29,9 @@ export function CustomAlertModal({
   cancelText = "Cancel",
   onConfirm,
   iconName = "alert-circle-outline",
-  buttonText
+  buttonText,
+  secondaryText,
+  onSecondary
 }: CustomAlertModalProps) {
   // Use buttonText if provided (backward compatibility), otherwise confirmText
   const singleButtonText = buttonText || confirmText;
@@ -98,6 +103,16 @@ export function CustomAlertModal({
               </Pressable>
             )}
           </View>
+          {onSecondary && secondaryText ? (
+            <Pressable
+              style={[styles.btn, styles.btnSecondary, styles.btnExtra]}
+              onPress={onSecondary}
+              accessibilityRole="button"
+              accessibilityLabel={secondaryText}
+            >
+              <Text style={styles.btnTextSecondary}>{secondaryText}</Text>
+            </Pressable>
+          ) : null}
         </Animated.View>
       </View>
     </Modal>
@@ -172,6 +187,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(106, 68, 40, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(106, 68, 40, 0.15)',
+  },
+  btnExtra: {
+    flex: 0,
+    width: '100%',
+    marginTop: 12,
   },
   btnTextPrimary: {
     color: '#FFF',

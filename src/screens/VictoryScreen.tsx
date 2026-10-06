@@ -21,7 +21,7 @@ import { SettingsModal } from '../components/SettingsModal';
 import { getTotalStarsEarned, getUnlockedLevelCount, getCheckpointRequiredStars, getCheckpointGateProgress, CheckpointGateProgress } from '../systems/levelManagement';
 import { ensureLevelProgressMap, isLevelLocked } from '../systems/levelManagementStore';
 import { getNextLevelId } from '../levels/levels';
-import { useGameStore } from '../state/gameStore';
+import { runSeconds, useGameStore } from '../state/gameStore';
 import { CheckpointLockModal } from '../components/CheckpointLockModal';
 import { SpinWheelModal } from '../components/SpinWheelModal';
 import { getSkinById } from '../config/skins';
@@ -42,8 +42,6 @@ export function VictoryScreen() {
   const dailyPuzzleState = useGameStore((state) => state.dailyPuzzleState);
   const doubleCoinsEarned = useGameStore((state) => state.doubleCoinsEarned);
   const board = useGameStore((state) => state.board);
-  const gameStartTime = useGameStore((state) => state.gameStartTime);
-  const levelStartTime = useGameStore((state) => state.levelStartTime);
   const levelProgressMap = useGameStore((state) => state.levelProgressMap);
   const finalStarsCalculated = useGameStore((state) => state.finalStarsCalculated);
   const coins = useGameStore((state) => state.coins);
@@ -148,9 +146,8 @@ export function VictoryScreen() {
 
     audioManager.playSound('victory');
 
-    const startTime = gameStartTime ?? levelStartTime;
-    const timeTaken = Math.round((Date.now() - startTime) / 1000);
-    const heartsLost = Math.max(0, 3 - board.livesLeft);
+    const timeTaken = runSeconds(useGameStore.getState());
+    const heartsLost = Math.max(0, useGameStore.getState().maxLives - board.livesLeft);
 
     if (isDaily) {
       recordDailyChallengeCompletion(timeTaken);
@@ -388,13 +385,13 @@ export function VictoryScreen() {
             cancelCountdown();
             try {
               const currentLevelId = useGameStore.getState().currentLevelId;
-              const startTime = gameStartTime ?? levelStartTime;
-              const timeTaken = Math.round((Date.now() - startTime) / 1000);
+              const timeTaken = runSeconds(useGameStore.getState());
+              const stars = Math.max(1, Math.min(3, useGameStore.getState().starsEarnedThisLevel || 1));
               const activeSkinId = useGameStore.getState().activeSkinId;
               const skin = getSkinById(activeSkinId);
 
               const message =
-                `🏹 I just conquered Level ${currentLevelId} with ⭐⭐⭐ in ${timeTaken}s in ArrowVerse!\n` +
+                `🏹 I just conquered Level ${currentLevelId} with ${'⭐'.repeat(stars)} in ${timeTaken}s in ArrowVerse!\n` +
                 `🔥 Win Streak: ${winStreak} | 🎨 Skin: ${skin ? skin.name : 'Classic Cedar'}\n` +
                 `Think you can beat my record? Play now! 👉 https://arrowgame.app`;
 

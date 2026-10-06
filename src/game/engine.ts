@@ -140,13 +140,13 @@ export function getCollisionDistance(arrow: ArrowNode, board: BoardState): numbe
 }
 
 /**
- * Process auto-exits — disabled so arrows only exit when tapped.
+ * Process auto-exits — disabled so arrows only exit when tapped (same rule as the app).
+ * Arrows tapped while blocked stay red (blockedAttemptIds) until the player taps them again.
  */
 export function processAutoExits(board: BoardState): {
   board: BoardState;
   autoRemovedArrows: ArrowNode[];
 } {
-  // ponytail: arrows only exit on explicit player tap, not automatically
   return { board, autoRemovedArrows: [] };
 }
 
@@ -168,7 +168,13 @@ export function resolveTap(
       ? board.livesLeft
       : Math.max(0, board.livesLeft - 1);
 
-    const newBoard = { ...board, livesLeft };
+    // remember the wrong tap: the arrow stays red until the player removes it
+    const attempted = board.blockedAttemptIds ?? [];
+    const newBoard = {
+      ...board,
+      livesLeft,
+      blockedAttemptIds: arrow && !attempted.includes(arrowId) ? [...attempted, arrowId] : attempted
+    };
 
     return {
       type: 'BLOCKED',
@@ -181,7 +187,8 @@ export function resolveTap(
   const baseBoard: BoardState = {
     ...board,
     arrows: board.arrows.filter((candidate) => candidate.id !== arrowId),
-    removedIds: [...board.removedIds, arrowId]
+    removedIds: [...board.removedIds, arrowId],
+    blockedAttemptIds: (board.blockedAttemptIds ?? []).filter((id) => id !== arrowId)
   };
 
   return {
